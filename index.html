@@ -870,10 +870,10 @@ function init() {
   renderCards();
   updateAgeInfo();
   loadHeight(); loadWeight(); loadPhoto();
-  updateOverview();
   updateAddButtonVisibility();
+  try { updateOverview(); } catch(e) { console.error('updateOverview error:', e); }
   setupMidnightReset();
-  setInterval(updateOverview, 60000);
+  setInterval(() => { try { updateOverview(); } catch(e) { console.error(e); } }, 60000);
   setupPWA();
   initSync();
 }
