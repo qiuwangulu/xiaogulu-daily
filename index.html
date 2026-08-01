@@ -506,6 +506,20 @@
   }
   .toggle-switch.on::after { transform: translateX(20px); }
 
+  .toggle-slider {
+    position: absolute; cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.15);
+    border-radius: 24px; transition: 0.2s;
+  }
+  .toggle-slider::before {
+    content: ''; position: absolute;
+    width: 18px; height: 18px; left: 3px; bottom: 3px;
+    background: #fff; border-radius: 50%; transition: 0.2s;
+  }
+  #readOnlyToggle:checked + .toggle-slider { background: #2ecc71; }
+  #readOnlyToggle:checked + .toggle-slider::before { transform: translateX(20px); }
+
   .custom-options-section {
     margin-top: 18px; padding-top: 14px;
     border-top: 1px solid rgba(255,255,255,0.1);
@@ -608,7 +622,7 @@
 
 <div class="bottom-bar">
   <div class="fab-wrap">
-    <button class="fab-btn" onclick="openAddModal()"> 添加记录</button>
+    <button class="fab-btn" id="fabBtn" onclick="openAddModal()"> 添加记录</button>
   </div>
   <div class="divider"></div>
   <div class="nav-row">
@@ -666,6 +680,16 @@
       <div class="sync-btn-row">
         <button class="btn btn-primary" onclick="hideModal('manageModal');openSyncSettings()">同步设置</button>
         <button class="btn" onclick="syncPullAllAndRefresh()">立即同步</button>
+      </div>
+    </div>
+    <div class="sync-section">
+      <div class="cos-title">🔒 只读模式</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;">
+        <span style="font-size:14px;color:#b2bec3;">开启后隐藏编辑/删除和添加按钮</span>
+        <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;">
+          <input type="checkbox" id="readOnlyToggle" style="opacity:0;width:0;height:0;" onchange="toggleReadOnly()">
+          <span class="toggle-slider" id="readOnlySlider"></span>
+        </label>
       </div>
     </div>
     <div class="modal-actions">
@@ -847,6 +871,7 @@ function init() {
   updateAgeInfo();
   loadHeight(); loadWeight(); loadPhoto();
   updateOverview();
+  updateAddButtonVisibility();
   setupMidnightReset();
   setInterval(updateOverview, 60000);
   setupPWA();
@@ -937,15 +962,17 @@ function updateOverview() {
   const records = getTodayRecords();
   const bar = document.getElementById('overviewBar');
 
-  let lastMilkTime = null; let totalMilk = 0;
-  for (let i = records.length - 1; i >= 0; i--) { if (records[i].type === 'milk' && records[i].milkTime) { lastMilkTime = records[i].milkTime; break; } }
+  let lastMilkRec = null; let totalMilk = 0;
+  for (let i = records.length - 1; i >= 0; i--) { if (records[i].type === 'milk' && records[i].milkTime) { lastMilkRec = records[i]; break; } }
   records.forEach(r => { if (r.type === 'milk' && r.milkAmount) totalMilk += r.milkAmount; });
 
   let html = '<div class="overview-row">';
-  if (lastMilkTime) {
-    const [h, m] = lastMilkTime.split(':').map(Number);
+  if (lastMilkRec) {
+    const [h, m] = (lastMilkRec.milkTime || lastMilkRec.recTime || '00:00').split(':').map(Number);
     const intv = getMilkInterval();
-    const ld = new Date(); ld.setHours(h, m, 0, 0);
+    // 用记录的timestamp构造完整日期，支持跨天计算
+    const ld = lastMilkRec.timestamp ? new Date(lastMilkRec.timestamp) : new Date();
+    ld.setHours(h, m, 0, 0);
     const nd = new Date(ld.getTime() + intv * 3600000);
     const nh = String(nd.getHours()).padStart(2, '0'), nm = String(nd.getMinutes()).padStart(2, '0');
     const diff = nd - new Date();
@@ -967,7 +994,7 @@ function updateOverview() {
   if (achievements.length > 0) {
     html += `<div class="overview-achievement">今日成就: ${achievements.join(' | ')}</div>`;
   } else {
-    html += `<div class="overview-achievement" style="color:#636e72;">今日成就: 无</div>`;
+    html += `<div class="overview-achievement">今日成就: 无</div>`;
   }
 
   bar.innerHTML = html;
@@ -1009,10 +1036,11 @@ function renderCards(newestIds) {
       actRecords.forEach((r, i) => {
         const isNewest = i === 0 && newestIds.includes(act.id);
         const time = r.recTime || r.time;
+        const readOnly = isReadOnlyMode();
+        const editDeleteHtml = readOnly ? '' : `<span class="rec-edit" onclick="event.stopPropagation();openEditRecord('${r.type}',${r.timestamp})"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><span class="rec-delete" onclick="event.stopPropagation();deleteRecord('${r.type}',${r.timestamp})"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6"/><path d="M14 10v6"/></svg></span>`;
         bodyHtml += `<div class="record-tag${isNewest ? ' newest' : ''}" data-timestamp="${r.timestamp}" data-type="${r.type}">
           <div class="rec-left"><span class="rec-time">${time}</span><span class="rec-detail">${formatRecordBrief(r)}</span></div>
-          <span class="rec-edit" onclick="event.stopPropagation();openEditRecord('${r.type}',${r.timestamp})"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
-          <span class="rec-delete" onclick="event.stopPropagation();deleteRecord('${r.type}',${r.timestamp})"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6"/><path d="M14 10v6"/></svg></span>
+          ${editDeleteHtml}
         </div>`;
       });
       bodyHtml += '</div>';
@@ -1031,7 +1059,7 @@ function formatRecordBrief(r) {
   if (r.type === 'listenStory') { return (r.storyLangs||[]).join('/') || '已记录'; }
   if (r.type === 'grossMotor') { return (r.grossMotorItems||[]).join(', ') || '已记录'; }
   if (r.type === 'fineMotor') { return (r.fineMotorItems||[]).join(', ') || '已记录'; }
-  if (r.type === 'sleep') { let s = ''; if (r.duration && r.duration > 0) s = r.duration + '分钟'; return s || '已记录'; }
+  if (r.type === 'sleep') { if (r.duration && r.duration > 0) { const h = Math.floor(r.duration / 60); const m = Math.round(r.duration % 60); let s = ''; if (h > 0) s += h + 'h'; if (m > 0) s += (s ? ' ' : '') + m + 'min'; return s || '已记录'; } return '已记录'; }
   if (r.type === 'drinkWater') { return '已喝水'; }
   if (r.duration !== undefined && r.duration > 0) { let s = r.duration + '分钟'; if (r.level) s += ' · 屁股状态:' + r.level; return s; }
   if (r.level) return '屁股状态:' + r.level;
@@ -1070,7 +1098,8 @@ function openEditRecord(type, timestamp) {
   if (act.type === 'milk') {
     html += `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">奶量:</label><input type="number" id="edt_val" value="${rec.milkAmount||120}"><span class="unit">ml</span></div>`;
   } else if (act.type === 'sleep') {
-    html += `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">时长:</label><input type="number" step="0.1" id="edt_val" value="${rec.duration||0}"><span class="unit">分钟</span></div>`;
+    const dur = rec.duration || 0; const dh = Math.floor(dur / 60); const dm = Math.round(dur % 60);
+    html += `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">时长:</label><input type="number" min="0" id="edt_dur_h" value="${dh}" style="width:50px;"><span class="unit">h</span><input type="number" min="0" max="59" id="edt_dur_m" value="${dm}" style="width:50px;margin-left:8px;"><span class="unit">min</span></div>`;
   } else if (act.type === 'poop') {
     let po = ''; POOP_STATUS.forEach(ps => { po += `<label><input type="radio" name="edt_poop" value="${ps.value}" ${(rec.poopStatus||'正常')===ps.value?'checked':''}> <span class="poop-icon ${ps.cls}">${ps.icon}</span>${ps.label}</label>`; });
     html += `<div class="input-row radio-group">${po}</div>`;
@@ -1126,7 +1155,9 @@ function saveEditRecord() {
     const a = parseInt(document.getElementById('edt_val').value); rec.milkAmount = isNaN(a) || a < 1 ? 120 : a;
   } else if (act.type === 'sleep') {
     rec.sleepStartTime = rec.recTime;
-    const v = parseFloat(document.getElementById('edt_val').value); rec.duration = isNaN(v) ? 0 : v;
+    const dh = parseInt(document.getElementById('edt_dur_h').value) || 0;
+    const dm = parseInt(document.getElementById('edt_dur_m').value) || 0;
+    rec.duration = dh * 60 + dm;
   } else if (act.type === 'drinkWater') {
     rec.drinkTime = rec.recTime;
   } else if (act.type === 'poop') {
@@ -1215,8 +1246,8 @@ function renderAddList(filterText) {
     if (act.type === 'milk') {
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">奶量:</label><input type="number" step="1" min="1" id="adinp_${act.id}" value="120"><span class="unit">ml</span></div>`;
     } else if (act.type === 'sleep') {
-      // 睡眠：开始时间 + 时长
-      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">时长:</label><input type="number" step="0.1" id="adinp_${act.id}" placeholder="0"><span class="unit">分钟</span></div>`;
+      // 睡眠：开始时间 + 时长（X h Y min）
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">时长:</label><input type="number" min="0" id="adinp_${act.id}_dur_h" placeholder="0" style="width:50px;"><span class="unit">h</span><input type="number" min="0" max="59" id="adinp_${act.id}_dur_m" placeholder="0" style="width:50px;margin-left:8px;"><span class="unit">min</span></div>`;
     } else if (act.type === 'drinkWater') {
       // 喝水：时间
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div>`;
@@ -1320,7 +1351,10 @@ function confirmAdd() {
       const el = document.getElementById(`adinp_${id}`); record.milkAmount = (el && !isNaN(parseInt(el.value))) ? Math.max(1, parseInt(el.value)) : 120;
     } else if (act.type === 'sleep') {
       record.sleepStartTime = recTime;
-      const el = document.getElementById(`adinp_${id}`); record.duration = (el && !isNaN(parseFloat(el.value))) ? parseFloat(el.value) : 0;
+      const dhEl = document.getElementById(`adinp_${id}_dur_h`); const dmEl = document.getElementById(`adinp_${id}_dur_m`);
+      const dh = (dhEl && !isNaN(parseInt(dhEl.value))) ? parseInt(dhEl.value) : 0;
+      const dm = (dmEl && !isNaN(parseInt(dmEl.value))) ? parseInt(dmEl.value) : 0;
+      record.duration = dh * 60 + dm;
     } else if (act.type === 'drinkWater') {
       record.drinkTime = recTime;
     } else if (act.type === 'poop') {
@@ -1394,10 +1428,10 @@ function openReport() {
     html += `<div class="report-section"><div class="report-section-title">${cat.icon} ${cat.name}</div>`;
     ca.forEach(act => {
       const s = stats[act.id]; let val = '', isZero = false;
-      if (!s) { val = act.type==='milk'?'0次 · 0ml':act.type==='sleep'?'0次 · 0分钟':'0次'; isZero = true; }
+      if (!s) { val = act.type==='milk'?'0次 · 0ml':act.type==='sleep'?'0次 · 0h 0min':'0次'; isZero = true; }
       else {
         if (act.type === 'milk') val = s.count + '次 · ' + s.totalMilk + 'ml';
-        else if (act.type === 'sleep') val = s.count + '次 · ' + s.duration.toFixed(1) + '分钟';
+        else if (act.type === 'sleep') { const h = Math.floor(s.duration / 60); const m = Math.round(s.duration % 60); val = s.count + '次 · ' + h + 'h ' + m + 'min'; }
         else if (act.type === 'supplement') val = s.count + '次 · ' + s.totalSuppl + '粒';
         else if (s.duration > 0) val = s.count + '次 · ' + s.duration.toFixed(1) + '分钟';
         else val = s.count + '次';
@@ -1442,7 +1476,26 @@ function openManage() {
   });
   list.innerHTML = html;
   renderCustomOptionsSection();
+  document.getElementById('readOnlyToggle').checked = isReadOnlyMode();
+  updateReadOnlySlider();
   showModal('manageModal');
+}
+function isReadOnlyMode() { return localStorage.getItem('readonly_mode') === 'yes'; }
+function updateReadOnlySlider() {
+  const slider = document.getElementById('readOnlySlider');
+  if (!slider) return;
+  if (isReadOnlyMode()) slider.style.background = '#2ecc71';
+  else slider.style.background = 'rgba(255,255,255,0.15)';
+}
+function toggleReadOnly() {
+  const ck = document.getElementById('readOnlyToggle').checked;
+  localStorage.setItem('readonly_mode', ck ? 'yes' : 'no');
+  updateReadOnlySlider();
+  renderCards(); updateAddButtonVisibility();
+}
+function updateAddButtonVisibility() {
+  const fab = document.getElementById('fabBtn');
+  if (fab) fab.style.display = isReadOnlyMode() ? 'none' : '';
 }
 function toggleManage(id) {
   const idx = hiddenActivities.indexOf(id);
