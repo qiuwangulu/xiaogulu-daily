@@ -673,13 +673,14 @@
     <button class="modal-close" onclick="hideModal('manageModal')">&times;</button>
     <div class="modal-title">&#9881; 管理</div>
     <div class="sync-section">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0 0 0;">
         <div class="cos-title" style="margin:0;">🔒 只读模式</div>
         <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;">
           <input type="checkbox" id="readOnlyToggle" style="opacity:0;width:0;height:0;" onchange="toggleReadOnly()">
           <span class="toggle-slider" id="readOnlySlider"></span>
         </label>
       </div>
+      <div style="font-size:14px;color:#b2bec3;padding:4px 0 8px 0;">开启后隐藏编辑/删除和添加按钮</div>
     </div>
     <div class="manage-list" id="manageList"></div>
     <div class="custom-options-section" id="customOptionsSection"></div>
