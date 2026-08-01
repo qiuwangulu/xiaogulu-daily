@@ -958,14 +958,29 @@ function getSupplementSuggestion() {
 }
 
 /* ==================== 信息总览 ==================== */
+function getLastMilkRecord() {
+  // 跨天查找最近的喝奶记录，从今天往前找最多7天
+  const today = new Date();
+  for (let d = 0; d <= 7; d++) {
+    const dt = new Date(today);
+    dt.setDate(dt.getDate() - d);
+    const ds = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+    let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch { continue; }
+    for (let i = recs.length - 1; i >= 0; i--) {
+      if (recs[i].type === 'milk' && recs[i].milkTime) return recs[i];
+    }
+  }
+  return null;
+}
+
 function updateOverview() {
   const records = getTodayRecords();
   const bar = document.getElementById('overviewBar');
 
-  let lastMilkRec = null; let totalMilk = 0;
-  for (let i = records.length - 1; i >= 0; i--) { if (records[i].type === 'milk' && records[i].milkTime) { lastMilkRec = records[i]; break; } }
+  let totalMilk = 0;
   records.forEach(r => { if (r.type === 'milk' && r.milkAmount) totalMilk += r.milkAmount; });
 
+  const lastMilkRec = getLastMilkRec();
   let html = '<div class="overview-row">';
   if (lastMilkRec) {
     const [h, m] = (lastMilkRec.milkTime || lastMilkRec.recTime || '00:00').split(':').map(Number);
