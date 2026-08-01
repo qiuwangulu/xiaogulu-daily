@@ -980,7 +980,7 @@ function updateOverview() {
   let totalMilk = 0;
   records.forEach(r => { if (r.type === 'milk' && r.milkAmount) totalMilk += r.milkAmount; });
 
-  const lastMilkRec = getLastMilkRec();
+  const lastMilkRec = getLastMilkRecord();
   let html = '<div class="overview-row">';
   if (lastMilkRec) {
     const [h, m] = (lastMilkRec.milkTime || lastMilkRec.recTime || '00:00').split(':').map(Number);
