@@ -672,16 +672,6 @@
   <div class="modal-box" onclick="event.stopPropagation()">
     <button class="modal-close" onclick="hideModal('manageModal')">&times;</button>
     <div class="modal-title">&#9881; 管理</div>
-    <div class="manage-list" id="manageList"></div>
-    <div class="custom-options-section" id="customOptionsSection"></div>
-    <div class="sync-section" id="syncSection">
-      <div class="cos-title">☁️ 云端同步</div>
-      <div class="sync-status-row"><span class="sync-dot off" id="syncDotManage"></span><span id="syncStatusTextManage">未配置</span></div>
-      <div class="sync-btn-row">
-        <button class="btn btn-primary" onclick="hideModal('manageModal');openSyncSettings()">同步设置</button>
-        <button class="btn" onclick="syncPullAllAndRefresh()">立即同步</button>
-      </div>
-    </div>
     <div class="sync-section">
       <div class="cos-title">🔒 只读模式</div>
       <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;">
@@ -690,6 +680,16 @@
           <input type="checkbox" id="readOnlyToggle" style="opacity:0;width:0;height:0;" onchange="toggleReadOnly()">
           <span class="toggle-slider" id="readOnlySlider"></span>
         </label>
+      </div>
+    </div>
+    <div class="manage-list" id="manageList"></div>
+    <div class="custom-options-section" id="customOptionsSection"></div>
+    <div class="sync-section" id="syncSection">
+      <div class="cos-title">☁️ 云端同步</div>
+      <div class="sync-status-row"><span class="sync-dot off" id="syncDotManage"></span><span id="syncStatusTextManage">未配置</span></div>
+      <div class="sync-btn-row">
+        <button class="btn btn-primary" onclick="hideModal('manageModal');openSyncSettings()">同步设置</button>
+        <button class="btn" onclick="syncPullAllAndRefresh()">立即同步</button>
       </div>
     </div>
     <div class="modal-actions">
@@ -1495,7 +1495,7 @@ function openManage() {
   updateReadOnlySlider();
   showModal('manageModal');
 }
-function isReadOnlyMode() { return localStorage.getItem('readonly_mode') === 'yes'; }
+function isReadOnlyMode() { const v = localStorage.getItem('readonly_mode'); return v === null ? true : v === 'yes'; }
 function updateReadOnlySlider() {
   const slider = document.getElementById('readOnlySlider');
   if (!slider) return;
