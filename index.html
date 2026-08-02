@@ -1003,15 +1003,18 @@ function updateOverview() {
   html += `<div class="overview-item"><span class="ov-label">总奶量:</span><span class="ov-value">${totalMilk} ml</span></div>`;
   html += '</div>';
 
-  const achievements = [];
+  const achievements = new Set();
   records.forEach(r => {
-    if (r.type === 'learnLanguage' && r.note) achievements.push(r.note);
-    if (r.type === 'learnLogic' && r.note) achievements.push(r.note);
-    if (r.type === 'grossMotor' && r.grossMotorItems && r.grossMotorItems.length > 0) achievements.push(r.grossMotorItems.join(','));
-    if (r.type === 'fineMotor' && r.fineMotorItems && r.fineMotorItems.length > 0) achievements.push(r.fineMotorItems.join(','));
+    if (r.type === 'learnLanguage' && r.note) achievements.add(r.note);
+    if (r.type === 'learnLogic' && r.note) achievements.add(r.note);
+    if (r.type === 'grossMotor' && r.grossMotorItems && r.grossMotorItems.length > 0) achievements.add(r.grossMotorItems.join(','));
+    if (r.type === 'fineMotor' && r.fineMotorItems && r.fineMotorItems.length > 0) achievements.add(r.fineMotorItems.join(','));
+    if (r.type === 'grossMotor' && r.note) achievements.add(r.note);
+    if (r.type === 'fineMotor' && r.note) achievements.add(r.note);
   });
-  if (achievements.length > 0) {
-    html += `<div class="overview-achievement">今日成就: ${achievements.join(' | ')}</div>`;
+  const achArr = [...achievements];
+  if (achArr.length > 0) {
+    html += `<div class="overview-achievement">今日成就: ${achArr.join(' | ')}</div>`;
   } else {
     html += `<div class="overview-achievement">今日成就: 无</div>`;
   }
@@ -1076,8 +1079,8 @@ function formatRecordBrief(r) {
   if (r.type === 'supplement') { let s = (r.supplementTypes||[]).join('/'); if (r.supplementAmount > 0) s += ' ' + r.supplementAmount + '粒'; return s || '已记录'; }
   if (r.type === 'vaccine') { let s = (r.vaccineTypes||[]).join('/'); if (r.vaccineDose > 0) s += ' 第' + r.vaccineDose + '剂'; return s || '已记录'; }
   if (r.type === 'listenStory') { return (r.storyLangs||[]).join('/') || '已记录'; }
-  if (r.type === 'grossMotor') { return (r.grossMotorItems||[]).join(', ') || '已记录'; }
-  if (r.type === 'fineMotor') { return (r.fineMotorItems||[]).join(', ') || '已记录'; }
+  if (r.type === 'grossMotor') { let s = (r.grossMotorItems||[]).join(', ') || '已记录'; if (r.note) s += ' · ' + r.note; return s; }
+  if (r.type === 'fineMotor') { let s = (r.fineMotorItems||[]).join(', ') || '已记录'; if (r.note) s += ' · ' + r.note; return s; }
   if (r.type === 'sleep') { if (r.duration && r.duration > 0) { const h = Math.floor(r.duration / 60); const m = Math.round(r.duration % 60); let s = ''; if (h > 0) s += h + 'h'; if (m > 0) s += (s ? ' ' : '') + m + 'min'; return s || '已记录'; } return '已记录'; }
   if (r.type === 'drinkWater') { return '已喝水'; }
   if (r.duration !== undefined && r.duration > 0) { let s = r.duration + '分钟'; if (r.level) s += ' · 屁股状态:' + r.level; return s; }
@@ -1136,11 +1139,11 @@ function openEditRecord(type, timestamp) {
   } else if (act.type === 'grossMotor') {
     const sel = rec.grossMotorItems || [];
     let gh = ''; grossMotorOptions.forEach(o => { gh += `<label><input type="checkbox" name="edt_gm" value="${o}" ${sel.includes(o)?'checked':''}> ${o}</label>`; });
-    html += `<div class="input-row checkbox-group">${gh}</div>`;
+    html += `<div class="input-row checkbox-group">${gh}</div><div class="input-row"><input type="text" id="edt_note" value="${(rec.note||'').replace(/"/g,'&quot;')}" placeholder="备注（可选）"></div>`;
   } else if (act.type === 'fineMotor') {
     const sel = rec.fineMotorItems || [];
     let fh = ''; fineMotorOptions.forEach(o => { fh += `<label><input type="checkbox" name="edt_fm" value="${o}" ${sel.includes(o)?'checked':''}> ${o}</label>`; });
-    html += `<div class="input-row checkbox-group">${fh}</div>`;
+    html += `<div class="input-row checkbox-group">${fh}</div><div class="input-row"><input type="text" id="edt_note" value="${(rec.note||'').replace(/"/g,'&quot;')}" placeholder="备注（可选）"></div>`;
   } else if (act.type === 'duration') {
     html += `<div class="input-row"><input type="number" step="0.1" id="edt_val" value="${rec.duration||0}"><span class="unit">${act.unit}</span></div>`;
   } else if (act.type === 'airButt') {
@@ -1200,10 +1203,12 @@ function saveEditRecord() {
     rec.grossMotorTime = rec.recTime;
     const cbs = document.getElementsByName('edt_gm'); const items = []; for (const cb of cbs) { if (cb.checked) items.push(cb.value); }
     rec.grossMotorItems = items;
+    const noteEl = document.getElementById('edt_note'); rec.note = noteEl ? (noteEl.value || '') : '';
   } else if (act.type === 'fineMotor') {
     rec.fineMotorTime = rec.recTime;
     const cbs = document.getElementsByName('edt_fm'); const items = []; for (const cb of cbs) { if (cb.checked) items.push(cb.value); }
     rec.fineMotorItems = items;
+    const noteEl = document.getElementById('edt_note'); rec.note = noteEl ? (noteEl.value || '') : '';
   } else if (act.type === 'duration') {
     rec.durationTime = rec.recTime;
     const v = parseFloat(document.getElementById('edt_val').value); rec.duration = isNaN(v) ? 0 : v;
@@ -1284,10 +1289,10 @@ function renderAddList(filterText) {
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group"><label><input type="checkbox" name="adstory_${act.id}" value="中文"> 中文</label><label><input type="checkbox" name="adstory_${act.id}" value="英文"> 英文</label></div>`;
     } else if (act.type === 'grossMotor') {
       let gh = ''; grossMotorOptions.forEach(o => { gh += `<label><input type="checkbox" name="adgm_${act.id}" value="${o}"> ${o}</label>`; });
-      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group">${gh}</div>`;
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group">${gh}</div><div class="input-row"><input type="text" id="adnote_${act.id}" placeholder="备注（可选）"></div>`;
     } else if (act.type === 'fineMotor') {
       let fh = ''; fineMotorOptions.forEach(o => { fh += `<label><input type="checkbox" name="adfm_${act.id}" value="${o}"> ${o}</label>`; });
-      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group">${fh}</div>`;
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group">${fh}</div><div class="input-row"><input type="text" id="adnote_${act.id}" placeholder="备注（可选）"></div>`;
     } else if (act.type === 'duration') {
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><input type="number" step="0.1" id="adinp_${act.id}" placeholder="0"><span class="unit">${act.unit}</span></div>`;
     } else if (act.type === 'airButt') {
@@ -1395,9 +1400,11 @@ function confirmAdd() {
     } else if (act.type === 'grossMotor') {
       const cbs = document.getElementsByName(`adgm_${id}`); const items = []; for (const cb of cbs) { if (cb.checked) items.push(cb.value); }
       record.grossMotorItems = items; record.grossMotorTime = recTime;
+      const noteEl = document.getElementById(`adnote_${id}`); record.note = noteEl ? (noteEl.value || '') : '';
     } else if (act.type === 'fineMotor') {
       const cbs = document.getElementsByName(`adfm_${id}`); const items = []; for (const cb of cbs) { if (cb.checked) items.push(cb.value); }
       record.fineMotorItems = items; record.fineMotorTime = recTime;
+      const noteEl = document.getElementById(`adnote_${id}`); record.note = noteEl ? (noteEl.value || '') : '';
     } else if (act.type === 'duration') { const el = document.getElementById(`adinp_${id}`); record.duration = (el && !isNaN(parseFloat(el.value))) ? parseFloat(el.value) : 0; record.durationTime = recTime; }
     else if (act.type === 'airButt') { const el = document.getElementById(`adinp_${id}`); record.duration = (el && !isNaN(parseFloat(el.value))) ? parseFloat(el.value) : 0; const sel = document.getElementById(`adsel_${id}`); record.level = sel ? sel.value : '正常'; record.airButtTime = recTime; }
     else if (act.type === 'bath') { const sel = document.getElementById(`adsel_${id}`); record.shampoo = sel ? sel.value : '无'; record.bathTime = recTime; }
@@ -1563,7 +1570,7 @@ function generateShare() {
   if (records.length === 0) { text += '今天还没有记录哦~'; } else {
     const stats = {};
     records.forEach(r => { if (!stats[r.type]) stats[r.type] = { name: r.name, count: 0, duration: 0, totalMilk: 0 }; stats[r.type].count++; if (r.duration !== undefined) stats[r.type].duration += r.duration; if (r.milkAmount !== undefined) stats[r.type].totalMilk += r.milkAmount; });
-    CATEGORIES.forEach(cat => { ACTIVITIES.filter(a => a.category === cat.id && !hiddenActivities.includes(a.id)).forEach(act => { const s = stats[act.id]; if (!s) return; let line = `${act.name}: `; if (act.type === 'milk') line += `${s.count}次 ${s.totalMilk}ml`; else if (s.duration > 0) line += `${s.duration.toFixed(1)}分钟`; else line += `${s.count}次`; text += line + '\n'; }); });
+    CATEGORIES.forEach(cat => { ACTIVITIES.filter(a => a.category === cat.id && !hiddenActivities.includes(a.id)).forEach(act => { const s = stats[act.id]; if (!s) return; let line = `${act.name}: `; if (act.type === 'milk') line += `${s.count}次 ${s.totalMilk}ml`; else if (act.type === 'sleep') { const h = Math.floor(s.duration / 60); const m = Math.round(s.duration % 60); line += `${s.count}次 ${h}h ${m}min`; } else if (s.duration > 0) line += `${s.duration.toFixed(1)}分钟`; else line += `${s.count}次`; text += line + '\n'; }); });
   }
   text += '\u2500'.repeat(20) + '\n记录于 小咕噜的日常';
   currentShareText = text; document.getElementById('shareText').textContent = text; showModal('shareModal');
