@@ -735,6 +735,10 @@
         <button class="btn btn-primary" onclick="savePushToken()">保存</button>
       </div>
       <div class="push-token-hint">微信扫码登录 pushplus.plus 后，在「一对一推送」页面复制 Token</div>
+      <div class="push-token-row">
+        <input type="text" id="pushTopicInput" placeholder="群组编码（可选，一对多推送）">
+      </div>
+      <div class="push-token-hint">填写后消息将推送给整个群组成员：pushplus.plus → 发送消息 → 一对多消息 → 新建群组，自定义「群组编码」填到这里，家人扫码入群即可同步接收</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-primary" onclick="saveManage()">保存</button>
@@ -1035,17 +1039,22 @@ function savePushToken() {
   const t = document.getElementById('pushTokenInput').value.trim();
   if (!t) { showToast('请填写Token'); return; }
   localStorage.setItem('pushplus_token', t);
+  const topic = document.getElementById('pushTopicInput') ? document.getElementById('pushTopicInput').value.trim() : '';
+  if (topic) localStorage.setItem('pushplus_topic', topic); else localStorage.removeItem('pushplus_topic');
   localStorage.removeItem('pushAchSig');
-  showToast('Token已保存');
+  showToast(topic ? 'Token与群组编码已保存' : 'Token已保存');
 }
 async function notifyPushplus(title, content) {
   const token = localStorage.getItem('pushplus_token');
   if (!token) return false;
   try {
+    const payload = { token: token, title: title, content: content, template: 'html' };
+    const topic = localStorage.getItem('pushplus_topic');
+    if (topic) payload.topic = topic; // 一对多群组推送
     const res = await fetch('https://www.pushplus.plus/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: token, title: title, content: content, template: 'html' })
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
     return !!(data && data.code === 200);
@@ -1623,6 +1632,7 @@ function openManage() {
   document.getElementById('readOnlyToggle').checked = isReadOnlyMode();
   document.getElementById('subscribeToggle').checked = isSubscribeMode();
   document.getElementById('pushTokenInput').value = localStorage.getItem('pushplus_token') || '';
+  document.getElementById('pushTopicInput').value = localStorage.getItem('pushplus_topic') || '';
   updateSubscribeSlider();
   updateReadOnlySlider();
   showModal('manageModal');
