@@ -193,9 +193,10 @@
     align-items: center;
   }
   .record-tag.newest {
-    background: rgba(46,204,113,0.2);
-    color: #2ecc71;
-    border: 1px solid rgba(46,204,113,0.35);
+    background: rgba(46,204,113,0.25);
+    color: #ffffff;
+    font-weight: 500;
+    border: 1px solid rgba(46,204,113,0.5);
     animation: tagFlash 0.8s ease;
   }
   @keyframes tagFlash {
@@ -1810,6 +1811,47 @@ function recordBodyMeasurement(field, val) {
 function seedBodyHistory() {
   let hist = getBodyHistory();
   const seedData = [
+    // 2026-04 ~ 2026-07 历史体重
+    { d: '2026-04-25', h: 50,   w: 3.34 },
+    { d: '2026-05-10', h: null, w: 3.54 },
+    { d: '2026-05-11', h: null, w: 3.60 },
+    { d: '2026-05-12', h: null, w: 3.62 },
+    { d: '2026-05-14', h: null, w: 3.70 },
+    { d: '2026-05-15', h: null, w: 3.70 },
+    { d: '2026-05-16', h: null, w: 3.73 },
+    { d: '2026-05-17', h: null, w: 3.76 },
+    { d: '2026-05-18', h: null, w: 3.76 },
+    { d: '2026-05-19', h: null, w: 3.79 },
+    { d: '2026-05-21', h: null, w: 3.86 },
+    { d: '2026-05-22', h: 54,   w: 3.89 },
+    { d: '2026-05-23', h: null, w: 3.92 },
+    { d: '2026-05-24', h: null, w: 3.92 },
+    { d: '2026-05-26', h: null, w: 3.96 },
+    { d: '2026-05-28', h: null, w: 4.04 },
+    { d: '2026-05-29', h: null, w: 4.11 },
+    { d: '2026-05-30', h: null, w: 4.12 },
+    { d: '2026-05-31', h: null, w: 4.15 },
+    { d: '2026-06-01', h: null, w: 4.15 },
+    { d: '2026-06-02', h: null, w: 4.24 },
+    { d: '2026-06-03', h: null, w: 4.27 },
+    { d: '2026-06-04', h: null, w: 4.27 },
+    { d: '2026-06-05', h: null, w: 4.32 },
+    { d: '2026-06-06', h: null, w: 4.35 },
+    { d: '2026-06-07', h: 56.5, w: 4.42 },
+    { d: '2026-06-08', h: null, w: 4.43 },
+    { d: '2026-06-09', h: null, w: 4.48 },
+    { d: '2026-06-10', h: null, w: 4.48 },
+    { d: '2026-06-11', h: null, w: 4.49 },
+    { d: '2026-06-12', h: null, w: 4.55 },
+    { d: '2026-06-13', h: 57,   w: 4.60 },
+    { d: '2026-06-14', h: null, w: 4.60 },
+    { d: '2026-06-15', h: null, w: 4.65 },
+    { d: '2026-06-20', h: 59.1, w: 4.75 },
+    { d: '2026-06-22', h: null, w: 4.80 },
+    { d: '2026-07-01', h: null, w: 5.20 },
+    { d: '2026-07-09', h: null, w: 5.45 },
+    { d: '2026-07-17', h: null, w: 5.55 },
+    // 现有数据（保留）
     { d: '2026-08-10', h: 61.0, w: 5.70 },
     { d: '2026-08-18', h: 62.5, w: 5.87 },
     { d: '2026-08-20', h: 62.5, w: 6.10 }
@@ -1817,7 +1859,10 @@ function seedBodyHistory() {
   let changed = false;
   seedData.forEach(s => {
     const existing = hist.find(x => x.d === s.d);
-    if (!existing) { hist.push({ d: s.d, h: s.h, w: s.w }); changed = true; }
+    if (!existing) {
+      hist.push({ d: s.d, h: s.h, w: s.w });
+      if (s.h != null || s.w != null) changed = true;
+    }
     else {
       const hadH = existing.h != null, hadW = existing.w != null;
       if (s.h != null && !hadH) { existing.h = s.h; changed = true; }
@@ -1913,13 +1958,14 @@ function chartTip(hitEl, tipId, label, valueText) {
   const rect = g.querySelector('rect');
   if (g.style.display !== 'none' && text.textContent === content) { g.style.display = 'none'; return; } // 再点同一点隐藏
   text.textContent = content;
-  const wChar = [...content].reduce((s, c) => s + (/[\u4e00-\u9fff\uff1a]/.test(c) ? 10 : 6), 0);
-  const w = wChar + 12;
+  const wChar = [...content].reduce((s, c) => s + (/[\u4e00-\u9fff\uff1a：]/.test(c) ? 11 : 7), 0);
+  const w = wChar + 14;
   rect.setAttribute('width', w);
   const cx = parseFloat(hitEl.getAttribute('data-cx')), cy = parseFloat(hitEl.getAttribute('data-cy'));
   const W = parseFloat(svg.viewBox.baseVal.width);
   const x = Math.max(2, Math.min(cx - w / 2, W - w - 2));
-  const y = cy - 34 >= 8 ? cy - 32 : Math.min(cy + 12, 168 - 24);
+  // tip 高度 20：若上方空间足够则显示在数据点上方，否则显示在下方
+  const y = cy - 36 >= 8 ? cy - 34 : Math.min(cy + 12, 168 - 24);
   g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
   g.style.display = '';
 }
@@ -1929,11 +1975,19 @@ function makeBarChart(data, opts) {
   const valid = data.filter(d => d.value != null);
   const head = `<div class="chart-card"><div class="chart-title">${title}</div>`;
   if (valid.length === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
-  const W = 330, H = 168, PL = 36, PR = 12, PT = 12, PB = 24;
+  const W = 330, H = 168, PL = 40, PR = 12, PT = 12, PB = 24;
   const minV = 0;
-  let maxV = Math.max(...valid.map(d => d.value));
-  if (maxV <= 0) maxV = 1;
-  maxV = maxV * 1.12;
+  // 纵坐标轴：奶量用 0/600/100/递增（0、600、700、800、900、1000），睡眠用自适应 3 档
+  let ticks;
+  if (opts.fixedTicks) {
+    ticks = opts.fixedTicks; // 数组，如 [0, 600, 700, 800, 900, 1000]
+    var maxV = ticks[ticks.length - 1];
+  } else {
+    var maxV = Math.max(...valid.map(d => d.value));
+    if (maxV <= 0) maxV = 1;
+    maxV = maxV * 1.12;
+    ticks = [0, maxV / 2, maxV];
+  }
   const iw = W - PL - PR, ih = H - PT - PB;
   const n = data.length;
   const slotW = iw / n;
@@ -1953,26 +2007,25 @@ function makeBarChart(data, opts) {
     bars += `<rect class="bar-rect" x="${(cxBar - barW / 2).toFixed(1)}" y="${barTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="${color}"/>` +
       `<rect class="bar-hit" x="${(cxBar - slotW / 2).toFixed(1)}" y="${PT.toFixed(1)}" width="${slotW.toFixed(1)}" height="${ih.toFixed(1)}" fill="transparent" data-cx="${cxBar.toFixed(1)}" data-cy="${barTop.toFixed(1)}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
   });
-  // 点击提示浮层
-  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="5" ry="5" height="18" fill="rgba(0,0,0,0.85)" stroke="rgba(255,255,255,0.25)" stroke-width="0.5"/><text font-size="10" fill="#ffeaa7" x="6" y="13">?</text></g>`;
-  // 网格线 + y轴刻度（3档）
+  // 点击提示浮层：白色加粗文字 + 深色背景，放在最后绘制保证不被柱子遮挡
+  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="rgba(0,0,0,0.92)" stroke="rgba(255,255,255,0.4)" stroke-width="0.5"/><text font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  // 网格线 + y轴刻度（按 ticks）
   let grid = '', ylabels = '';
-  for (let k = 0; k <= 2; k++) {
-    const v = minV + ((maxV - minV) * k) / 2;
+  ticks.forEach(v => {
     const gy = yf(v).toFixed(1);
     grid += `<line x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
-    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#636e72" font-size="9" text-anchor="end">${fmtV(Math.round(v * 10) / 10)}</text>`;
-  }
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#b2bec3" font-size="9" text-anchor="end">${fmtV(Math.round(v * 10) / 10)}</text>`;
+  });
   // x轴标签
   const step = Math.max(1, Math.ceil(n / 7));
   let xlabels = '';
   data.forEach((d, i) => {
     const cxBar = PL + slotW * i + slotW / 2;
     if (i % step !== 0 && i !== n - 1) return;
-    xlabels += `<text x="${cxBar.toFixed(1)}" y="${H - 8}" fill="#636e72" font-size="9" text-anchor="middle">${d.label}</text>`;
+    xlabels += `<text x="${cxBar.toFixed(1)}" y="${H - 8}" fill="#b2bec3" font-size="9" text-anchor="middle">${d.label}</text>`;
   });
   return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
-    grid + ylabels + xlabels + tip + bars + `</svg></div>`;
+    grid + ylabels + xlabels + bars + tip + `</svg></div>`;
 }
 function openAnalysis() {
   const content = document.getElementById('analysisContent');
@@ -1991,7 +2044,7 @@ function openAnalysis() {
   const heightPts = dedupeBodySeries(hist.map(x => ({ d: x.d, v: x.h })));
   const toChart = pts => pts.map(p => { const [y, m, dd] = p.d.split('-'); return { label: `${parseInt(m)}/${parseInt(dd)}`, value: p.v }; });
   let html = '';
-  html += makeBarChart(milkData, { title: '🍼 每日总奶量（近15天）', unit: 'ml', color: '#74b9ff' });
+  html += makeBarChart(milkData, { title: '🍼 每日总奶量（近15天）', unit: 'ml', color: '#74b9ff', fixedTicks: [0, 600, 700, 800, 900, 1000] });
   html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#a29bfe', fmt: v => v.toFixed(1) });
   html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重曲线（有记录以来）', unit: 'kg', color: '#55efc4', fmt: v => v.toFixed(1) });
   html += makeLineChart(toChart(heightPts), { title: '📏 身高曲线（有记录以来）', unit: 'cm', color: '#ffeaa7', fmt: v => v.toFixed(1) });
