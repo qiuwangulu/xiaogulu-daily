@@ -408,6 +408,17 @@
   }
   .add-inputs input[type="text"] { width: 100%; }
   .add-inputs input::placeholder { color: rgba(255,255,255,0.35); }
+  .add-inputs .input-row textarea {
+    flex: 1 1 100%;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    color: #fff; font-size: 14px;
+    padding: 6px 8px; outline: none;
+    resize: vertical; min-height: 46px;
+    font-family: inherit; line-height: 1.5;
+  }
+  .add-inputs .input-row textarea::placeholder { color: rgba(255,255,255,0.35); }
   .add-inputs .unit { font-size: 13px; color: #b2bec3; white-space: nowrap; }
   .add-inputs select {
     background: rgba(0,0,0,0.3);
@@ -459,6 +470,9 @@
   .report-label { color: #b2bec3; }
   .report-value { color: #ffeaa7; font-weight: 600; }
   .report-value.zero { color: #636e72; font-weight: 400; }
+  .report-item.note-item { display: block; }
+  .report-item.note-item .report-label { display: block; margin-bottom: 2px; font-size: 13px; }
+  .report-item.note-item .note-text { display: block; color: #dfe6e9; font-weight: 400; white-space: pre-wrap; word-break: break-word; }
   .report-empty { text-align: center; color: #636e72; padding: 24px 0; font-size: 16px; }
 
   /* ===== 历史 ===== */
@@ -524,8 +538,6 @@
   }
   #readOnlyToggle:checked + .toggle-slider { background: #2ecc71; border-color: #2ecc71; }
   #readOnlyToggle:checked + .toggle-slider::before { transform: translateX(20px); }
-  #subscribeToggle:checked + .toggle-slider { background: #2ecc71; border-color: #2ecc71; }
-  #subscribeToggle:checked + .toggle-slider::before { transform: translateX(20px); }
 
   .push-token-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
   .push-token-row input {
@@ -710,6 +722,14 @@
       </div>
       <div style="font-size:14px;color:#b2bec3;padding:4px 0 8px 0;">开启后隐藏编辑/删除和添加按钮</div>
     </div>
+    <div class="sync-section">
+      <div class="cos-title">📮 订阅推送</div>
+      <div class="push-token-row">
+        <input type="text" id="pushTopicInput" placeholder="群组编码" value="xiaogulu_daily">
+        <button class="btn btn-primary" onclick="savePushTopic()">保存</button>
+      </div>
+      <div class="push-token-hint">pushplus.plus → 发送消息 → 一对多消息 → 群组编码填到这里，家人扫码入群即可同步接收成就提醒</div>
+    </div>
     <div class="manage-list" id="manageList"></div>
     <div class="custom-options-section" id="customOptionsSection"></div>
     <div class="sync-section" id="syncSection">
@@ -719,26 +739,6 @@
         <button class="btn btn-primary" onclick="hideModal('manageModal');openSyncSettings()">同步设置</button>
         <button class="btn" onclick="syncPullAllAndRefresh()">立即同步</button>
       </div>
-    </div>
-    <div class="sync-section">
-      <div class="cos-title">📮 订阅推送</div>
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0 0 0;">
-        <div class="cos-title" style="margin:0;">订阅模式</div>
-        <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;">
-          <input type="checkbox" id="subscribeToggle" style="opacity:0;width:0;height:0;" onchange="toggleSubscribe()">
-          <span class="toggle-slider" id="subscribeSlider"></span>
-        </label>
-      </div>
-      <div style="font-size:14px;color:#b2bec3;padding:4px 0 8px 0;">开启后，今日成就有更新时自动推送至您的微信</div>
-      <div class="push-token-row">
-        <input type="text" id="pushTokenInput" placeholder="PushPlus Token">
-        <button class="btn btn-primary" onclick="savePushToken()">保存</button>
-      </div>
-      <div class="push-token-hint">微信扫码登录 pushplus.plus 后，在「一对一推送」页面复制 Token</div>
-      <div class="push-token-row">
-        <input type="text" id="pushTopicInput" placeholder="群组编码（可选，一对多推送）">
-      </div>
-      <div class="push-token-hint">填写后消息将推送给整个群组成员：pushplus.plus → 发送消息 → 一对多消息 → 新建群组，自定义「群组编码」填到这里，家人扫码入群即可同步接收</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-primary" onclick="saveManage()">保存</button>
@@ -1009,48 +1009,25 @@ function getSupplementSuggestion() {
 function computeAchievements(records) {
   const achievements = new Set();
   records.forEach(r => {
-    if (r.type === 'learnLanguage' && r.note) achievements.add(r.note);
-    if (r.type === 'learnLogic' && r.note) achievements.add(r.note);
-    if (r.type === 'grossMotor' && r.grossMotorItems && r.grossMotorItems.length > 0) achievements.add(r.grossMotorItems.join(','));
-    if (r.type === 'fineMotor' && r.fineMotorItems && r.fineMotorItems.length > 0) achievements.add(r.fineMotorItems.join(','));
-    if (r.type === 'grossMotor' && r.note) achievements.add(r.note);
-    if (r.type === 'fineMotor' && r.note) achievements.add(r.note);
+    if (r.note && r.note.trim()) achievements.add(r.note.trim());
   });
   return [...achievements];
 }
-function isSubscribeMode() { return localStorage.getItem('subscribe_mode') === 'on'; }
-function updateSubscribeSlider() {
-  const slider = document.getElementById('subscribeSlider');
-  if (slider) slider.style.background = isSubscribeMode() ? '#2ecc71' : 'rgba(255,255,255,0.1)';
-}
-function toggleSubscribe() {
-  const ck = document.getElementById('subscribeToggle').checked;
-  if (ck && !localStorage.getItem('pushplus_token')) {
-    showToast('请先填写并保存PushPlus Token');
-    document.getElementById('subscribeToggle').checked = false;
-    return;
-  }
-  localStorage.setItem('subscribe_mode', ck ? 'on' : 'off');
-  if (ck) localStorage.removeItem('pushAchSig'); // 开启后允许立即推送当前成就
-  updateSubscribeSlider();
-  showToast(ck ? '订阅已开启' : '订阅已关闭');
-}
-function savePushToken() {
-  const t = document.getElementById('pushTokenInput').value.trim();
-  if (!t) { showToast('请填写Token'); return; }
-  localStorage.setItem('pushplus_token', t);
+function isSubscribeMode() { return true; } // 订阅推送始终开启（只要有配置就自动推送）
+function savePushTopic() {
   const topic = document.getElementById('pushTopicInput') ? document.getElementById('pushTopicInput').value.trim() : '';
-  if (topic) localStorage.setItem('pushplus_topic', topic); else localStorage.removeItem('pushplus_topic');
+  if (!topic) { showToast('请填写群组编码'); return; }
+  localStorage.setItem('pushplus_topic', topic);
   localStorage.removeItem('pushAchSig');
-  showToast(topic ? 'Token与群组编码已保存' : 'Token已保存');
+  showToast('群组编码已保存');
 }
 async function notifyPushplus(title, content) {
   const token = localStorage.getItem('pushplus_token');
-  if (!token) return false;
+  if (!token) { console.warn('PushPlus Token未配置，无法推送'); return false; }
   try {
     const payload = { token: token, title: title, content: content, template: 'html' };
-    const topic = localStorage.getItem('pushplus_topic');
-    if (topic) payload.topic = topic; // 一对多群组推送
+    const topic = localStorage.getItem('pushplus_topic') || 'xiaogulu_daily';
+    payload.topic = topic; // 默认按群组编码一对多推送
     const res = await fetch('https://www.pushplus.plus/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1183,21 +1160,33 @@ function renderCards(newestIds) {
 }
 
 function formatRecordBrief(r) {
-  if (r.type === 'milk') { let s = ''; if (r.milkAmount > 0) s = r.milkAmount + 'ml'; return s || '已记录'; }
-  if (r.type === 'poop') { return r.poopStatus || '已记录'; }
-  if (r.type === 'supplement') { let s = (r.supplementTypes||[]).join('/'); if (r.supplementAmount > 0) s += ' ' + r.supplementAmount + '粒'; return s || '已记录'; }
-  if (r.type === 'vaccine') { let s = (r.vaccineTypes||[]).join('/'); if (r.vaccineDose > 0) s += ' 第' + r.vaccineDose + '剂'; return s || '已记录'; }
-  if (r.type === 'listenStory') { return (r.storyLangs||[]).join('/') || '已记录'; }
-  if (r.type === 'grossMotor') { let s = (r.grossMotorItems||[]).join(', ') || '已记录'; if (r.note) s += ' · ' + r.note; return s; }
-  if (r.type === 'fineMotor') { let s = (r.fineMotorItems||[]).join(', ') || '已记录'; if (r.note) s += ' · ' + r.note; return s; }
-  if (r.type === 'sleep') { if (r.duration && r.duration > 0) { const h = Math.floor(r.duration / 60); const m = Math.round(r.duration % 60); let s = ''; if (h > 0) s += h + 'h'; if (m > 0) s += (s ? ' ' : '') + m + 'min'; return s || '已记录'; } return '已记录'; }
-  if (r.type === 'drinkWater') { return '已喝水'; }
-  if (r.duration !== undefined && r.duration > 0) { let s = r.duration + '分钟'; if (r.level) s += ' · 屁股状态:' + r.level; return s; }
-  if (r.level) return '屁股状态:' + r.level;
-  if (r.shampoo && r.shampoo !== '无') return '使用沐浴露:' + r.shampoo;
-  if (r.temperature) return r.temperature + '℃ <span class="' + (r.tempStatus === 'high' ? 'temp-high' : 'temp-normal') + '">' + (r.tempStatus === 'high' ? '⚠️' : '●') + '</span>';
-  if (r.note) return r.note;
-  return '已记录';
+  let base = '';
+  if (r.type === 'milk') { if (r.milkAmount > 0) base = r.milkAmount + 'ml'; }
+  else if (r.type === 'poop') { base = r.poopStatus || ''; }
+  else if (r.type === 'supplement') { base = (r.supplementTypes||[]).join('/'); if (r.supplementAmount > 0) base += ' ' + r.supplementAmount + '粒'; }
+  else if (r.type === 'vaccine') { base = (r.vaccineTypes||[]).join('/'); if (r.vaccineDose > 0) base += ' 第' + r.vaccineDose + '剂'; }
+  else if (r.type === 'listenStory') { base = (r.storyLangs||[]).join('/'); }
+  else if (r.type === 'grossMotor') { base = (r.grossMotorItems||[]).join(', '); }
+  else if (r.type === 'fineMotor') { base = (r.fineMotorItems||[]).join(', '); }
+  else if (r.type === 'sleep') {
+    if (r.duration && r.duration > 0) {
+      const h = Math.floor(r.duration / 60); const m = Math.round(r.duration % 60);
+      let s = ''; if (h > 0) s += h + 'h'; if (m > 0) s += (s ? ' ' : '') + m + 'min';
+      base = s;
+    }
+  }
+  else if (r.type === 'drinkWater') { base = '已喝水'; }
+  else if (r.duration !== undefined && r.duration > 0) { base = r.duration + '分钟'; if (r.level) base += ' · 屁股状态:' + r.level; }
+  else if (r.level) { base = '屁股状态:' + r.level; }
+  else if (r.shampoo && r.shampoo !== '无') { base = '使用沐浴露:' + r.shampoo; }
+  else if (r.temperature) { base = r.temperature + '℃ <span class="' + (r.tempStatus === 'high' ? 'temp-high' : 'temp-normal') + '">' + (r.tempStatus === 'high' ? '⚠️' : '●') + '</span>'; }
+  // 所有类型统一追加备注（多行以<br>显示）
+  const note = (r.note || '').trim();
+  if (note) {
+    const noteHtml = note.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    return base ? base + ' · ' + noteHtml : noteHtml;
+  }
+  return base || '已记录';
 }
 
 function deleteRecord(type, timestamp) {
@@ -1248,11 +1237,11 @@ function openEditRecord(type, timestamp) {
   } else if (act.type === 'grossMotor') {
     const sel = rec.grossMotorItems || [];
     let gh = ''; grossMotorOptions.forEach(o => { gh += `<label><input type="checkbox" name="edt_gm" value="${o}" ${sel.includes(o)?'checked':''}> ${o}</label>`; });
-    html += `<div class="input-row checkbox-group">${gh}</div><div class="input-row"><input type="text" id="edt_note" value="${(rec.note||'').replace(/"/g,'&quot;')}" placeholder="备注（可选）"></div>`;
+    html += `<div class="input-row checkbox-group">${gh}</div>`;
   } else if (act.type === 'fineMotor') {
     const sel = rec.fineMotorItems || [];
     let fh = ''; fineMotorOptions.forEach(o => { fh += `<label><input type="checkbox" name="edt_fm" value="${o}" ${sel.includes(o)?'checked':''}> ${o}</label>`; });
-    html += `<div class="input-row checkbox-group">${fh}</div><div class="input-row"><input type="text" id="edt_note" value="${(rec.note||'').replace(/"/g,'&quot;')}" placeholder="备注（可选）"></div>`;
+    html += `<div class="input-row checkbox-group">${fh}</div>`;
   } else if (act.type === 'duration') {
     html += `<div class="input-row"><input type="number" step="0.1" id="edt_val" value="${rec.duration||0}"><span class="unit">${act.unit}</span></div>`;
   } else if (act.type === 'airButt') {
@@ -1260,10 +1249,15 @@ function openEditRecord(type, timestamp) {
   } else if (act.type === 'bath') {
     html += `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">使用沐浴露:</label><select id="edt_sel"><option value="无" ${(rec.shampoo||'无')==='无'?'selected':''}>无</option><option value="头发" ${rec.shampoo==='头发'?'selected':''}>头发</option><option value="身体" ${rec.shampoo==='身体'?'selected':''}>身体</option><option value="头发和身体" ${rec.shampoo==='头发和身体'?'selected':''}>头发和身体</option></select></div>`;
   } else if (act.type === 'note') {
-    html += `<div class="input-row"><input type="text" id="edt_val" value="${(rec.note||'').replace(/"/g,'&quot;')}"></div>`;
+    // 备注即内容，由统一备注框编辑
   } else if (act.type === 'temperature') {
     html += `<div class="input-row"><input type="number" step="0.1" id="edt_val" value="${rec.temperature||36.5}"><span class="unit">℃</span></div>`;
   }
+
+  // 所有活动统一附带多行备注编辑框
+  const notePh2 = act.type === 'note' ? '记录内容（支持多行）' : '备注（可选，支持多行）';
+  const noteEsc = (rec.note || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  html += `<div class="input-row add-note-row"><textarea id="edt_note" rows="2" placeholder="${notePh2}">${noteEsc}</textarea></div>`;
 
   container.innerHTML = html;
   showModal('editModal');
@@ -1312,12 +1306,10 @@ function saveEditRecord() {
     rec.grossMotorTime = rec.recTime;
     const cbs = document.getElementsByName('edt_gm'); const items = []; for (const cb of cbs) { if (cb.checked) items.push(cb.value); }
     rec.grossMotorItems = items;
-    const noteEl = document.getElementById('edt_note'); rec.note = noteEl ? (noteEl.value || '') : '';
   } else if (act.type === 'fineMotor') {
     rec.fineMotorTime = rec.recTime;
     const cbs = document.getElementsByName('edt_fm'); const items = []; for (const cb of cbs) { if (cb.checked) items.push(cb.value); }
     rec.fineMotorItems = items;
-    const noteEl = document.getElementById('edt_note'); rec.note = noteEl ? (noteEl.value || '') : '';
   } else if (act.type === 'duration') {
     rec.durationTime = rec.recTime;
     const v = parseFloat(document.getElementById('edt_val').value); rec.duration = isNaN(v) ? 0 : v;
@@ -1330,12 +1322,15 @@ function saveEditRecord() {
     rec.shampoo = document.getElementById('edt_sel').value;
   } else if (act.type === 'note') {
     rec.noteTime = rec.recTime;
-    rec.note = document.getElementById('edt_val').value || '';
   } else if (act.type === 'temperature') {
     rec.tempTime = rec.recTime;
     const v = parseFloat(document.getElementById('edt_val').value); rec.temperature = isNaN(v) ? 0 : v;
     rec.tempStatus = v <= 37.5 ? 'normal' : 'high';
   }
+
+  // 统一读取备注（所有活动类型均支持）
+  const noteEl = document.getElementById('edt_note');
+  if (noteEl) rec.note = noteEl.value.trim();
 
   localStorage.setItem(getTodayKey(), JSON.stringify(records));
   syncUpload('records', getTodayDateStr());
@@ -1398,10 +1393,10 @@ function renderAddList(filterText) {
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group"><label><input type="checkbox" name="adstory_${act.id}" value="中文"> 中文</label><label><input type="checkbox" name="adstory_${act.id}" value="英文"> 英文</label></div>`;
     } else if (act.type === 'grossMotor') {
       let gh = ''; grossMotorOptions.forEach(o => { gh += `<label><input type="checkbox" name="adgm_${act.id}" value="${o}"> ${o}</label>`; });
-      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group">${gh}</div><div class="input-row"><input type="text" id="adnote_${act.id}" placeholder="备注（可选）"></div>`;
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group">${gh}</div>`;
     } else if (act.type === 'fineMotor') {
       let fh = ''; fineMotorOptions.forEach(o => { fh += `<label><input type="checkbox" name="adfm_${act.id}" value="${o}"> ${o}</label>`; });
-      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group">${fh}</div><div class="input-row"><input type="text" id="adnote_${act.id}" placeholder="备注（可选）"></div>`;
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group">${fh}</div>`;
     } else if (act.type === 'duration') {
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><input type="number" step="0.1" id="adinp_${act.id}" placeholder="0"><span class="unit">${act.unit}</span></div>`;
     } else if (act.type === 'airButt') {
@@ -1409,12 +1404,16 @@ function renderAddList(filterText) {
     } else if (act.type === 'bath') {
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">使用沐浴露:</label><select id="adsel_${act.id}"><option value="无">无</option><option value="头发">头发</option><option value="身体">身体</option><option value="头发和身体">头发和身体</option></select></div>`;
     } else if (act.type === 'note') {
-      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><input type="text" id="adinp_${act.id}" placeholder="备注（可选）"></div>`;
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div>`;
     } else if (act.type === 'temperature') {
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><input type="number" step="0.1" id="adinp_${act.id}" placeholder="36.5" oninput="addTempIndicator('${act.id}')"><span class="unit">℃</span><span class="temp-indicator-inline" id="adtemp_${act.id}"></span></div>`;
     } else if (act.type === 'simple') {
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div>`;
     }
+
+    // 每项活动统一附带多行备注输入框
+    const notePh = act.type === 'note' ? '记录内容（支持多行）' : '备注（可选，支持多行）';
+    inputsHtml += `<div class="input-row add-note-row"><textarea id="adnote_${act.id}" rows="2" placeholder="${notePh}"></textarea></div>`;
 
     const isChecked = addSelectedSet.has(act.id);
     html += `<div class="add-item"><div class="add-check${isChecked?' checked':''}" data-id="${act.id}" onclick="toggleAddSelect('${act.id}')">${isChecked?'\u2713':''}</div><div class="add-body"><div class="add-name">${act.icon} ${act.name}</div><div class="add-inputs${isChecked?' show':''}" id="adinputs_${act.id}">${inputsHtml}</div></div></div>`;
@@ -1509,17 +1508,19 @@ function confirmAdd() {
     } else if (act.type === 'grossMotor') {
       const cbs = document.getElementsByName(`adgm_${id}`); const items = []; for (const cb of cbs) { if (cb.checked) items.push(cb.value); }
       record.grossMotorItems = items; record.grossMotorTime = recTime;
-      const noteEl = document.getElementById(`adnote_${id}`); record.note = noteEl ? (noteEl.value || '') : '';
     } else if (act.type === 'fineMotor') {
       const cbs = document.getElementsByName(`adfm_${id}`); const items = []; for (const cb of cbs) { if (cb.checked) items.push(cb.value); }
       record.fineMotorItems = items; record.fineMotorTime = recTime;
-      const noteEl = document.getElementById(`adnote_${id}`); record.note = noteEl ? (noteEl.value || '') : '';
     } else if (act.type === 'duration') { const el = document.getElementById(`adinp_${id}`); record.duration = (el && !isNaN(parseFloat(el.value))) ? parseFloat(el.value) : 0; record.durationTime = recTime; }
     else if (act.type === 'airButt') { const el = document.getElementById(`adinp_${id}`); record.duration = (el && !isNaN(parseFloat(el.value))) ? parseFloat(el.value) : 0; const sel = document.getElementById(`adsel_${id}`); record.level = sel ? sel.value : '正常'; record.airButtTime = recTime; }
     else if (act.type === 'bath') { const sel = document.getElementById(`adsel_${id}`); record.shampoo = sel ? sel.value : '无'; record.bathTime = recTime; }
-    else if (act.type === 'note') { const el = document.getElementById(`adinp_${id}`); record.note = el ? (el.value || '') : ''; record.noteTime = recTime; }
+    else if (act.type === 'note') { record.noteTime = recTime; }
     else if (act.type === 'temperature') { const el = document.getElementById(`adinp_${id}`); const v = (el && !isNaN(parseFloat(el.value))) ? parseFloat(el.value) : 0; record.temperature = v; record.tempStatus = v <= 37.5 ? 'normal' : 'high'; record.tempTime = recTime; }
     else if (act.type === 'simple') { record.simpleTime = recTime; }
+
+    // 统一读取备注（所有活动类型均支持）
+    const noteEl = document.getElementById(`adnote_${id}`);
+    record.note = (noteEl && noteEl.value.trim()) ? noteEl.value.trim() : '';
 
     records.push(record); newestIds.push(id);
   });
@@ -1535,6 +1536,7 @@ function confirmAdd() {
 function openReport() {
   const records = getTodayRecords(); const content = document.getElementById('reportContent');
   const stats = {};
+  const noteRecords = []; // 带备注的记录（用于备注区块）
   records.forEach(r => {
     if (!stats[r.type]) stats[r.type] = { name: r.name, count: 0, duration: 0, totalCount: 0, details: [], totalMilk: 0, totalSuppl: 0 };
     stats[r.type].count++;
@@ -1548,6 +1550,7 @@ function openReport() {
     else if (r.temperature) detail = r.temperature + '℃' + (r.tempStatus === 'high' ? '⚠️' : '');
     else if (r.note) detail = r.note;
     if (detail) stats[r.type].details.push(detail);
+    if (r.note && r.note.trim()) noteRecords.push({ time: r.recTime || r.time || '', name: r.name, note: r.note.trim() });
   });
   const height = localStorage.getItem('babyHeight') || '';
   const weight = localStorage.getItem('babyWeight') || '';
@@ -1575,6 +1578,16 @@ function openReport() {
     });
     html += '</div>';
   });
+  // 备注区块：按时间正序列出所有备注
+  if (noteRecords.length > 0) {
+    noteRecords.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    html += `<div class="report-section"><div class="report-section-title">📝 备注记录</div>`;
+    noteRecords.forEach(n => {
+      const noteHtml = n.note.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      html += `<div class="report-item note-item"><span class="report-label">${n.time} ${n.name}</span><span class="report-value note-text">${noteHtml}</span></div>`;
+    });
+    html += '</div>';
+  }
   html += `<div class="report-item" style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.15); padding-top:10px;"><span class="report-label">总记录数</span><span class="report-value">${records.length}条</span></div>`;
   content.innerHTML = html || '<div class="report-empty">今天还没有记录哦~</div>';
   showModal('reportModal');
@@ -1630,10 +1643,7 @@ function openManage() {
   list.innerHTML = html;
   renderCustomOptionsSection();
   document.getElementById('readOnlyToggle').checked = isReadOnlyMode();
-  document.getElementById('subscribeToggle').checked = isSubscribeMode();
-  document.getElementById('pushTokenInput').value = localStorage.getItem('pushplus_token') || '';
-  document.getElementById('pushTopicInput').value = localStorage.getItem('pushplus_topic') || '';
-  updateSubscribeSlider();
+  document.getElementById('pushTopicInput').value = localStorage.getItem('pushplus_topic') || 'xiaogulu_daily';
   updateReadOnlySlider();
   showModal('manageModal');
 }
