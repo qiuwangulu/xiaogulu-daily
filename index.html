@@ -622,6 +622,20 @@
     padding: 28px 0; font-size: 14px;
   }
   .modal-actions.space-between { justify-content: space-between; }
+  .copy-float {
+    position: sticky; bottom: 6px;
+    display: flex; justify-content: flex-end;
+    padding: 10px 0 2px; margin-top: 12px;
+    z-index: 2;
+  }
+  .copy-float .btn {
+    box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+    background: rgba(46,204,113,0.92);
+    border-color: rgba(46,204,113,0.5);
+    font-size: 15px; padding: 9px 22px;
+  }
+  .chart-dot { cursor: pointer; }
+  .chart-hit { cursor: pointer; }
 
   .toast {
     position: fixed; top: 50%; left: 50%;
@@ -698,8 +712,7 @@
     <button class="modal-close" onclick="hideModal('reportModal')">&times;</button>
     <div class="modal-title">&#128200; 今日日报</div>
     <div id="reportContent"></div>
-    <div class="modal-actions space-between">
-      <button class="btn" onclick="hideModal('reportModal')">关闭</button>
+    <div class="copy-float">
       <button class="btn btn-success" onclick="copyReport()">复制</button>
     </div>
   </div>
@@ -715,7 +728,6 @@
     </div>
     <div class="history-summary" id="historySummary" style="display:none;"></div>
     <div class="history-list" id="historyList"></div>
-    <div class="modal-actions"><button class="btn" onclick="hideModal('historyModal')">关闭</button></div>
   </div>
 </div>
 <!-- 管理 -->
@@ -763,7 +775,6 @@
     <button class="modal-close" onclick="hideModal('analysisModal')">&times;</button>
     <div class="modal-title">&#128202; 数据分析</div>
     <div id="analysisContent"></div>
-    <div class="modal-actions"><button class="btn" onclick="hideModal('analysisModal')">关闭</button></div>
   </div>
 </div>
 <!-- 添加记录 -->
@@ -1791,7 +1802,8 @@ function dailySleepHours(ds) {
   recs.forEach(r => { if (r.type === 'sleep' && r.duration) total += r.duration; });
   return total > 0 ? total / 60 : null;
 }
-// 通用折线图（内联SVG，无外部依赖）
+// 通用折线图（内联SVG，无外部依赖；点击数据点显示横纵坐标）
+let _chartTipSeq = 0;
 function makeLineChart(data, opts) {
   const title = opts.title, unit = opts.unit || '', color = opts.color || '#74b9ff';
   const valid = data.filter(d => d.value != null);
@@ -1807,15 +1819,21 @@ function makeLineChart(data, opts) {
   const xf = i => PL + (n <= 1 ? iw / 2 : (iw * i) / (n - 1));
   const yf = v => PT + ih - ((v - min) / (max - min)) * ih;
   const fmtV = opts.fmt ? opts.fmt : (v => v);
-  // 折线（无数据日断开）
+  const tipId = 'ctip' + (++_chartTipSeq);
+  // 折线（无数据日断开）+ 可点击数据点（含透明命中区）
   let path = '', dots = '', started = false;
   data.forEach((d, i) => {
     if (d.value == null) { started = false; return; }
     const px = xf(i).toFixed(1), py = yf(d.value).toFixed(1);
     path += (started ? 'L' : 'M') + px + ' ' + py + ' ';
     started = true;
-    dots += `<circle cx="${px}" cy="${py}" r="3" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="1"><title>${d.label}：${fmtV(d.value)}${unit}</title></circle>`;
+    const valText = (fmtV(d.value) + unit).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const labelText = d.label.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    dots += `<circle class="chart-dot" cx="${px}" cy="${py}" r="3" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
+      `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
   });
+  // 点击提示浮层（默认隐藏）
+  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="5" ry="5" height="18" fill="rgba(0,0,0,0.85)" stroke="rgba(255,255,255,0.25)" stroke-width="0.5"/><text font-size="10" fill="#ffeaa7" x="6" y="13">?</text></g>`;
   // 网格线 + y轴刻度（3档）
   let grid = '', ylabels = '';
   for (let k = 0; k <= 2; k++) {
@@ -1832,9 +1850,29 @@ function makeLineChart(data, opts) {
     xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="#636e72" font-size="9" text-anchor="middle">${d.label}</text>`;
   });
   return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
-    grid + ylabels + xlabels +
+    grid + ylabels + xlabels + tip +
     `<path d="${path.trim()}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` +
     dots + `</svg></div>`;
+}
+// 点击数据点显示/隐藏横纵坐标浮层（同一点再点隐藏）
+function chartTip(hitEl, tipId, label, valueText) {
+  const svg = hitEl.ownerSVGElement;
+  const g = svg.querySelector('#' + tipId);
+  if (!g) return;
+  const content = label + '：' + valueText;
+  const text = g.querySelector('text');
+  const rect = g.querySelector('rect');
+  if (g.style.display !== 'none' && text.textContent === content) { g.style.display = 'none'; return; } // 再点同一点隐藏
+  text.textContent = content;
+  const wChar = [...content].reduce((s, c) => s + (/[\u4e00-\u9fff\uff1a]/.test(c) ? 10 : 6), 0);
+  const w = wChar + 12;
+  rect.setAttribute('width', w);
+  const cx = parseFloat(hitEl.getAttribute('cx')), cy = parseFloat(hitEl.getAttribute('cy'));
+  const W = parseFloat(svg.viewBox.baseVal.width);
+  const x = Math.max(2, Math.min(cx - w / 2, W - w - 2));
+  const y = cy - 34 >= 8 ? cy - 32 : Math.min(cy + 12, 168 - 24);
+  g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
+  g.style.display = '';
 }
 function openAnalysis() {
   const content = document.getElementById('analysisContent');
