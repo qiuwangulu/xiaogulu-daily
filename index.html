@@ -1069,11 +1069,14 @@ function checkAchievementPush(achArr, totalMilk) {
     localStorage.setItem('pushAchSig', sig);
     localStorage.setItem('pushAchTs', String(now));
     const ds = getTodayDateStr();
-    const content = `<h3>小咕噜的日常 ${ds}</h3>` +
-      `<p><b>🏆 今日成就:</b></p>` +
-      `<ul>${achArr.map(a => `<li>${a}</li>`).join('')}</ul>` +
-      `<p><b>🍼 总奶量:</b> ${totalMilk} ml</p>`;
-    notifyPushplus('小咕噜的日常更新', content).then(ok => { if (!ok) console.warn('PushPlus推送未成功'); });
+    // 通知标题直接展示今日成就具体内容（按需截断避免过长）
+    const achText = achArr.join(' · ');
+    const fullTitle = `小咕噜的日常更新 · ${achText}`;
+    // 微信通知中心受长度限制，>28字截断并加省略号（留空间给'…'）
+    const displayTitle = fullTitle.length > 28 ? fullTitle.slice(0, 28) + '…' : fullTitle;
+    // content 为纯文本备份（详情展开时显示）
+    const content = `日期：${ds}\n今日成就：\n${achArr.map((a, i) => `${i+1}. ${a}`).join('\n')}\n总奶量：${totalMilk} ml`;
+    notifyPushplus(displayTitle, content).then(ok => { if (!ok) console.warn('PushPlus推送未成功'); });
   } catch (e) { console.warn('推送检查失败:', e); }
 }
 
