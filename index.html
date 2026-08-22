@@ -963,19 +963,27 @@ function saveHeight() { const raw = document.getElementById('heightInput').value
 function loadWeight() { const w = localStorage.getItem('babyWeight'); if (w) document.getElementById('weightInput').value = w; }
 function saveWeight() { const raw = document.getElementById('weightInput').value; localStorage.setItem('babyWeight', raw); const v = parseFloat(raw); if (v > 0) recordBodyMeasurement('w', v); else syncUpload('config'); }
 
-function getTodayKey() {
+// 业务"今天"的判定：每日重置时间为凌晨 1:00（0:00-0:59 期间仍算昨天）
+function effectiveNow() {
   const d = new Date();
+  if (d.getHours() === 0) return new Date(d.getTime() - 3600000); // 0点档视为前一天 23:xx
+  return d;
+}
+function getTodayKey() {
+  const d = effectiveNow();
   return `records_${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 function getDateKey(ds) { return `records_${ds}`; }
 function checkDateReset() {
-  const t = new Date();
+  const t = effectiveNow();
   localStorage.setItem('lastActiveDate', `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`);
 }
 function setupMidnightReset() {
+  // 定时到下一个凌晨 1:00 触发日切重置（当日重置时间为 1:00）
   const now = new Date();
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
-  setTimeout(() => { checkDateReset(); renderCards(); updateAgeInfo(); updateOverview(); setupMidnightReset(); }, tomorrow - now);
+  let next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 1, 0, 0);
+  if (next <= now) next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 1, 0, 0);
+  setTimeout(() => { checkDateReset(); renderCards(); updateAgeInfo(); updateOverview(); setupMidnightReset(); }, next - now);
 }
 
 function handlePhotoUpload(e) {
@@ -2051,7 +2059,7 @@ function openAnalysis() {
   // 1) 近15天（含当天）每日总奶量
   const days = [];
   for (let i = 14; i >= 0; i--) {
-    const dt = new Date(); dt.setDate(dt.getDate() - i);
+    const dt = effectiveNow(); dt.setDate(dt.getDate() - i);
     const ds = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
     days.push({ ds: ds, label: `${dt.getMonth()+1}/${dt.getDate()}` });
   }
@@ -2098,7 +2106,7 @@ function isSyncReady() {
 function getFamilyId() { return localStorage.getItem('family_id') || ''; }
 function getDeviceName() { return localStorage.getItem('device_name') || '未知设备'; }
 function getTodayDateStr() {
-  const d = new Date();
+  const d = effectiveNow();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
