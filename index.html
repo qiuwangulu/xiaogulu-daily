@@ -636,6 +636,9 @@
   }
   .chart-dot { cursor: pointer; }
   .chart-hit { cursor: pointer; }
+  .bar-hit { cursor: pointer; }
+  .bar-rect { transition: opacity 0.15s; }
+  .bar-hit:hover ~ .bar-rect, .bar-rect:hover { opacity: 0.75; }
 
   .toast {
     position: fixed; top: 50%; left: 50%;
@@ -935,6 +938,7 @@ function init() {
   renderCards();
   updateAgeInfo();
   loadHeight(); loadWeight(); loadPhoto();
+  seedBodyHistory();
   updateAddButtonVisibility();
   try { updateOverview(); } catch(e) { console.error('updateOverview error:', e); }
   setupMidnightReset();
@@ -1781,6 +1785,30 @@ function recordBodyMeasurement(field, val) {
   localStorage.setItem('bodyHistory', JSON.stringify(hist));
   syncUpload('config');
 }
+// 补充历史身高体重数据（幂等，仅首次或缺失时填入）
+function seedBodyHistory() {
+  let hist = getBodyHistory();
+  const seedData = [
+    { d: '2026-08-10', h: 61.0, w: 5.70 },
+    { d: '2026-08-18', h: 62.5, w: 5.87 },
+    { d: '2026-08-20', h: 62.5, w: 6.10 }
+  ];
+  let changed = false;
+  seedData.forEach(s => {
+    const existing = hist.find(x => x.d === s.d);
+    if (!existing) { hist.push({ d: s.d, h: s.h, w: s.w }); changed = true; }
+    else {
+      const hadH = existing.h != null, hadW = existing.w != null;
+      if (s.h != null && !hadH) { existing.h = s.h; changed = true; }
+      if (s.w != null && !hadW) { existing.w = s.w; changed = true; }
+    }
+  });
+  if (changed) {
+    hist.sort((a, b) => a.d.localeCompare(b.d));
+    localStorage.setItem('bodyHistory', JSON.stringify(hist));
+    syncUpload('config');
+  }
+}
 // 相同数值只保留最早日期（按日期升序遍历去重）
 function dedupeBodySeries(points) {
   const seen = new Set(); const out = [];
@@ -1867,12 +1895,62 @@ function chartTip(hitEl, tipId, label, valueText) {
   const wChar = [...content].reduce((s, c) => s + (/[\u4e00-\u9fff\uff1a]/.test(c) ? 10 : 6), 0);
   const w = wChar + 12;
   rect.setAttribute('width', w);
-  const cx = parseFloat(hitEl.getAttribute('cx')), cy = parseFloat(hitEl.getAttribute('cy'));
+  const cx = parseFloat(hitEl.getAttribute('data-cx')), cy = parseFloat(hitEl.getAttribute('data-cy'));
   const W = parseFloat(svg.viewBox.baseVal.width);
   const x = Math.max(2, Math.min(cx - w / 2, W - w - 2));
   const y = cy - 34 >= 8 ? cy - 32 : Math.min(cy + 12, 168 - 24);
   g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
   g.style.display = '';
+}
+// 柱状图（内联SVG，无外部依赖；点击柱形显示横纵坐标）
+function makeBarChart(data, opts) {
+  const title = opts.title, unit = opts.unit || '', color = opts.color || '#74b9ff';
+  const valid = data.filter(d => d.value != null);
+  const head = `<div class="chart-card"><div class="chart-title">${title}</div>`;
+  if (valid.length === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
+  const W = 330, H = 168, PL = 36, PR = 12, PT = 12, PB = 24;
+  const minV = 0;
+  let maxV = Math.max(...valid.map(d => d.value));
+  if (maxV <= 0) maxV = 1;
+  maxV = maxV * 1.12;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  const n = data.length;
+  const slotW = iw / n;
+  const barW = Math.min(20, Math.max(4, slotW * 0.6));
+  const yf = v => PT + ih - ((v - minV) / (maxV - minV)) * ih;
+  const fmtV = opts.fmt ? opts.fmt : (v => v);
+  const tipId = 'ctip' + (++_chartTipSeq);
+  let bars = '';
+  data.forEach((d, i) => {
+    const cxBar = PL + slotW * i + slotW / 2;
+    if (d.value == null) return;
+    const h = yf(d.value) - yf(0);
+    const y = yf(d.value);
+    const valText = (fmtV(d.value) + unit).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const labelText = d.label.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    bars += `<rect class="bar-rect" x="${(cxBar - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="${color}"/>` +
+      `<rect class="bar-hit" x="${(cxBar - slotW / 2).toFixed(1)}" y="${PT.toFixed(1)}" width="${slotW.toFixed(1)}" height="${ih.toFixed(1)}" fill="transparent" data-cx="${cxBar.toFixed(1)}" data-cy="${y.toFixed(1)}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
+  });
+  // 点击提示浮层
+  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="5" ry="5" height="18" fill="rgba(0,0,0,0.85)" stroke="rgba(255,255,255,0.25)" stroke-width="0.5"/><text font-size="10" fill="#ffeaa7" x="6" y="13">?</text></g>`;
+  // 网格线 + y轴刻度（3档）
+  let grid = '', ylabels = '';
+  for (let k = 0; k <= 2; k++) {
+    const v = minV + ((maxV - minV) * k) / 2;
+    const gy = yf(v).toFixed(1);
+    grid += `<line x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#636e72" font-size="9" text-anchor="end">${fmtV(Math.round(v * 10) / 10)}</text>`;
+  }
+  // x轴标签
+  const step = Math.max(1, Math.ceil(n / 7));
+  let xlabels = '';
+  data.forEach((d, i) => {
+    const cxBar = PL + slotW * i + slotW / 2;
+    if (i % step !== 0 && i !== n - 1) return;
+    xlabels += `<text x="${cxBar.toFixed(1)}" y="${H - 8}" fill="#636e72" font-size="9" text-anchor="middle">${d.label}</text>`;
+  });
+  return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
+    grid + ylabels + xlabels + tip + bars + `</svg></div>`;
 }
 function openAnalysis() {
   const content = document.getElementById('analysisContent');
@@ -1891,8 +1969,8 @@ function openAnalysis() {
   const heightPts = dedupeBodySeries(hist.map(x => ({ d: x.d, v: x.h })));
   const toChart = pts => pts.map(p => { const [y, m, dd] = p.d.split('-'); return { label: `${parseInt(m)}/${parseInt(dd)}`, value: p.v }; });
   let html = '';
-  html += makeLineChart(milkData, { title: '🍼 每日总奶量（近15天）', unit: 'ml', color: '#74b9ff' });
-  html += makeLineChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#a29bfe', fmt: v => v.toFixed(1) });
+  html += makeBarChart(milkData, { title: '🍼 每日总奶量（近15天）', unit: 'ml', color: '#74b9ff' });
+  html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#a29bfe', fmt: v => v.toFixed(1) });
   html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重曲线（有记录以来）', unit: 'kg', color: '#55efc4', fmt: v => v.toFixed(1) });
   html += makeLineChart(toChart(heightPts), { title: '📏 身高曲线（有记录以来）', unit: 'cm', color: '#ffeaa7', fmt: v => v.toFixed(1) });
   content.innerHTML = html;
