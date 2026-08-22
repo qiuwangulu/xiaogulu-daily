@@ -604,16 +604,24 @@
   .sync-btn-row { display: flex; gap: 8px; margin-top: 10px; }
   .sync-btn-row .btn { flex: 1; }
 
-  /* ===== 分享 ===== */
-  .share-text {
-    background: rgba(0,0,0,0.3);
+  /* ===== 分析图表 ===== */
+  .chart-card {
+    background: rgba(0,0,0,0.25);
     border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 12px; padding: 14px;
-    font-size: 15px; color: #dfe6e9;
-    line-height: 1.8; white-space: pre-wrap;
-    max-height: 40vh; overflow-y: auto;
-    margin-bottom: 12px;
+    border-radius: 12px;
+    padding: 12px 10px 8px 10px;
+    margin-bottom: 14px;
   }
+  .chart-title {
+    font-size: 14px; font-weight: 600; color: #74b9ff;
+    margin-bottom: 6px; padding-left: 4px;
+  }
+  .chart-svg { width: 100%; height: auto; display: block; }
+  .chart-empty {
+    text-align: center; color: #636e72;
+    padding: 28px 0; font-size: 14px;
+  }
+  .modal-actions.space-between { justify-content: space-between; }
 
   .toast {
     position: fixed; top: 50%; left: 50%;
@@ -673,9 +681,9 @@
       <span class="nav-icon">&#128197;</span>
       <span class="nav-label">历史</span>
     </div>
-    <div class="nav-item" onclick="generateShare()">
-      <span class="nav-icon">&#128239;</span>
-      <span class="nav-label">分享</span>
+    <div class="nav-item" onclick="openAnalysis()">
+      <span class="nav-icon">&#128202;</span>
+      <span class="nav-label">分析</span>
     </div>
     <div class="nav-item" onclick="openManage()">
       <span class="nav-icon">&#9881;</span>
@@ -690,7 +698,10 @@
     <button class="modal-close" onclick="hideModal('reportModal')">&times;</button>
     <div class="modal-title">&#128200; 今日日报</div>
     <div id="reportContent"></div>
-    <div class="modal-actions"><button class="btn" onclick="hideModal('reportModal')">关闭</button></div>
+    <div class="modal-actions space-between">
+      <button class="btn" onclick="hideModal('reportModal')">关闭</button>
+      <button class="btn btn-success" onclick="copyReport()">复制</button>
+    </div>
   </div>
 </div>
 <!-- 历史 -->
@@ -746,17 +757,13 @@
     </div>
   </div>
 </div>
-<!-- 分享 -->
-<div class="modal-overlay" id="shareModal" onclick="closeModal(event,'shareModal')">
+<!-- 分析 -->
+<div class="modal-overlay" id="analysisModal" onclick="closeModal(event,'analysisModal')">
   <div class="modal-box" onclick="event.stopPropagation()">
-    <button class="modal-close" onclick="hideModal('shareModal')">&times;</button>
-    <div class="modal-title">&#128239; 分享今日</div>
-    <div class="share-text" id="shareText"></div>
-    <div class="modal-actions">
-      <button class="btn btn-success" onclick="doShare()">分享</button>
-      <button class="btn" onclick="copyShare()">复制</button>
-      <button class="btn" onclick="hideModal('shareModal')">关闭</button>
-    </div>
+    <button class="modal-close" onclick="hideModal('analysisModal')">&times;</button>
+    <div class="modal-title">&#128202; 数据分析</div>
+    <div id="analysisContent"></div>
+    <div class="modal-actions"><button class="btn" onclick="hideModal('analysisModal')">关闭</button></div>
   </div>
 </div>
 <!-- 添加记录 -->
@@ -891,7 +898,6 @@ const DEFAULT_GROSS_MOTOR = ['会抬头', '会翻身', '会爬', '会坐', '会�
 const DEFAULT_FINE_MOTOR = ['抓握', '摇头', '点头', '挥手', '放东西', '捏', '戳'];
 
 let hiddenActivities = [];
-let currentShareText = '';
 let currentCategory = 'all';
 let addModalCategory = 'all';
 let addSelectedSet = new Set(); // 跨分类保留已勾选活动
@@ -937,9 +943,9 @@ function updateAgeInfo() {
 }
 
 function loadHeight() { const h = localStorage.getItem('babyHeight'); if (h) document.getElementById('heightInput').value = h; }
-function saveHeight() { localStorage.setItem('babyHeight', document.getElementById('heightInput').value); syncUpload('config'); }
+function saveHeight() { const raw = document.getElementById('heightInput').value; localStorage.setItem('babyHeight', raw); const v = parseFloat(raw); if (v > 0) recordBodyMeasurement('h', v); else syncUpload('config'); }
 function loadWeight() { const w = localStorage.getItem('babyWeight'); if (w) document.getElementById('weightInput').value = w; }
-function saveWeight() { localStorage.setItem('babyWeight', document.getElementById('weightInput').value); syncUpload('config'); }
+function saveWeight() { const raw = document.getElementById('weightInput').value; localStorage.setItem('babyWeight', raw); const v = parseFloat(raw); if (v > 0) recordBodyMeasurement('w', v); else syncUpload('config'); }
 
 function getTodayKey() {
   const d = new Date();
@@ -1707,25 +1713,153 @@ function addFineMotorOpt() {
 function removeFineMotorOpt(opt) { fineMotorOptions = fineMotorOptions.filter(o => o !== opt); saveCustomOptions(); renderCustomOptionsSection(); }
 function saveManage() { saveHiddenActivities(); renderCategoryBar(); renderCards(); hideModal('manageModal'); showToast('已保存'); }
 
-/* ==================== 分享 ==================== */
-function generateShare() {
+/* ==================== 日报复制 ==================== */
+function buildReportText() {
   const t = new Date(); const ds = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
   const records = getTodayRecords();
   let text = `${BABY_NAME}的日常 (${ds})\n${document.getElementById('ageInfo').textContent}\n`;
   const h = localStorage.getItem('babyHeight'), w = localStorage.getItem('babyWeight');
   if (h || w) text += `高${h||'-'}cm 重${w||'-'}kg\n`;
   text += '\u2500'.repeat(20) + '\n';
-  if (records.length === 0) { text += '今天还没有记录哦~'; } else {
+  const noteRecords = [];
+  if (records.length === 0) { text += '今天还没有记录哦~\n'; } else {
     const stats = {};
-    records.forEach(r => { if (!stats[r.type]) stats[r.type] = { name: r.name, count: 0, duration: 0, totalMilk: 0 }; stats[r.type].count++; if (r.duration !== undefined) stats[r.type].duration += r.duration; if (r.milkAmount !== undefined) stats[r.type].totalMilk += r.milkAmount; });
-    CATEGORIES.forEach(cat => { ACTIVITIES.filter(a => a.category === cat.id && !hiddenActivities.includes(a.id)).forEach(act => { const s = stats[act.id]; if (!s) return; let line = `${act.name}: `; if (act.type === 'milk') line += `${s.count}次 ${s.totalMilk}ml`; else if (act.type === 'sleep') { const h = Math.floor(s.duration / 60); const m = Math.round(s.duration % 60); line += `${s.count}次 ${h}h ${m}min`; } else if (s.duration > 0) line += `${s.duration.toFixed(1)}分钟`; else line += `${s.count}次`; text += line + '\n'; }); });
+    records.forEach(r => {
+      if (!stats[r.type]) stats[r.type] = { name: r.name, count: 0, duration: 0, totalMilk: 0 };
+      stats[r.type].count++;
+      if (r.duration !== undefined) stats[r.type].duration += r.duration;
+      if (r.milkAmount !== undefined) stats[r.type].totalMilk += r.milkAmount;
+      if (r.note && r.note.trim()) noteRecords.push({ time: r.recTime || r.time || '', name: r.name, note: r.note.trim() });
+    });
+    CATEGORIES.forEach(cat => { ACTIVITIES.filter(a => a.category === cat.id && !hiddenActivities.includes(a.id)).forEach(act => { const s = stats[act.id]; if (!s) return; let line = `${act.name}: `; if (act.type === 'milk') line += `${s.count}次 ${s.totalMilk}ml`; else if (act.type === 'sleep') { const hh = Math.floor(s.duration / 60); const mm = Math.round(s.duration % 60); line += `${s.count}次 ${hh}h ${mm}min`; } else if (s.duration > 0) line += `${s.duration.toFixed(1)}分钟`; else line += `${s.count}次`; text += line + '\n'; }); });
+    if (noteRecords.length > 0) {
+      noteRecords.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+      text += '\n📝 备注:\n';
+      noteRecords.forEach(n => { text += `${n.time} ${n.name}: ${n.note.replace(/\n/g, ' / ')}\n`; });
+    }
+    text += `总记录数: ${records.length}条\n`;
   }
   text += '\u2500'.repeat(20) + '\n记录于 小咕噜的日常';
-  currentShareText = text; document.getElementById('shareText').textContent = text; showModal('shareModal');
+  return text;
 }
-function doShare() { if (navigator.share) { navigator.share({ title: `${BABY_NAME}的日常`, text: currentShareText }).catch(() => copyShare()); } else copyShare(); }
-function copyShare() { if (navigator.clipboard) { navigator.clipboard.writeText(currentShareText).then(() => showToast('已复制到剪贴板')).catch(() => fallbackCopy()); } else fallbackCopy(); }
-function fallbackCopy() { const ta = document.createElement('textarea'); ta.value = currentShareText; ta.style.cssText = 'position:fixed;opacity:0;'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); showToast('已复制到剪贴板'); } catch { showToast('复制失败'); } document.body.removeChild(ta); }
+function copyReport() { copyTextToClipboard(buildReportText()); }
+function copyTextToClipboard(text) {
+  if (navigator.clipboard) { navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板')).catch(() => fallbackCopyText(text)); }
+  else fallbackCopyText(text);
+}
+function fallbackCopyText(text) { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); showToast('已复制到剪贴板'); } catch { showToast('复制失败'); } document.body.removeChild(ta); }
+
+/* ==================== 数据分析 ==================== */
+function getBodyHistory() {
+  try { const a = JSON.parse(localStorage.getItem('bodyHistory') || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+function recordBodyMeasurement(field, val) {
+  // field: 'h' | 'w'；当天已有记录则覆盖，否则新增
+  let hist = getBodyHistory();
+  const ds = getTodayDateStr();
+  if (hist.length === 0) {
+    // 首次记录：以当前已有值作为曲线起点
+    const h = parseFloat(localStorage.getItem('babyHeight')) || null;
+    const w = parseFloat(localStorage.getItem('babyWeight')) || null;
+    if (h || w) hist.push({ d: ds, h: h, w: w });
+  }
+  let todayRec = hist.find(x => x.d === ds);
+  if (!todayRec) { todayRec = { d: ds, h: null, w: null }; hist.push(todayRec); }
+  todayRec[field] = val;
+  hist.sort((a, b) => a.d.localeCompare(b.d));
+  localStorage.setItem('bodyHistory', JSON.stringify(hist));
+  syncUpload('config');
+}
+// 相同数值只保留最早日期（按日期升序遍历去重）
+function dedupeBodySeries(points) {
+  const seen = new Set(); const out = [];
+  for (const p of points) {
+    if (p.v == null) continue;
+    if (!seen.has(p.v)) { seen.add(p.v); out.push(p); }
+  }
+  return out;
+}
+function dailyMilkTotal(ds) {
+  let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
+  let total = 0;
+  recs.forEach(r => { if (r.type === 'milk' && r.milkAmount) total += r.milkAmount; });
+  return total > 0 ? total : null;
+}
+function dailySleepHours(ds) {
+  let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
+  let total = 0;
+  recs.forEach(r => { if (r.type === 'sleep' && r.duration) total += r.duration; });
+  return total > 0 ? total / 60 : null;
+}
+// 通用折线图（内联SVG，无外部依赖）
+function makeLineChart(data, opts) {
+  const title = opts.title, unit = opts.unit || '', color = opts.color || '#74b9ff';
+  const valid = data.filter(d => d.value != null);
+  const head = `<div class="chart-card"><div class="chart-title">${title}</div>`;
+  if (valid.length === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
+  const W = 330, H = 168, PL = 36, PR = 12, PT = 12, PB = 24;
+  let min = Math.min(...valid.map(d => d.value));
+  let max = Math.max(...valid.map(d => d.value));
+  if (max === min) { const p = Math.abs(max) * 0.1 || 1; min = Math.max(0, min - p); max = max + p; }
+  else { const pad = (max - min) * 0.15; min = Math.max(0, min - pad); max = max + pad; }
+  const iw = W - PL - PR, ih = H - PT - PB;
+  const n = data.length;
+  const xf = i => PL + (n <= 1 ? iw / 2 : (iw * i) / (n - 1));
+  const yf = v => PT + ih - ((v - min) / (max - min)) * ih;
+  const fmtV = opts.fmt ? opts.fmt : (v => v);
+  // 折线（无数据日断开）
+  let path = '', dots = '', started = false;
+  data.forEach((d, i) => {
+    if (d.value == null) { started = false; return; }
+    const px = xf(i).toFixed(1), py = yf(d.value).toFixed(1);
+    path += (started ? 'L' : 'M') + px + ' ' + py + ' ';
+    started = true;
+    dots += `<circle cx="${px}" cy="${py}" r="3" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="1"><title>${d.label}：${fmtV(d.value)}${unit}</title></circle>`;
+  });
+  // 网格线 + y轴刻度（3档）
+  let grid = '', ylabels = '';
+  for (let k = 0; k <= 2; k++) {
+    const v = min + ((max - min) * k) / 2;
+    const gy = yf(v).toFixed(1);
+    grid += `<line x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#636e72" font-size="9" text-anchor="end">${fmtV(Math.round(v * 10) / 10)}</text>`;
+  }
+  // x轴标签（每隔step个显示）
+  const step = Math.max(1, Math.ceil(n / 7));
+  let xlabels = '';
+  data.forEach((d, i) => {
+    if (i % step !== 0 && i !== n - 1) return;
+    xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="#636e72" font-size="9" text-anchor="middle">${d.label}</text>`;
+  });
+  return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
+    grid + ylabels + xlabels +
+    `<path d="${path.trim()}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` +
+    dots + `</svg></div>`;
+}
+function openAnalysis() {
+  const content = document.getElementById('analysisContent');
+  // 1) 近15天（含当天）每日总奶量
+  const days = [];
+  for (let i = 14; i >= 0; i--) {
+    const dt = new Date(); dt.setDate(dt.getDate() - i);
+    const ds = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+    days.push({ ds: ds, label: `${dt.getMonth()+1}/${dt.getDate()}` });
+  }
+  const milkData = days.map(d => ({ label: d.label, value: dailyMilkTotal(d.ds) }));
+  const sleepData = days.map(d => ({ label: d.label, value: dailySleepHours(d.ds) }));
+  // 2) 体重/身高曲线（相同数值只保留最早日期）
+  const hist = getBodyHistory();
+  const weightPts = dedupeBodySeries(hist.map(x => ({ d: x.d, v: x.w })));
+  const heightPts = dedupeBodySeries(hist.map(x => ({ d: x.d, v: x.h })));
+  const toChart = pts => pts.map(p => { const [y, m, dd] = p.d.split('-'); return { label: `${parseInt(m)}/${parseInt(dd)}`, value: p.v }; });
+  let html = '';
+  html += makeLineChart(milkData, { title: '🍼 每日总奶量（近15天）', unit: 'ml', color: '#74b9ff' });
+  html += makeLineChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#a29bfe', fmt: v => v.toFixed(1) });
+  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重曲线（有记录以来）', unit: 'kg', color: '#55efc4', fmt: v => v.toFixed(1) });
+  html += makeLineChart(toChart(heightPts), { title: '📏 身高曲线（有记录以来）', unit: 'cm', color: '#ffeaa7', fmt: v => v.toFixed(1) });
+  content.innerHTML = html;
+  showModal('analysisModal');
+}
 
 /* ==================== 模态框 ==================== */
 function showModal(id) { document.getElementById(id).classList.add('show'); document.body.style.overflow = 'hidden'; }
@@ -1825,7 +1959,7 @@ async function syncUpload(category, dateStr) {
       const { data, iv } = await encrypt(key, JSON.stringify(records));
       await supabaseUpsert('family_records', { family_id: fid, record_date: dateStr, encrypted_data: data, iv, last_modified: Date.now(), modified_by: getDeviceName() });
     } else if (category === 'config') {
-      const configKeys = ['hiddenActivities','grossMotorOptions','fineMotorOptions','babyHeight','babyWeight'];
+      const configKeys = ['hiddenActivities','grossMotorOptions','fineMotorOptions','babyHeight','babyWeight','bodyHistory'];
       for (const ck of configKeys) {
         const val = localStorage.getItem(ck) || '';
         const { data, iv } = await encrypt(key, val);
