@@ -1070,8 +1070,7 @@ function checkAchievementPush(achArr, totalMilk) {
     localStorage.setItem('pushAchTs', String(now));
     const ds = getTodayDateStr();
     // 通知标题直接展示今日成就具体内容（按需截断避免过长）
-    const achText = achArr.join(' · ');
-    const fullTitle = `小咕噜的日常更新 · ${achText}`;
+    const fullTitle = achArr.join(' · ');
     // 微信通知中心受长度限制，>28字截断并加省略号（留空间给'…'）
     const displayTitle = fullTitle.length > 28 ? fullTitle.slice(0, 28) + '…' : fullTitle;
     // content 为纯文本备份（详情展开时显示）
