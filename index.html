@@ -1942,7 +1942,7 @@ function makeLineChart(data, opts) {
       `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
   });
   // 点击提示浮层（默认隐藏）：白色加粗文字，与柱状图保持一致
-  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="rgba(0,0,0,0.92)" stroke="rgba(255,255,255,0.4)" stroke-width="0.5"/><text font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.5)" stroke-width="0.5"/><text font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
   // 网格线 + y轴刻度（按 ticks）
   let grid = '', ylabels = '';
   ticks.forEach(v => {
@@ -2027,7 +2027,7 @@ function makeBarChart(data, opts) {
       `<rect class="bar-hit" x="${(cxBar - slotW / 2).toFixed(1)}" y="${PT.toFixed(1)}" width="${slotW.toFixed(1)}" height="${ih.toFixed(1)}" fill="transparent" data-cx="${cxBar.toFixed(1)}" data-cy="${barTop.toFixed(1)}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
   });
   // 点击提示浮层：白色加粗文字 + 深色背景，放在最后绘制保证不被柱子遮挡
-  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="rgba(0,0,0,0.92)" stroke="rgba(255,255,255,0.4)" stroke-width="0.5"/><text font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.5)" stroke-width="0.5"/><text font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
   // 网格线 + y轴刻度（按 ticks）
   let grid = '', ylabels = '';
   ticks.forEach(v => {
