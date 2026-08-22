@@ -638,7 +638,7 @@
   .chart-hit { cursor: pointer; }
   .bar-hit { cursor: pointer; }
   .bar-rect { transition: opacity 0.15s; }
-  .bar-hit:hover ~ .bar-rect, .bar-rect:hover { opacity: 0.75; }
+  .bar-rect:hover, .bar-hit:hover + .bar-rect { opacity: 0.75; }
 
   .toast {
     position: fixed; top: 50%; left: 50%;
@@ -1070,9 +1070,10 @@ function checkAchievementPush(achArr, totalMilk) {
     localStorage.setItem('pushAchTs', String(now));
     const ds = getTodayDateStr();
     const content = `<h3>小咕噜的日常 ${ds}</h3>` +
-      `<p><b>🏆 今日成就:</b> ${achArr.join(' | ')}</p>` +
+      `<p><b>🏆 今日成就:</b></p>` +
+      `<ul>${achArr.map(a => `<li>${a}</li>`).join('')}</ul>` +
       `<p><b>🍼 总奶量:</b> ${totalMilk} ml</p>`;
-    notifyPushplus('小咕噜今日成就更新', content).then(ok => { if (!ok) console.warn('PushPlus推送未成功'); });
+    notifyPushplus('小咕噜的日常更新', content).then(ok => { if (!ok) console.warn('PushPlus推送未成功'); });
   } catch (e) { console.warn('推送检查失败:', e); }
 }
 
@@ -1784,6 +1785,10 @@ function recordBodyMeasurement(field, val) {
   hist.sort((a, b) => a.d.localeCompare(b.d));
   localStorage.setItem('bodyHistory', JSON.stringify(hist));
   syncUpload('config');
+  // 如果分析弹窗正打开，实时刷新图表
+  if (document.getElementById('analysisModal') && document.getElementById('analysisModal').classList.contains('show')) {
+    openAnalysis();
+  }
 }
 // 补充历史身高体重数据（幂等，仅首次或缺失时填入）
 function seedBodyHistory() {
@@ -1924,12 +1929,13 @@ function makeBarChart(data, opts) {
   data.forEach((d, i) => {
     const cxBar = PL + slotW * i + slotW / 2;
     if (d.value == null) return;
-    const h = yf(d.value) - yf(0);
-    const y = yf(d.value);
+    const barTop = yf(d.value);
+    const barBottom = yf(0);
+    const h = barBottom - barTop; // 柱子高度（正值：底部y - 顶部y）
     const valText = (fmtV(d.value) + unit).replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const labelText = d.label.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    bars += `<rect class="bar-rect" x="${(cxBar - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="${color}"/>` +
-      `<rect class="bar-hit" x="${(cxBar - slotW / 2).toFixed(1)}" y="${PT.toFixed(1)}" width="${slotW.toFixed(1)}" height="${ih.toFixed(1)}" fill="transparent" data-cx="${cxBar.toFixed(1)}" data-cy="${y.toFixed(1)}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
+    bars += `<rect class="bar-rect" x="${(cxBar - barW / 2).toFixed(1)}" y="${barTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="${color}"/>` +
+      `<rect class="bar-hit" x="${(cxBar - slotW / 2).toFixed(1)}" y="${PT.toFixed(1)}" width="${slotW.toFixed(1)}" height="${ih.toFixed(1)}" fill="transparent" data-cx="${cxBar.toFixed(1)}" data-cy="${barTop.toFixed(1)}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
   });
   // 点击提示浮层
   const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="5" ry="5" height="18" fill="rgba(0,0,0,0.85)" stroke="rgba(255,255,255,0.25)" stroke-width="0.5"/><text font-size="10" fill="#ffeaa7" x="6" y="13">?</text></g>`;
@@ -2130,7 +2136,10 @@ async function syncPullAll() {
       }
     } catch {}
 
-    if (changed) { loadCustomOptions(); loadHiddenActivities(); loadHeight(); loadWeight(); renderCategoryBar(); renderCards(); updateOverview(); }
+    if (changed) { loadCustomOptions(); loadHiddenActivities(); loadHeight(); loadWeight(); renderCategoryBar(); renderCards(); updateOverview();
+      // 如果分析弹窗正打开，刷新身高体重曲线
+      if (document.getElementById('analysisModal') && document.getElementById('analysisModal').classList.contains('show')) { openAnalysis(); }
+    }
     setSyncStatus('synced');
   } catch (e) { console.warn('同步拉取失败:', e); setSyncStatus('pending'); }
   _isSyncing = false;
