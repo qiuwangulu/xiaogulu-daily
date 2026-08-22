@@ -1066,15 +1066,29 @@ function checkAchievementPush(achArr, totalMilk) {
     if (sig === localStorage.getItem('pushAchSig')) return;
     const now = Date.now();
     if (now - parseInt(localStorage.getItem('pushAchTs') || '0') < 10000) return; // 10秒防抖
+    // 计算本次新增的成就（相对上次推送）
+    const prevSig = localStorage.getItem('pushAchSig');
+    const prevArr = prevSig ? prevSig.split('|') : [];
+    const newAchievements = achArr.filter(a => !prevArr.includes(a));
     localStorage.setItem('pushAchSig', sig);
     localStorage.setItem('pushAchTs', String(now));
     const ds = getTodayDateStr();
-    // 通知标题直接展示今日成就具体内容（按需截断避免过长）
-    const fullTitle = achArr.join(' · ');
+    // 通知标题 = 本次更新的成就内容（首次推送/无新增时回退为全部成就）
+    const titleSrc = newAchievements.length > 0 ? newAchievements : achArr;
+    const fullTitle = titleSrc.join(' · ');
     // 微信通知中心受长度限制，>28字截断并加省略号（留空间给'…'）
     const displayTitle = fullTitle.length > 28 ? fullTitle.slice(0, 28) + '…' : fullTitle;
-    // content 为纯文本备份（详情展开时显示）
-    const content = `日期：${ds}\n今日成就：\n${achArr.map((a, i) => `${i+1}. ${a}`).join('\n')}\n总奶量：${totalMilk} ml`;
+    // 详情内容 = 今日全部成就，本次新增项高亮
+    const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const items = achArr.map(a => {
+      if (newAchievements.includes(a)) {
+        return `<li><span style="background:#ffecb3;color:#c0392b;font-weight:bold;padding:1px 4px;border-radius:3px;">【新】${esc(a)}</span></li>`;
+      }
+      return `<li>${esc(a)}</li>`;
+    }).join('');
+    const content = `<h3>小咕噜的今日成就 ${ds}</h3>` +
+      `<p><b>🏆 今日成就:</b></p><ul>${items}</ul>` +
+      `<p><b>🍼 总奶量:</b> ${totalMilk} ml</p>`;
     notifyPushplus(displayTitle, content).then(ok => { if (!ok) console.warn('PushPlus推送未成功'); });
   } catch (e) { console.warn('推送检查失败:', e); }
 }
