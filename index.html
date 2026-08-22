@@ -1903,16 +1903,31 @@ function makeLineChart(data, opts) {
   const valid = data.filter(d => d.value != null);
   const head = `<div class="chart-card"><div class="chart-title">${title}</div>`;
   if (valid.length === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
-  const W = 330, H = 168, PL = 36, PR = 12, PT = 12, PB = 24;
-  let min = Math.min(...valid.map(d => d.value));
-  let max = Math.max(...valid.map(d => d.value));
-  if (max === min) { const p = Math.abs(max) * 0.1 || 1; min = Math.max(0, min - p); max = max + p; }
-  else { const pad = (max - min) * 0.15; min = Math.max(0, min - pad); max = max + pad; }
+  const W = 330, H = 168, PL = 40, PR = 12, PT = 12, PB = 24;
+  // 纵坐标：可自定义 minV/tickStep/labelColor，否则按数据自动
+  const dataMax = Math.max(...valid.map(d => d.value));
+  const dataMin = Math.min(...valid.map(d => d.value));
+  let min, max, ticks;
+  if (opts.yMin !== undefined && opts.yStep) {
+    min = opts.yMin;
+    max = Math.ceil(dataMax / opts.yStep) * opts.yStep;
+    if (max <= dataMax) max += opts.yStep;
+    if (max <= min) max = min + opts.yStep;
+    ticks = [];
+    for (let v = min; v <= max + 0.0001; v += opts.yStep) ticks.push(Math.round(v * 100) / 100);
+  } else {
+    min = dataMin;
+    max = dataMax;
+    if (max === min) { const p = Math.abs(max) * 0.1 || 1; min = Math.max(0, min - p); max = max + p; }
+    else { const pad = (max - min) * 0.15; min = Math.max(0, min - pad); max = max + pad; }
+    ticks = [min, (min + max) / 2, max];
+  }
   const iw = W - PL - PR, ih = H - PT - PB;
   const n = data.length;
   const xf = i => PL + (n <= 1 ? iw / 2 : (iw * i) / (n - 1));
   const yf = v => PT + ih - ((v - min) / (max - min)) * ih;
   const fmtV = opts.fmt ? opts.fmt : (v => v);
+  const labelColor = opts.labelColor || '#b2bec3';
   const tipId = 'ctip' + (++_chartTipSeq);
   // 折线（无数据日断开）+ 可点击数据点（含透明命中区）
   let path = '', dots = '', started = false;
@@ -1926,22 +1941,21 @@ function makeLineChart(data, opts) {
     dots += `<circle class="chart-dot" cx="${px}" cy="${py}" r="3" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
       `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
   });
-  // 点击提示浮层（默认隐藏）
-  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="5" ry="5" height="18" fill="rgba(0,0,0,0.85)" stroke="rgba(255,255,255,0.25)" stroke-width="0.5"/><text font-size="10" fill="#ffeaa7" x="6" y="13">?</text></g>`;
-  // 网格线 + y轴刻度（3档）
+  // 点击提示浮层（默认隐藏）：白色加粗文字，与柱状图保持一致
+  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="rgba(0,0,0,0.92)" stroke="rgba(255,255,255,0.4)" stroke-width="0.5"/><text font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  // 网格线 + y轴刻度（按 ticks）
   let grid = '', ylabels = '';
-  for (let k = 0; k <= 2; k++) {
-    const v = min + ((max - min) * k) / 2;
+  ticks.forEach(v => {
     const gy = yf(v).toFixed(1);
     grid += `<line x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
-    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#636e72" font-size="9" text-anchor="end">${fmtV(Math.round(v * 10) / 10)}</text>`;
-  }
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${labelColor}" font-size="9" text-anchor="end">${fmtV(Math.round(v * 10) / 10)}</text>`;
+  });
   // x轴标签（每隔step个显示）
   const step = Math.max(1, Math.ceil(n / 7));
   let xlabels = '';
   data.forEach((d, i) => {
     if (i % step !== 0 && i !== n - 1) return;
-    xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="#636e72" font-size="9" text-anchor="middle">${d.label}</text>`;
+    xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="${labelColor}" font-size="9" text-anchor="middle">${d.label}</text>`;
   });
   return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
     grid + ylabels + xlabels + tip +
@@ -1977,16 +1991,21 @@ function makeBarChart(data, opts) {
   if (valid.length === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
   const W = 330, H = 168, PL = 40, PR = 12, PT = 12, PB = 24;
   const minV = 0;
-  // 纵坐标轴：奶量用 0/600/100/递增（0、600、700、800、900、1000），睡眠用自适应 3 档
+  const dataMax = Math.max(...valid.map(d => d.value));
+  // 纵坐标轴：自动计算 0 到"最大值向上取整"的 step 倍数
   let ticks;
   if (opts.fixedTicks) {
-    ticks = opts.fixedTicks; // 数组，如 [0, 600, 700, 800, 900, 1000]
+    ticks = opts.fixedTicks;
     var maxV = ticks[ticks.length - 1];
   } else {
-    var maxV = Math.max(...valid.map(d => d.value));
-    if (maxV <= 0) maxV = 1;
-    maxV = maxV * 1.12;
-    ticks = [0, maxV / 2, maxV];
+    const step = opts.tickStep || 1;
+    // maxV = 向上取整到 step 的整数倍；至少留 step 余量
+    var maxV = Math.ceil(dataMax / step) * step;
+    if (maxV <= dataMax) maxV += step; // 确保柱子顶部不贴天花板
+    if (maxV <= 0) maxV = step;
+    // 在 0 和 maxV 之间按 step 生成所有刻度
+    ticks = [];
+    for (let v = 0; v <= maxV + 0.0001; v += step) ticks.push(Math.round(v * 100) / 100);
   }
   const iw = W - PL - PR, ih = H - PT - PB;
   const n = data.length;
@@ -2044,10 +2063,10 @@ function openAnalysis() {
   const heightPts = dedupeBodySeries(hist.map(x => ({ d: x.d, v: x.h })));
   const toChart = pts => pts.map(p => { const [y, m, dd] = p.d.split('-'); return { label: `${parseInt(m)}/${parseInt(dd)}`, value: p.v }; });
   let html = '';
-  html += makeBarChart(milkData, { title: '🍼 每日总奶量（近15天）', unit: 'ml', color: '#74b9ff', fixedTicks: [0, 600, 700, 800, 900, 1000] });
-  html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#a29bfe', fmt: v => v.toFixed(1) });
-  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重曲线（有记录以来）', unit: 'kg', color: '#55efc4', fmt: v => v.toFixed(1) });
-  html += makeLineChart(toChart(heightPts), { title: '📏 身高曲线（有记录以来）', unit: 'cm', color: '#ffeaa7', fmt: v => v.toFixed(1) });
+  html += makeBarChart(milkData, { title: '🍼 每日总奶量（近15天）', unit: 'ml', color: '#74b9ff', tickStep: 100 });
+  html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#a29bfe', fmt: v => v.toFixed(1), tickStep: 1 });
+  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#55efc4', fmt: v => v.toFixed(1), yMin: 3, yStep: 1 });
+  html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#74b9ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2 });
   content.innerHTML = html;
   showModal('analysisModal');
 }
