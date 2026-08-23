@@ -2279,10 +2279,10 @@ function openAnalysis() {
   const countStdRows = days.map(d => getStdRow(MILK_COUNT_STD, d.ds));
   const sleepStdRows = days.map(d => getStdRow(SLEEP_STD, d.ds));
   html += makeBarChart(milkData, { title: '🍼 每日奶量（水+奶，近15天）', unit: 'ml', color: '#74b9ff', tickStep: 100, stdLines: [{ values: milkStdRows.map(r => r.min) }, { values: milkStdRows.map(r => r.max) }] });
-  html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#81ecec', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
+  html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#fd79a8', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
   html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#a29bfe', fmt: v => v.toFixed(1), tickStep: 1, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
   html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#fab1a0', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}` });
-  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#55efc4', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT } });
+  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#ffeaa7', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT } });
   html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#74b9ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT } });
   content.innerHTML = html;
   showModal('analysisModal');
