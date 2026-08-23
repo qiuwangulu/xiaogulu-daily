@@ -874,7 +874,7 @@ const CATEGORIES = [
 
 const ACTIVITIES = [
   // 吃睡 - 睡眠带开始时间
-  { id: 'milk', name: '喝奶', icon: '🍼', type: 'milk', category: 'eatSleep' },
+  { id: 'milk', name: '喝奶（水量）', icon: '🍼', type: 'milk', category: 'eatSleep' },
   { id: 'sleep', name: '睡眠', icon: '😴', type: 'sleep', unit: '分钟', category: 'eatSleep' },
   { id: 'drinkWater', name: '喝水', icon: '💧', type: 'drinkWater', category: 'eatSleep' },
   { id: 'supplement', name: '营养补剂', icon: '💊', type: 'supplement', category: 'eatSleep' },
@@ -1622,13 +1622,19 @@ function openReport() {
       const s = stats[act.id]; let val = '', isZero = false;
       if (!s) { val = act.type==='milk'?'0次 · 0ml':act.type==='sleep'?'0次 · 0h 0min':'0次'; isZero = true; }
       else {
-        if (act.type === 'milk') val = s.count + '次 · ' + s.totalMilk + 'ml';
-        else if (act.type === 'sleep') { const h = Math.floor(s.duration / 60); const m = Math.round(s.duration % 60); val = s.count + '次 · ' + h + 'h ' + m + 'min'; }
+        if (act.type === 'sleep') { const h = Math.floor(s.duration / 60); const m = Math.round(s.duration % 60); val = s.count + '次 · ' + h + 'h ' + m + 'min'; }
         else if (act.type === 'supplement') val = s.count + '次 · ' + s.totalSuppl + '粒';
+        else if (act.type === 'milk') val = s.count + '次 · ' + s.totalMilk + 'ml';
         else if (s.duration > 0) val = s.count + '次 · ' + s.duration.toFixed(1) + '分钟';
         else val = s.count + '次';
       }
       html += `<div class="report-item"><span class="report-label">${act.icon} ${act.name}</span><span class="report-value${isZero?' zero':''}">${val}</span></div>`;
+      // 喝奶（水量）下一行展示 水+奶 总量（奶量*1.12）
+      if (act.type === 'milk') {
+        const base = s ? s.totalMilk : 0;
+        const mixed = Math.round(base * 1.12);
+        html += `<div class="report-item"><span class="report-label">${act.icon} 喝奶（水+奶）</span><span class="report-value${isZero?' zero':''}">${mixed}ml</span></div>`;
+      }
     });
     html += '</div>';
   });
@@ -1772,7 +1778,7 @@ function buildReportText() {
       if (r.milkAmount !== undefined) stats[r.type].totalMilk += r.milkAmount;
       if (r.note && r.note.trim()) noteRecords.push({ time: r.recTime || r.time || '', name: r.name, note: r.note.trim() });
     });
-    CATEGORIES.forEach(cat => { ACTIVITIES.filter(a => a.category === cat.id && !hiddenActivities.includes(a.id)).forEach(act => { const s = stats[act.id]; if (!s) return; let line = `${act.name}: `; if (act.type === 'milk') line += `${s.count}次 ${s.totalMilk}ml`; else if (act.type === 'sleep') { const hh = Math.floor(s.duration / 60); const mm = Math.round(s.duration % 60); line += `${s.count}次 ${hh}h ${mm}min`; } else if (s.duration > 0) line += `${s.duration.toFixed(1)}分钟`; else line += `${s.count}次`; text += line + '\n'; }); });
+    CATEGORIES.forEach(cat => { ACTIVITIES.filter(a => a.category === cat.id && !hiddenActivities.includes(a.id)).forEach(act => { const s = stats[act.id]; if (!s) return; let line = `${act.name}: `; if (act.type === 'milk') line += `${s.count}次 ${s.totalMilk}ml`; else if (act.type === 'sleep') { const hh = Math.floor(s.duration / 60); const mm = Math.round(s.duration % 60); line += `${s.count}次 ${hh}h ${mm}min`; } else if (s.duration > 0) line += `${s.duration.toFixed(1)}分钟`; else line += `${s.count}次`; text += line + '\n'; if (act.type === 'milk') text += `喝奶（水+奶）: ${Math.round(s.totalMilk * 1.12)}ml\n`; }); });
     if (noteRecords.length > 0) {
       noteRecords.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
       text += '\n📝 备注:\n';
@@ -1904,6 +1910,19 @@ function dailySleepHours(ds) {
   recs.forEach(r => { if (r.type === 'sleep' && r.duration) total += r.duration; });
   return total > 0 ? total / 60 : null;
 }
+function dailyMilkCount(ds) {
+  let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
+  let count = 0;
+  recs.forEach(r => { if (r.type === 'milk') count++; });
+  return count > 0 ? count : null;
+}
+function dailyPoopInfo(ds) {
+  // 返回 { count, statuses: [状态文字] }，无记录返回 null
+  let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
+  const statuses = [];
+  recs.forEach(r => { if (r.type === 'poop') statuses.push(r.poopStatus || '正常'); });
+  return statuses.length > 0 ? { count: statuses.length, statuses: statuses } : null;
+}
 // 通用折线图（内联SVG，无外部依赖；点击数据点显示横纵坐标）
 let _chartTipSeq = 0;
 function makeLineChart(data, opts) {
@@ -1932,7 +1951,14 @@ function makeLineChart(data, opts) {
   }
   const iw = W - PL - PR, ih = H - PT - PB;
   const n = data.length;
-  const xf = i => PL + (n <= 1 ? iw / 2 : (iw * i) / (n - 1));
+  // 横轴：数据点带时间戳 t 时按日期间隔线性等分（间隔1天的图上距离是间隔2天的一半），否则按索引等分
+  const tArr = data.map(d => d.t).filter(t => t != null);
+  const hasT = tArr.length === n && n > 1 && Math.max(...tArr) > Math.min(...tArr);
+  const tMin = hasT ? Math.min(...tArr) : 0, tMax = hasT ? Math.max(...tArr) : 1;
+  const xf = i => {
+    if (hasT) return PL + (iw * (data[i].t - tMin)) / (tMax - tMin);
+    return PL + (n <= 1 ? iw / 2 : (iw * i) / (n - 1));
+  };
   const yf = v => PT + ih - ((v - min) / (max - min)) * ih;
   const fmtV = opts.fmt ? opts.fmt : (v => v);
   const labelColor = opts.labelColor || '#b2bec3';
@@ -1941,7 +1967,7 @@ function makeLineChart(data, opts) {
   let path = '', dots = '', started = false;
   data.forEach((d, i) => {
     if (d.value == null) { started = false; return; }
-    const px = xf(i).toFixed(1), py = yf(d.value).toFixed(1);
+    const px = xf(i).toFixed(2), py = yf(d.value).toFixed(2);
     path += (started ? 'L' : 'M') + px + ' ' + py + ' ';
     started = true;
     const valText = (fmtV(d.value) + unit).replace(/'/g, "\\'").replace(/"/g, '&quot;');
@@ -2029,7 +2055,8 @@ function makeBarChart(data, opts) {
     const barTop = yf(d.value);
     const barBottom = yf(0);
     const h = barBottom - barTop; // 柱子高度（正值：底部y - 顶部y）
-    const valText = (fmtV(d.value) + unit).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const valRaw = opts.tipText ? opts.tipText(d) : (fmtV(d.value) + unit);
+    const valText = String(valRaw).replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const labelText = d.label.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     bars += `<rect class="bar-rect" x="${(cxBar - barW / 2).toFixed(1)}" y="${barTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="${color}"/>` +
       `<rect class="bar-hit" x="${(cxBar - slotW / 2).toFixed(1)}" y="${PT.toFixed(1)}" width="${slotW.toFixed(1)}" height="${ih.toFixed(1)}" fill="transparent" data-cx="${cxBar.toFixed(1)}" data-cy="${barTop.toFixed(1)}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
@@ -2056,23 +2083,28 @@ function makeBarChart(data, opts) {
 }
 function openAnalysis() {
   const content = document.getElementById('analysisContent');
-  // 1) 近15天（含当天）每日总奶量
+  // 1) 近15天（含当天）每日数据
   const days = [];
   for (let i = 14; i >= 0; i--) {
     const dt = effectiveNow(); dt.setDate(dt.getDate() - i);
     const ds = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
     days.push({ ds: ds, label: `${dt.getMonth()+1}/${dt.getDate()}` });
   }
-  const milkData = days.map(d => ({ label: d.label, value: dailyMilkTotal(d.ds) }));
+  // 奶量（水+奶）= 水量 * 1.12
+  const milkData = days.map(d => { const t = dailyMilkTotal(d.ds); return { label: d.label, value: t != null ? Math.round(t * 1.12) : null }; });
+  const milkCountData = days.map(d => ({ label: d.label, value: dailyMilkCount(d.ds) }));
   const sleepData = days.map(d => ({ label: d.label, value: dailySleepHours(d.ds) }));
-  // 2) 体重/身高曲线（相同数值只保留最早日期）
+  const poopData = days.map(d => { const info = dailyPoopInfo(d.ds); return { label: d.label, value: info ? info.count : null, statuses: info ? info.statuses : null }; });
+  // 2) 体重/身高曲线（相同数值只保留最早日期；横轴按日期间隔等分）
   const hist = getBodyHistory();
   const weightPts = dedupeBodySeries(hist.map(x => ({ d: x.d, v: x.w })));
   const heightPts = dedupeBodySeries(hist.map(x => ({ d: x.d, v: x.h })));
-  const toChart = pts => pts.map(p => { const [y, m, dd] = p.d.split('-'); return { label: `${parseInt(m)}/${parseInt(dd)}`, value: p.v }; });
+  const toChart = pts => pts.map(p => { const [y, m, dd] = p.d.split('-'); return { label: `${parseInt(m)}/${parseInt(dd)}`, value: p.v, t: Date.parse(p.d) }; });
   let html = '';
-  html += makeBarChart(milkData, { title: '🍼 每日总奶量（近15天）', unit: 'ml', color: '#74b9ff', tickStep: 100 });
+  html += makeBarChart(milkData, { title: '🍼 每日奶量（水+奶，近15天）', unit: 'ml', color: '#74b9ff', tickStep: 100 });
+  html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#81ecec', tickStep: 1 });
   html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#a29bfe', fmt: v => v.toFixed(1), tickStep: 1 });
+  html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#fab1a0', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}` });
   html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#55efc4', fmt: v => v.toFixed(1), yMin: 3, yStep: 1 });
   html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#74b9ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2 });
   content.innerHTML = html;
