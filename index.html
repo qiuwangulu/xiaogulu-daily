@@ -515,8 +515,8 @@
   .temp-high { color: #e74c3c; }
   .hint-text { font-size: 13px; color: #74b9ff; margin-top: 4px; font-style: italic; }
 
-  .poop-icon { font-size: 20px; display: inline-flex; align-items: center; }
-  .poop-icon .poop-svg { width: 20px; height: 20px; display: block; }
+  .poop-icon { font-size: 24px; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; }
+  .poop-icon .poop-svg { width: 24px; height: 24px; display: block; }
   .poop-normal { color: #f0c060; }
   .poop-normal .poop-svg { fill: #f0c060; }
   .poop-watery { color: #e8b730; }
@@ -1335,13 +1335,13 @@ function updateOverview() {
   if (lastMilkRec) {
     const [h, m] = (lastMilkRec.milkTime || lastMilkRec.recTime || '00:00').split(':').map(Number);
     const intv = getMilkInterval();
-    // 用记录的timestamp构造完整日期，支持跨天计算
     const ld = lastMilkRec.timestamp ? new Date(lastMilkRec.timestamp) : new Date();
     ld.setHours(h, m, 0, 0);
     const nd = new Date(ld.getTime() + intv * 3600000);
     const nh = String(nd.getHours()).padStart(2, '0'), nm = String(nd.getMinutes()).padStart(2, '0');
     const diff = nd - new Date();
-    let cd = ''; if (diff > 0) { const dm = Math.floor(diff / 60000); cd = `${Math.floor(dm/60)}h ${dm%60}min`; } else cd = '已到时间';
+    let cd = ''; if (diff > 0) { const dm = Math.floor(diff / 60000); cd = `${Math.floor(dm/60)}h ${dm%60}min`; }
+    else { cd = '已到时间'; setTimeout(() => showToast('⏰ 下次喝奶时间到了！'), 800); }
     html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶</span><span class="ov-time">${nh}:${nm}</span><span class="ov-countdown">${cd}</span></div>`;
   } else {
     html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶</span><span class="ov-value">暂无记录</span></div>`;
@@ -2296,7 +2296,7 @@ function openManage() {
   updateReadOnlySlider();
   showModal('manageModal');
 }
-function isReadOnlyMode() { const v = localStorage.getItem('readonly_mode'); return v === null ? true : v === 'yes'; }
+function isReadOnlyMode() { const v = localStorage.getItem('readonly_mode'); return v === 'yes'; }
 function updateReadOnlySlider() {
   const slider = document.getElementById('readOnlySlider');
   if (!slider) return;
