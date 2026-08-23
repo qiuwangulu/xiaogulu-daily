@@ -1177,9 +1177,21 @@ function checkAchievementPush(achArr, totalMilk) {
       }
       return `<li>${esc(a)}</li>`;
     }).join('');
+    // 当天统计：大便次数 / 户外活动时长 / 睡眠时长
+    let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
+    let poopCount = 0, outdoorMin = 0, sleepMin = 0;
+    recs.forEach(r => {
+      if (r.type === 'poop') poopCount++;
+      else if (r.type === 'outdoor' && r.duration) outdoorMin += r.duration;
+      else if (r.type === 'sleep' && r.duration) sleepMin += r.duration;
+    });
+    const fmtDur = min => { min = Math.round(min); const h = Math.floor(min / 60), m = min % 60; if (h > 0 && m > 0) return `${h}小时${m}分钟`; return h > 0 ? `${h}小时` : `${m}分钟`; };
     const content = `<h3>小咕噜的今日成就 ${ds}</h3>` +
       `<p><b>🏆 今日成就:</b></p><ul>${items}</ul>` +
-      `<p><b>🍼 水+奶量:</b> ${Math.round(totalMilk * 1.12)} ml</p>`;
+      `<p><b>🍼 水+奶量:</b> ${Math.round(totalMilk * 1.12)} ml</p>` +
+      `<p><b>💩 大便次数:</b> ${poopCount} 次</p>` +
+      `<p><b>☀️ 户外活动:</b> ${fmtDur(outdoorMin)}</p>` +
+      `<p><b>😴 睡眠时长:</b> ${fmtDur(sleepMin)}</p>`;
     notifyPushplus(displayTitle, content).then(ok => { if (!ok) console.warn('PushPlus推送未成功'); });
   } catch (e) { console.warn('推送检查失败:', e); }
 }
