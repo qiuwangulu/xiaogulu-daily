@@ -1984,15 +1984,35 @@ function makeLineChart(data, opts) {
     grid += `<line x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
     ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${labelColor}" font-size="9" text-anchor="end">${fmtV(Math.round(v * 10) / 10)}</text>`;
   });
-  // x轴标签：keyDates 模式只显示首点/末点/每月25号；默认按 step 抽稀
+  // x轴标签：keyDates 模式显示首末日期 + 每月25号（按时间轴位置渲染，不依赖数据点）；默认按 step 抽稀
   let xlabels = '';
   if (opts.xTickMode === 'keyDates') {
-    data.forEach((d, i) => {
-      const dt = d.t != null ? new Date(d.t) : null;
-      const isKey = i === 0 || i === n - 1 || (dt && dt.getUTCDate() === 25);
-      if (!isKey) return;
-      xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="${labelColor}" font-size="9" text-anchor="middle">${d.label}</text>`;
-    });
+    if (hasT) {
+      // 按时间轴渲染：首末日期 + 范围内每月25号，即使该日期没有数据点也显示刻度
+      const keyMap = new Map(); // 时间戳 -> 标签（自动去重：首/末恰为25号时只显示一次）
+      const fmtTs = ts => { const dt = new Date(ts); return `${dt.getUTCMonth() + 1}/${dt.getUTCDate()}`; };
+      keyMap.set(tMin, fmtTs(tMin));
+      keyMap.set(tMax, fmtTs(tMax));
+      let cur = new Date(tMin);
+      cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth(), 25));
+      if (cur.getTime() <= tMin) cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 25));
+      while (cur.getTime() < tMax) {
+        keyMap.set(cur.getTime(), fmtTs(cur.getTime()));
+        cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 25));
+      }
+      Array.from(keyMap.keys()).sort((a, b) => a - b).forEach(ts => {
+        const x = (PL + (iw * (ts - tMin)) / (tMax - tMin)).toFixed(1);
+        xlabels += `<text x="${x}" y="${H - 8}" fill="${labelColor}" font-size="9" text-anchor="middle">${keyMap.get(ts)}</text>`;
+      });
+    } else {
+      // 无时间戳时退化为数据点判断（首/末/25号数据点）
+      data.forEach((d, i) => {
+        const dt = d.t != null ? new Date(d.t) : null;
+        const isKey = i === 0 || i === n - 1 || (dt && dt.getUTCDate() === 25);
+        if (!isKey) return;
+        xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="${labelColor}" font-size="9" text-anchor="middle">${d.label}</text>`;
+      });
+    }
   } else {
     const step = Math.max(1, Math.ceil(n / 7));
     data.forEach((d, i) => {
