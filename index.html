@@ -1031,7 +1031,7 @@ function init() {
 }
 
 function updateAgeInfo() {
-  const now = new Date();
+  const now = effectiveNow(); // 与业务日切换对齐（凌晨0-1点仍算前一天，月龄在1:00才+1）
   const birth = BIRTH_DATE;
   let months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
   if (now.getDate() < birth.getDate()) months--;
