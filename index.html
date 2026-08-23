@@ -1305,7 +1305,15 @@ function updateOverview() {
   checkAchievementPush(achArr, totalMilk);
 }
 
-function checkMilkReminder() {
+let milkRemindShown = false; // 页面级变量：本次页面生命周期内只弹一次，刷新后自然重置
+function checkMilkReminder(attempt) {
+  if (milkRemindShown) return;
+  // 若有其他 toast 正在显示（如操作反馈），等待其结束后再弹，避免覆盖（最多等 5 秒）
+  const toastEl = document.getElementById('toast');
+  if (toastEl && toastEl.classList.contains('show') && (attempt || 0) < 10) {
+    setTimeout(() => checkMilkReminder((attempt || 0) + 1), 500);
+    return;
+  }
   const lastMilkRec = getLastMilkRecord();
   if (!lastMilkRec) return;
   const [h, m] = (lastMilkRec.milkTime || lastMilkRec.recTime || '00:00').split(':').map(Number);
@@ -1313,11 +1321,15 @@ function checkMilkReminder() {
   const ld = lastMilkRec.timestamp ? new Date(lastMilkRec.timestamp) : new Date();
   ld.setHours(h, m, 0, 0);
   const nd = new Date(ld.getTime() + intv * 3600000);
-  if (nd - new Date() > 0) return;
-  const todayKey = 'milk_remind_' + getTodayDateStr();
-  if (sessionStorage.getItem(todayKey)) return;
-  sessionStorage.setItem(todayKey, '1');
-  showToast('⏰ 下次喝奶时间到了！');
+  const nh = String(nd.getHours()).padStart(2, '0'), nm = String(nd.getMinutes()).padStart(2, '0');
+  const diff = nd - new Date();
+  milkRemindShown = true;
+  if (diff > 0) {
+    const dm = Math.floor(diff / 60000);
+    showToast(`⏰ 距下次喝奶（${nh}:${nm}）还有 ${Math.floor(dm/60)}h ${dm%60}min`, 3000);
+  } else {
+    showToast(`⏰ 下次喝奶时间到了（${nh}:${nm}）！`, 3000);
+  }
 }
 
 /* ==================== 分类侧边栏 ==================== */
@@ -2778,7 +2790,7 @@ function openAnalysis() {
 function showModal(id) { document.getElementById(id).classList.add('show'); document.body.style.overflow = 'hidden'; }
 function hideModal(id) { document.getElementById(id).classList.remove('show'); document.body.style.overflow = ''; }
 function closeModal(e, id) { if (e.target.id === id) hideModal(id); }
-function showToast(msg) { const toast = document.getElementById('toast'); toast.textContent = msg; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 1800); }
+function showToast(msg, ms) { const toast = document.getElementById('toast'); toast.textContent = msg; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), ms || 1800); }
 
 /* ==================== 云端同步模块 ==================== */
 
