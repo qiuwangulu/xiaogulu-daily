@@ -255,7 +255,7 @@
   }
   .bottom-bar .fab-wrap {
     display: flex; justify-content: center;
-    padding: 8px 14px 6px;
+    padding: 8px 14px 12px;
   }
   .fab-btn {
     padding: 7px 20px; border-radius: 20px;
@@ -275,7 +275,7 @@
     padding: 7px 18px 7px 12px; border-radius: 20px;
     border: 2px solid #fff;
     background: transparent;
-    color: #fff; font-size: 15px; font-weight: 600;
+    color: #fff; font-size: 14px; font-weight: 600;
     cursor: pointer; transition: all 0.2s;
     display: inline-flex; align-items: center; gap: 6px;
   }
@@ -289,7 +289,7 @@
     padding: 7px 18px 7px 12px; border-radius: 20px;
     border: 2px solid #fff;
     background: transparent;
-    color: #fff; font-size: 15px; font-weight: 600;
+    color: #fff; font-size: 14px; font-weight: 600;
     cursor: pointer; transition: all 0.2s;
     display: inline-flex; align-items: center; gap: 6px;
     user-select: none; -webkit-user-select: none;
@@ -342,12 +342,12 @@
   .voice-empty-tip { font-size: 13px; color: #b2bec3; text-align: center; padding: 10px 0 2px; }
 
   .bottom-bar .divider {
-    height: 1px; background: rgba(255,255,255,0.12);
+    height: 1px; background: rgba(255,255,255,0.2);
     margin: 0 14px;
   }
   .bottom-bar .nav-row {
     display: flex; justify-content: space-around;
-    padding: 6px 10px 14px;
+    padding: 10px 10px 14px;
   }
   .nav-item {
     display: flex; flex-direction: column;
@@ -2045,7 +2045,7 @@ function startVoiceHold() {
       voiceFinalText = (voiceFinalText + interim).trim();
     };
     voiceRecog.onerror = (e) => {
-      if (e.error === 'not-allowed') showToast('麦克风权限被拒');
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') showToast('麦克风权限被拒：点地址栏左侧🔒/ⓘ图标→权限→麦克风→允许后重试');
       else if (e.error === 'no-speech') showToast('没有听到声音');
       else if (e.error === 'network') showToast('语音服务连接失败');
     };
@@ -2658,7 +2658,7 @@ function makeLineChart(data, opts) {
   }
   return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
     whoBand + grid + ylabels + xlabels + whoLines +
-    `<path d="${path.trim()}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` +
+    `<path d="${path.trim()}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` +
     dots + tip + `</svg></div>`;
 }
 // 点击数据点显示/隐藏横纵坐标浮层（同一点再点隐藏）
@@ -2800,10 +2800,10 @@ function openAnalysis() {
   const poopStdRows = days.map(d => getStdRow(POOP_STD, d.ds));
   html += makeBarChart(milkData, { title: '🍼 每日奶量（水+奶，近15天）', unit: 'ml', color: '#7da8e6', tickStep: 100, stdLines: [{ values: milkStdRows.map(r => r.min) }, { values: milkStdRows.map(r => r.max) }] });
   html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
-  html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 1, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
+  html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
   html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
-  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#7da8e6', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT } });
-  html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#7da8e6', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT } });
+  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#4da3ff', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT } });
+  html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#4da3ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT } });
   content.innerHTML = html;
   showModal('analysisModal');
 }
