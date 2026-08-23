@@ -866,6 +866,23 @@
       </div>
       <div class="push-token-hint">pushplus.plus → 发送消息 → 一对多消息 → 群组编码填到这里，家人扫码入群即可同步接收成就提醒</div>
     </div>
+    <div class="sync-section">
+      <div class="cos-title">🎤 语音识别（讯飞）</div>
+      <div class="push-token-row">
+        <input type="text" id="xfAppidInput" placeholder="APPID">
+      </div>
+      <div class="push-token-row">
+        <input type="text" id="xfApiKeyInput" placeholder="API Key">
+      </div>
+      <div class="push-token-row">
+        <input type="text" id="xfApiSecretInput" placeholder="API Secret">
+      </div>
+      <div class="push-token-row">
+        <button class="btn btn-primary" onclick="saveXfyunConfig()">保存语音配置</button>
+        <button class="btn" onclick="clearXfyunConfig()">清除</button>
+      </div>
+      <div class="push-token-hint">国内手机推荐：讯飞开放平台 xfyun.cn 免费注册 → 创建应用 → 开通「语音听写（流式版）」→ 填入以上三个值。配置后语音功能走讯飞（国内直连，每天免费500次）；不填则使用浏览器自带语音（国内多不可用）</div>
+    </div>
     <div class="manage-list" id="manageList"></div>
     <div class="custom-options-section" id="customOptionsSection"></div>
     <div class="sync-section" id="syncSection">
@@ -1998,15 +2015,228 @@ function parseVoiceText(text) {
 // ---- 语音 UI 与识别（按住说话） ----
 let voiceRecog = null, voiceRecActive = false, voiceFinalText = '', voiceItems = [];
 
+// ========== 讯飞语音听写（流式版 WebAPI，浏览器 WebSocket 直连，国内可用） ==========
+function getXfyunConfig() {
+  const appid = localStorage.getItem('xfyun_appid');
+  const apiKey = localStorage.getItem('xfyun_api_key');
+  const apiSecret = localStorage.getItem('xfyun_api_secret');
+  if (appid && apiKey && apiSecret) return { appid: appid, apiKey: apiKey, apiSecret: apiSecret };
+  return null;
+}
+function saveXfyunConfig() {
+  const appid = document.getElementById('xfAppidInput').value.trim();
+  const apiKey = document.getElementById('xfApiKeyInput').value.trim();
+  const apiSecret = document.getElementById('xfApiSecretInput').value.trim();
+  if (!appid || !apiKey || !apiSecret) { showToast('请填写完整的 APPID / API Key / API Secret'); return; }
+  localStorage.setItem('xfyun_appid', appid);
+  localStorage.setItem('xfyun_api_key', apiKey);
+  localStorage.setItem('xfyun_api_secret', apiSecret);
+  showToast('语音配置已保存，语音将使用讯飞识别');
+}
+function clearXfyunConfig() {
+  localStorage.removeItem('xfyun_appid');
+  localStorage.removeItem('xfyun_api_key');
+  localStorage.removeItem('xfyun_api_secret');
+  loadXfyunConfigUI();
+  showToast('已清除语音配置，改用浏览器自带语音');
+}
+function loadXfyunConfigUI() {
+  document.getElementById('xfAppidInput').value = localStorage.getItem('xfyun_appid') || '';
+  document.getElementById('xfApiKeyInput').value = localStorage.getItem('xfyun_api_key') || '';
+  document.getElementById('xfApiSecretInput').value = localStorage.getItem('xfyun_api_secret') || '';
+}
+// 构建带鉴权的 WebSocket URL（HMAC-SHA256 签名，讯飞 WebAPI 标准）
+async function buildXfyunUrl(cfg) {
+  const host = 'iat-api.xfyun.cn';
+  const path = '/v2/iat';
+  const date = new Date().toUTCString();
+  const origin = 'host: ' + host + '\ndate: ' + date + '\nGET ' + path + ' HTTP/1.1';
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(cfg.apiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(origin));
+  const signature = btoa(String.fromCharCode.apply(null, new Uint8Array(sig)));
+  const authOrigin = 'api_key="' + cfg.apiKey + '", algorithm="hmac-sha256", headers="host date request-line", signature="' + signature + '"';
+  const authorization = btoa(authOrigin);
+  return 'wss://' + host + path + '?authorization=' + encodeURIComponent(authorization) + '&date=' + encodeURIComponent(date) + '&host=' + encodeURIComponent(host);
+}
+// 浏览器采样率 → 16k（线性插值）
+function downsampleTo16k(input, inputRate) {
+  if (inputRate === 16000) return input;
+  const ratio = inputRate / 16000;
+  const outLen = Math.floor(input.length / ratio);
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const pos = i * ratio;
+    const i0 = Math.floor(pos);
+    const i1 = Math.min(i0 + 1, input.length - 1);
+    out[i] = input[i0] + (input[i1] - input[i0]) * (pos - i0);
+  }
+  return out;
+}
+function float32ToInt16(f32) {
+  const out = new Int16Array(f32.length);
+  for (let i = 0; i < f32.length; i++) {
+    const s = Math.max(-1, Math.min(1, f32[i]));
+    out[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  }
+  return out;
+}
+function pcmToBase64(u8) {
+  let bin = '';
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+// 解析讯飞识别结果（含 wpgs 动态修正：rpl 时按 rg 范围替换旧句），返回当前完整文本
+function parseXfyunResult(sentences, r) {
+  if (!r) return null;
+  const text = (r.ws || []).map(w => (w.cw || []).map(c => c.w || '').join('')).join('');
+  if (r.pgs === 'rpl' && Array.isArray(r.rg)) {
+    const from = r.rg[0], to = r.rg[r.rg.length - 1];
+    for (let sn = from; sn <= to; sn++) sentences.delete(sn);
+  }
+  if (r.sn != null) sentences.set(r.sn, text);
+  return [...sentences.keys()].sort((a, b) => a - b).map(k => sentences.get(k)).join('');
+}
+let xfSession = null;
+async function startXfyunDictation() {
+  const cfg = getXfyunConfig();
+  if (!cfg) return false;
+  let url;
+  try { url = await buildXfyunUrl(cfg); } catch (e) { showToast('语音配置无效'); return false; }
+  const sess = { sentences: new Map(), queue: [], endSent: false, finalized: false };
+  xfSession = sess;
+  let ws;
+  try { ws = new WebSocket(url); } catch (e) { xfSession = null; showToast('无法连接语音服务'); return false; }
+  sess.ws = ws;
+  ws.onopen = async () => {
+    try {
+      sess.ws.send(JSON.stringify({
+        common: { app_id: cfg.appid },
+        business: { language: 'zh_cn', domain: 'iat', accent: 'mandarin', vad_eos: 5000, dwa: 'wpgs' },
+        data: { status: 0, format: 'audio/L16;rate=16000', encoding: 'raw', audio: '' }
+      }));
+      await startXfyunMic(sess);
+    } catch (e) {
+      showToast('无法访问麦克风：请检查浏览器录音权限');
+      sess.endSent = true;
+      finalizeXfyun(sess);
+    }
+  };
+  ws.onmessage = ev => {
+    let res; try { res = JSON.parse(ev.data); } catch (e) { return; }
+    if (res.code !== 0) {
+      showToast('语音识别失败：' + (res.message || res.code));
+      sess.endSent = true;
+      finalizeXfyun(sess);
+      return;
+    }
+    const d = res.data;
+    if (d && d.result) {
+      const text = parseXfyunResult(sess.sentences, d.result);
+      if (text != null) voiceFinalText = text;
+    }
+    if (d && d.status === 2) finalizeXfyun(sess);
+  };
+  ws.onerror = () => {
+    if (!sess.finalized) showToast('语音服务连接失败');
+    sess.endSent = true;
+    finalizeXfyun(sess);
+  };
+  ws.onclose = () => finalizeXfyun(sess);
+  return true;
+}
+async function startXfyunMic(sess) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+  sess.stream = stream;
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  sess.audioCtx = audioCtx;
+  const source = audioCtx.createMediaStreamSource(stream);
+  sess.source = source;
+  const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+  sess.processor = processor;
+  const inputRate = audioCtx.sampleRate;
+  const pcmBuf = [];
+  processor.onaudioprocess = e => {
+    e.outputBuffer.getChannelData(0).fill(0); // 静音输出，防止回声
+    if (sess.endSent || xfSession !== sess) return;
+    const down = downsampleTo16k(e.inputBuffer.getChannelData(0), inputRate);
+    const int16 = float32ToInt16(down);
+    for (let i = 0; i < int16.length; i++) pcmBuf.push(int16[i]);
+    while (pcmBuf.length >= 640) { // 640样本=1280字节=40ms，讯飞标准帧
+      const frame = new Int16Array(pcmBuf.splice(0, 640));
+      sess.queue.push(JSON.stringify({ data: { status: 1, format: 'audio/L16;rate=16000', encoding: 'raw', audio: pcmToBase64(new Uint8Array(frame.buffer)) } }));
+    }
+  };
+  source.connect(processor);
+  processor.connect(audioCtx.destination);
+  sess.sendTimer = setInterval(() => {
+    if (sess.ws && sess.ws.readyState === 1 && sess.queue.length) sess.ws.send(sess.queue.shift());
+  }, 40);
+}
+// 会话收尾：关连接、释放录音、进入统一的识别完成处理
+function finalizeXfyun(sess) {
+  if (sess.finalized) return;
+  sess.finalized = true;
+  clearTimeout(sess.timeoutTimer);
+  clearInterval(sess.sendTimer);
+  sess.queue.length = 0;
+  try { sess.ws && sess.ws.close(); } catch (e) {}
+  try { sess.source && sess.source.disconnect(); } catch (e) {}
+  try { sess.processor && sess.processor.disconnect(); } catch (e) {}
+  try { sess.audioCtx && sess.audioCtx.close(); } catch (e) {}
+  try { sess.stream && sess.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+  if (xfSession === sess) xfSession = null;
+  finishVoiceRecognition();
+}
+// 用户松开按钮：停录音并发送结束帧，等讯飞返回最终结果（3秒超时兜底）
+function stopXfyunDictation() {
+  const sess = xfSession;
+  if (!sess) return;
+  try { sess.source && sess.source.disconnect(); } catch (e) {}
+  try { sess.processor && sess.processor.disconnect(); } catch (e) {}
+  try { sess.audioCtx && sess.audioCtx.close(); } catch (e) {}
+  try { sess.stream && sess.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+  clearInterval(sess.sendTimer);
+  sess.queue.length = 0;
+  if (!sess.endSent) {
+    sess.endSent = true;
+    if (sess.ws && sess.ws.readyState === 1) {
+      try { sess.ws.send(JSON.stringify({ data: { status: 2, format: 'audio/L16;rate=16000', encoding: 'raw', audio: '' } })); } catch (e) {}
+      sess.timeoutTimer = setTimeout(() => finalizeXfyun(sess), 3000);
+    } else {
+      finalizeXfyun(sess);
+    }
+  }
+}
+// 识别完成统一入口（Web Speech API 与讯飞共用）
+function finishVoiceRecognition() {
+  voiceRecActive = false;
+  const btn = document.getElementById('voiceHoldBtn');
+  if (btn) btn.classList.remove('recording');
+  if (voiceFinalText) {
+    const r = parseVoiceText(voiceFinalText);
+    voiceItems = r.items;
+    showVoiceModal(voiceFinalText, r.unmatched);
+  }
+}
+
 function startVoiceHold() {
   if (isReadOnlyMode()) return;
   const btn = document.getElementById('voiceHoldBtn');
   if (btn) btn.classList.add('recording');
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showToast('当前浏览器不支持语音识别，建议手动点击「添加」按钮录入'); if (btn) btn.classList.remove('recording'); return; }
   if (voiceRecActive) return;
   voiceFinalText = '';
   voiceItems = [];
+  // 优先讯飞（国内直连可用）；未配置则回退浏览器自带 Web Speech API（海外可用）
+  if (getXfyunConfig()) {
+    voiceRecActive = true;
+    startXfyunDictation().then(started => {
+      if (!started) { voiceRecActive = false; if (btn) btn.classList.remove('recording'); }
+    });
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast('当前浏览器不支持语音识别：请到「管理」页配置讯飞语音'); if (btn) btn.classList.remove('recording'); return; }
   try {
     voiceRecog = new SR();
     voiceRecog.lang = 'zh-CN'; voiceRecog.interimResults = true; voiceRecog.continuous = false; voiceRecog.maxAlternatives = 1;
@@ -2023,19 +2253,11 @@ function startVoiceHold() {
       if (btn) btn.classList.remove('recording');
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') showToast('麦克风权限被拒：点地址栏左侧🔒→权限→麦克风→允许');
       else if (e.error === 'no-speech') showToast('没有听到声音');
-      else if (e.error === 'network') showToast('语音服务连接失败：Edge/Chrome 在国内可能无法使用语音识别，建议手动输入');
+      else if (e.error === 'network') showToast('语音服务连接失败：国内请在「管理」页配置讯飞语音');
       else if (e.error === 'audio-capture') showToast('无法访问麦克风：请确认浏览器有录音权限');
-      else showToast('语音识别出错(' + e.error + ')：若持续失败请手动输入');
+      else showToast('语音识别出错(' + e.error + ')：国内可在「管理」页配置讯飞语音');
     };
-    voiceRecog.onend = () => {
-      voiceRecActive = false;
-      if (btn) btn.classList.remove('recording');
-      if (voiceFinalText) {
-        const r = parseVoiceText(voiceFinalText);
-        voiceItems = r.items;
-        showVoiceModal(voiceFinalText, r.unmatched);
-      }
-    };
+    voiceRecog.onend = finishVoiceRecognition;
     voiceRecog.start();
     voiceRecActive = true;
   } catch (err) {
@@ -2044,6 +2266,7 @@ function startVoiceHold() {
   }
 }
 function stopVoiceHold() {
+  if (xfSession) { stopXfyunDictation(); return; }
   if (voiceRecog && voiceRecActive) { try { voiceRecog.stop(); } catch (e) {} }
 }
 
@@ -2267,6 +2490,7 @@ function openManage() {
   renderCustomOptionsSection();
   document.getElementById('readOnlyToggle').checked = isReadOnlyMode();
   document.getElementById('pushTopicInput').value = localStorage.getItem('pushplus_topic') || 'xiaogulu_daily';
+  loadXfyunConfigUI();
   updateReadOnlySlider();
   showModal('manageModal');
 }
