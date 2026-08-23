@@ -250,6 +250,7 @@
     max-width: 480px; width: 100%;
     background: rgba(10,15,30,0.94);
     backdrop-filter: blur(10px);
+    box-shadow: 0 -6px 20px rgba(0,0,0,0.55);
     z-index: 100;
   }
   .bottom-bar .fab-wrap {
@@ -272,7 +273,7 @@
   .bottom-bar .fab-wrap { gap: 20px; }
   .fab-btn {
     padding: 7px 18px 7px 12px; border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.35);
+    border: 2px solid #fff;
     background: transparent;
     color: #fff; font-size: 15px; font-weight: 600;
     cursor: pointer; transition: all 0.2s;
@@ -286,7 +287,7 @@
 
   .voice-hold-btn {
     padding: 7px 18px 7px 12px; border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.35);
+    border: 2px solid #fff;
     background: transparent;
     color: #fff; font-size: 15px; font-weight: 600;
     cursor: pointer; transition: all 0.2s;
@@ -295,7 +296,7 @@
     touch-action: none;
   }
   .voice-hold-btn:active { background: rgba(255,255,255,0.08); }
-  .voice-hold-btn.recording { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.55); }
+  .voice-hold-btn.recording { background: rgba(255,255,255,0.12); border-color: #fff; }
   .voice-hold-btn .voice-icon {
     width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
   }
@@ -2517,7 +2518,7 @@ function makeLineChart(data, opts) {
   const valid = data.filter(d => d.value != null);
   const head = `<div class="chart-card"><div class="chart-title">${title}</div>`;
   if (valid.length === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
-  const W = 330, H = 168, PL = 40, PR = 12, PT = 12, PB = 24;
+  const W = 330, H = 168, PL = 40, PR = 12, PT = 22, PB = 24;
   const iw = W - PL - PR, ih = H - PT - PB;
   const n = data.length;
   // 横轴：数据点带时间戳 t 时按日期间隔线性等分（间隔1天的图上距离是间隔2天的一半），否则按索引等分
@@ -2574,7 +2575,7 @@ function makeLineChart(data, opts) {
   };
   const yf = v => PT + ih - ((v - min) / (max - min)) * ih;
   const fmtV = opts.fmt ? opts.fmt : (v => v);
-  const labelColor = opts.labelColor || '#8a90a6';
+  const labelColor = opts.labelColor || '#fff';
   const tipId = 'ctip' + (++_chartTipSeq);
   // 折线（无数据日断开）+ 可点击数据点（含透明命中区）
   let path = '', dots = '', started = false;
@@ -2586,10 +2587,10 @@ function makeLineChart(data, opts) {
     const valText = (fmtV(d.value) + unit).replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const labelText = d.label.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     dots += `<circle class="chart-dot" cx="${px}" cy="${py}" r="3" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
-      `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
+      `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" data-cx="${px}" data-cy="${py}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
   });
   // 点击提示浮层（默认隐藏）：白色加粗文字
-  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="rgba(0,0,0,0.7)" stroke="rgba(255,255,255,0.3)" stroke-width="0.5"/><text font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.45)" stroke-width="0.5"/><text font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
   // 网格线 + y轴刻度（按 ticks）
   let grid = '', ylabels = '';
   ticks.forEach(v => {
@@ -2597,6 +2598,7 @@ function makeLineChart(data, opts) {
     grid += `<line x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
     ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${labelColor}" font-size="9" text-anchor="end">${fmtV(Math.round(v * 10) / 10)}</text>`;
   });
+  if (unit) ylabels += `<text x="${PL - 5}" y="13" fill="#fff" font-size="8.5" font-weight="bold" text-anchor="end">${unit}</text>`;
   // x轴标签：keyDates 模式显示首末日期 + 每月25号（按时间轴位置渲染，不依赖数据点）；默认按 step 抽稀
   let xlabels = '';
   if (opts.xTickMode === 'keyDates') {
@@ -2615,7 +2617,7 @@ function makeLineChart(data, opts) {
       }
       Array.from(keyMap.keys()).sort((a, b) => a - b).forEach(ts => {
         const x = (PL + (iw * (ts - tMin)) / (tMax - tMin)).toFixed(1);
-        xlabels += `<text x="${x}" y="${H - 8}" fill="#8a90a6" font-size="9" text-anchor="middle">${keyMap.get(ts)}</text>`;
+        xlabels += `<text x="${x}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${keyMap.get(ts)}</text>`;
       });
     } else {
       // 无时间戳时退化为数据点判断（首/末/25号数据点）
@@ -2623,14 +2625,14 @@ function makeLineChart(data, opts) {
         const dt = d.t != null ? new Date(d.t) : null;
         const isKey = i === 0 || i === n - 1 || (dt && dt.getUTCDate() === 25);
         if (!isKey) return;
-        xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="#8a90a6" font-size="9" text-anchor="middle">${d.label}</text>`;
+        xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${d.label}</text>`;
       });
     }
   } else {
     const step = Math.max(1, Math.ceil(n / 7));
     data.forEach((d, i) => {
       if (i % step !== 0 && i !== n - 1) return;
-      xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="#8a90a6" font-size="9" text-anchor="middle">${d.label}</text>`;
+      xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${d.label}</text>`;
     });
   }
   // WHO 参考曲线渲染：p3~p75 半透明填充带（最底层）+ 3条虚线 + 右端标注
@@ -2686,7 +2688,7 @@ function makeBarChart(data, opts) {
   const valid = data.filter(d => d.value != null);
   const head = `<div class="chart-card"><div class="chart-title">${title}</div>`;
   if (valid.length === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
-  const W = 330, H = 168, PL = 40, PR = 12, PT = 12, PB = 24;
+  const W = 330, H = 168, PL = 40, PR = 12, PT = 22, PB = 24;
   const minV = 0;
   const dataMax = Math.max(...valid.map(d => d.value));
   // 月龄标准范围线（opts.stdLines: [{values:[与data等长]}]）取值纳入纵轴范围
@@ -2729,21 +2731,22 @@ function makeBarChart(data, opts) {
       `<rect class="bar-hit" x="${(cxBar - slotW / 2).toFixed(1)}" y="${PT.toFixed(1)}" width="${slotW.toFixed(1)}" height="${ih.toFixed(1)}" fill="transparent" data-cx="${cxBar.toFixed(1)}" data-cy="${barTop.toFixed(1)}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
   });
   // 点击提示浮层：深色半透明背景 + 白色文字
-  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="rgba(0,0,0,0.7)" stroke="rgba(255,255,255,0.3)" stroke-width="0.5"/><text font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.45)" stroke-width="0.5"/><text font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
   // 网格线 + y轴刻度（按 ticks）
   let grid = '', ylabels = '';
   ticks.forEach(v => {
     const gy = yf(v).toFixed(1);
     grid += `<line x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
-    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#8a90a6" font-size="9" text-anchor="end">${fmtV(Math.round(v * 10) / 10)}</text>`;
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#fff" font-size="9" text-anchor="end">${fmtV(Math.round(v * 10) / 10)}</text>`;
   });
+  if (unit) ylabels += `<text x="${PL - 5}" y="13" fill="#fff" font-size="8.5" font-weight="bold" text-anchor="end">${unit}</text>`;
   // x轴标签
   const step = Math.max(1, Math.ceil(n / 7));
   let xlabels = '';
   data.forEach((d, i) => {
     const cxBar = PL + slotW * i + slotW / 2;
     if (i % step !== 0 && i !== n - 1) return;
-    xlabels += `<text x="${cxBar.toFixed(1)}" y="${H - 8}" fill="#8a90a6" font-size="9" text-anchor="middle">${d.label}</text>`;
+    xlabels += `<text x="${cxBar.toFixed(1)}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${d.label}</text>`;
   });
   // 月龄标准范围线：绿色虚线（每天按其月龄取标准值；跨月龄切换日（25号）标准值变化时呈阶梯状垂直跳变）
   let stdSvg = '';
@@ -2799,7 +2802,7 @@ function openAnalysis() {
   html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
   html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 1, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
   html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
-  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#e8b87d', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT } });
+  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#7da8e6', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT } });
   html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#7da8e6', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT } });
   content.innerHTML = html;
   showModal('analysisModal');
