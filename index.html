@@ -111,11 +111,13 @@
   .overview-row { display: flex; gap: 24px; flex-wrap: wrap; justify-content: flex-start; margin-bottom: 8px; }
   .overview-row:last-child { margin-bottom: 0; }
   .overview-item { display: flex; align-items: center; gap: 5px; }
+  .overview-item .ov-icon { font-size: 15px; }
   .overview-item .ov-label { color: #fff; }
   .overview-item .ov-value { color: #fff; font-weight: 600; }
   .overview-item .ov-time { color: #fff; font-weight: 600; }
   .overview-item .ov-countdown { color: #55efc4; }
-  .overview-achievement { color: #fff; font-size: 15px; text-align: left; margin-top: 6px; }
+  .overview-achievement { color: #fff; font-size: 15px; text-align: left; margin-top: 6px; display: flex; align-items: flex-start; gap: 5px; }
+  .overview-achievement .ov-icon { font-size: 15px; }
 
   /* ===== 分类侧边栏 ===== */
   .category-bar {
@@ -1340,18 +1342,18 @@ function updateOverview() {
     const nh = String(nd.getHours()).padStart(2, '0'), nm = String(nd.getMinutes()).padStart(2, '0');
     const diff = nd - new Date();
     let cd = ''; if (diff > 0) { const dm = Math.floor(diff / 60000); cd = `${Math.floor(dm/60)}h ${dm%60}min`; } else cd = '已到时间';
-    html += `<div class="overview-item"><span class="ov-label">下一次喝奶</span><span class="ov-time">${nh}:${nm}</span><span class="ov-countdown">${cd}</span></div>`;
+    html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶</span><span class="ov-time">${nh}:${nm}</span><span class="ov-countdown">${cd}</span></div>`;
   } else {
-    html += `<div class="overview-item"><span class="ov-label">下一次喝奶</span><span class="ov-value">暂无记录</span></div>`;
+    html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶</span><span class="ov-value">暂无记录</span></div>`;
   }
   html += `<div class="overview-item"><span class="ov-label">水+奶量:</span><span class="ov-value">${Math.round(totalMilk * 1.12)} ml</span></div>`;
   html += '</div>';
 
   const achArr = computeAchievements(records);
   if (achArr.length > 0) {
-    html += `<div class="overview-achievement">今日成就: ${achArr.join(' | ')}</div>`;
+    html += `<div class="overview-achievement"><span class="ov-icon">🏆</span><span>今日成就: ${achArr.join(' | ')}</span></div>`;
   } else {
-    html += `<div class="overview-achievement">今日成就: 无</div>`;
+    html += `<div class="overview-achievement"><span class="ov-icon">🏆</span><span>今日成就: 无</span></div>`;
   }
 
   bar.innerHTML = html;
@@ -2029,7 +2031,7 @@ function startVoiceHold() {
   const btn = document.getElementById('voiceHoldBtn');
   if (btn) btn.classList.add('recording');
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showToast('当前浏览器不支持语音识别'); if (btn) btn.classList.remove('recording'); return; }
+  if (!SR) { showToast('当前浏览器不支持语音识别，请换 Chrome 或 Edge 浏览器打开'); if (btn) btn.classList.remove('recording'); return; }
   if (voiceRecActive) return;
   voiceFinalText = '';
   voiceItems = [];
@@ -2045,6 +2047,8 @@ function startVoiceHold() {
       voiceFinalText = (voiceFinalText + interim).trim();
     };
     voiceRecog.onerror = (e) => {
+      voiceRecActive = false;
+      if (btn) btn.classList.remove('recording');
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') showToast('麦克风权限被拒：点地址栏左侧🔒/ⓘ图标→权限→麦克风→允许后重试');
       else if (e.error === 'no-speech') showToast('没有听到声音');
       else if (e.error === 'network') showToast('语音服务连接失败');
@@ -2802,8 +2806,8 @@ function openAnalysis() {
   html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
   html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
   html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
-  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#4da3ff', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT } });
-  html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#4da3ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT } });
+  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT } });
+  html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT } });
   content.innerHTML = html;
   showModal('analysisModal');
 }
