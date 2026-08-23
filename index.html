@@ -1079,6 +1079,8 @@ function init() {
   setInterval(() => { try { updateOverview(); } catch(e) { console.error(e); } }, 60000);
   setupPWA();
   initSync();
+  // 页面加载后检查喝奶提醒（已到时间则 toast，仅提醒一次）
+  setTimeout(checkMilkReminder, 1200);
 }
 
 function updateAgeInfo() {
@@ -1218,8 +1220,8 @@ function checkAchievementPush(achArr, totalMilk) {
     // 通知标题 = 本次更新的成就内容（首次推送/无新增时回退为全部成就）
     const titleSrc = newAchievements.length > 0 ? newAchievements : achArr;
     const fullTitle = titleSrc.join(' · ');
-    // 微信通知中心受长度限制，>28字截断并加省略号（留空间给'…'）
-    const displayTitle = fullTitle.length > 28 ? fullTitle.slice(0, 28) + '…' : fullTitle;
+    const displayTitle = fullTitle.length > 20 ? fullTitle.slice(0, 20) + '…' : fullTitle;
+    const pushTitle = '小咕噜的日常更新';
     // 详情内容 = 今日全部成就，本次新增项高亮
     const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const items = achArr.map(a => {
@@ -1243,7 +1245,7 @@ function checkAchievementPush(achArr, totalMilk) {
       `<p><b>💩 大便次数:</b> ${poopCount} 次</p>` +
       `<p><b>☀️ 户外活动:</b> ${fmtDur(outdoorMin)}</p>` +
       `<p><b>😴 睡眠时长:</b> ${fmtDur(sleepMin)}</p>`;
-    notifyPushplus(displayTitle, content).then(ok => { if (!ok) console.warn('PushPlus推送未成功'); });
+    notifyPushplus(pushTitle, content).then(ok => { if (!ok) console.warn('PushPlus推送未成功'); });
   } catch (e) { console.warn('推送检查失败:', e); }
 }
 
@@ -1289,11 +1291,6 @@ function updateOverview() {
     const diff = nd - new Date();
     let cd = '';
     if (diff > 0) { const dm = Math.floor(diff / 60000); cd = `${Math.floor(dm/60)}h ${dm%60}min`; }
-    else {
-      cd = '';
-      const todayKey = 'milk_remind_' + getTodayDateStr();
-      if (!sessionStorage.getItem(todayKey)) { sessionStorage.setItem(todayKey, '1'); setTimeout(() => showToast('⏰ 下次喝奶时间到了！'), 800); }
-    }
     html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶</span><span class="ov-time">${nh}:${nm}</span>${cd ? `<span class="ov-countdown">${cd}</span>` : ''}</div>`;
   } else {
     html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶</span><span class="ov-value">暂无记录</span></div>`;
@@ -1310,6 +1307,21 @@ function updateOverview() {
 
   bar.innerHTML = html;
   checkAchievementPush(achArr, totalMilk);
+}
+
+function checkMilkReminder() {
+  const lastMilkRec = getLastMilkRecord();
+  if (!lastMilkRec) return;
+  const [h, m] = (lastMilkRec.milkTime || lastMilkRec.recTime || '00:00').split(':').map(Number);
+  const intv = getMilkInterval();
+  const ld = lastMilkRec.timestamp ? new Date(lastMilkRec.timestamp) : new Date();
+  ld.setHours(h, m, 0, 0);
+  const nd = new Date(ld.getTime() + intv * 3600000);
+  if (nd - new Date() > 0) return;
+  const todayKey = 'milk_remind_' + getTodayDateStr();
+  if (sessionStorage.getItem(todayKey)) return;
+  sessionStorage.setItem(todayKey, '1');
+  showToast('⏰ 下次喝奶时间到了！');
 }
 
 /* ==================== 分类侧边栏 ==================== */
@@ -3037,7 +3049,30 @@ function setupPWA() {
     const link = document.createElement('link'); link.rel = 'manifest'; link.href = manifestUrl;
     document.head.appendChild(link);
   } catch {}
+  // 监听 PWA 安装事件，提供页面内安装引导
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    window.deferredInstallPrompt = e;
+    showInstallPrompt();
+  });
 }
+function showInstallPrompt() {
+  if (document.getElementById('pwaInstallBar')) return;
+  const bar = document.createElement('div');
+  bar.id = 'pwaInstallBar';
+  bar.style.cssText = 'position:fixed;top:0;left:0;width:100%;z-index:200;background:#1a1f2e;border-bottom:1px solid rgba(255,255,255,0.1);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;color:#fff;';
+  bar.innerHTML = '<span>📲 安装到主屏幕，像 App 一样使用</span><button id="pwaInstallBtn" style="padding:6px 14px;border-radius:16px;border:none;background:#667eea;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">安装</button>';
+  document.body.appendChild(bar);
+  document.getElementById('pwaInstallBtn').addEventListener('click', async () => {
+    const prompt = window.deferredInstallPrompt;
+    if (!prompt) return;
+    prompt.prompt();
+    const { outcome } = await prompt.userChoice;
+    if (outcome === 'accepted') { window.deferredInstallPrompt = null; bar.remove(); }
+  });
+}
+// 如果已作为 PWA 运行，隐藏浏览器 UI 提示
+window.addEventListener('appinstalled', () => { const bar = document.getElementById('pwaInstallBar'); if (bar) bar.remove(); window.deferredInstallPrompt = null; });
 
 // ---------- 同步初始化 ----------
 async function initSync() {
