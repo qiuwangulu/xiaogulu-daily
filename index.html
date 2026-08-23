@@ -108,7 +108,7 @@
     margin: 10px 0 14px;
     font-size: 15px;
   }
-  .overview-row { display: flex; gap: 24px; flex-wrap: wrap; justify-content: space-between; margin-bottom: 8px; }
+  .overview-row { display: flex; gap: 24px; flex-wrap: wrap; justify-content: flex-start; margin-bottom: 8px; }
   .overview-row:last-child { margin-bottom: 0; }
   .overview-item { display: flex; align-items: center; gap: 5px; }
   .overview-item .ov-icon { font-size: 15px; }
@@ -1221,7 +1221,6 @@ function checkAchievementPush(achArr, totalMilk) {
     const titleSrc = newAchievements.length > 0 ? newAchievements : achArr;
     const fullTitle = titleSrc.join(' · ');
     const displayTitle = fullTitle.length > 20 ? fullTitle.slice(0, 20) + '…' : fullTitle;
-    const pushTitle = '小咕噜的日常更新';
     // 详情内容 = 今日全部成就，本次新增项高亮
     const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const items = achArr.map(a => {
@@ -1245,7 +1244,7 @@ function checkAchievementPush(achArr, totalMilk) {
       `<p><b>💩 大便次数:</b> ${poopCount} 次</p>` +
       `<p><b>☀️ 户外活动:</b> ${fmtDur(outdoorMin)}</p>` +
       `<p><b>😴 睡眠时长:</b> ${fmtDur(sleepMin)}</p>`;
-    notifyPushplus(pushTitle, content).then(ok => { if (!ok) console.warn('PushPlus推送未成功'); });
+    notifyPushplus(displayTitle, content).then(ok => { if (!ok) console.warn('PushPlus推送未成功'); });
   } catch (e) { console.warn('推送检查失败:', e); }
 }
 
@@ -1288,10 +1287,7 @@ function updateOverview() {
     ld.setHours(h, m, 0, 0);
     const nd = new Date(ld.getTime() + intv * 3600000);
     const nh = String(nd.getHours()).padStart(2, '0'), nm = String(nd.getMinutes()).padStart(2, '0');
-    const diff = nd - new Date();
-    let cd = '';
-    if (diff > 0) { const dm = Math.floor(diff / 60000); cd = `${Math.floor(dm/60)}h ${dm%60}min`; }
-    html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶</span><span class="ov-time">${nh}:${nm}</span>${cd ? `<span class="ov-countdown">${cd}</span>` : ''}</div>`;
+    html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶</span><span class="ov-time">${nh}:${nm}</span></div>`;
   } else {
     html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶</span><span class="ov-value">暂无记录</span></div>`;
   }
@@ -1995,7 +1991,7 @@ function startVoiceHold() {
   const btn = document.getElementById('voiceHoldBtn');
   if (btn) btn.classList.add('recording');
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showToast('当前浏览器不支持语音识别，请安装 Chrome 或 Edge'); if (btn) btn.classList.remove('recording'); return; }
+  if (!SR) { showToast('当前浏览器不支持语音识别，建议手动点击「添加」按钮录入'); if (btn) btn.classList.remove('recording'); return; }
   if (voiceRecActive) return;
   voiceFinalText = '';
   voiceItems = [];
@@ -2015,9 +2011,9 @@ function startVoiceHold() {
       if (btn) btn.classList.remove('recording');
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') showToast('麦克风权限被拒：点地址栏左侧🔒→权限→麦克风→允许');
       else if (e.error === 'no-speech') showToast('没有听到声音');
-      else if (e.error === 'network') showToast('语音服务连接失败：请检查网络或换用 Chrome/Edge');
+      else if (e.error === 'network') showToast('语音服务连接失败：Edge/Chrome 在国内可能无法使用语音识别，建议手动输入');
       else if (e.error === 'audio-capture') showToast('无法访问麦克风：请确认浏览器有录音权限');
-      else showToast('语音识别出错：' + e.error);
+      else showToast('语音识别出错(' + e.error + ')：若持续失败请手动输入');
     };
     voiceRecog.onend = () => {
       voiceRecActive = false;
