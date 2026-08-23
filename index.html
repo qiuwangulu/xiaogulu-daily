@@ -2240,18 +2240,27 @@ function makeBarChart(data, opts) {
     if (i % step !== 0 && i !== n - 1) return;
     xlabels += `<text x="${cxBar.toFixed(1)}" y="${H - 8}" fill="#b2bec3" font-size="9" text-anchor="middle">${d.label}</text>`;
   });
-  // 月龄标准范围线：绿色虚线折线（每天按其月龄取标准值，同月龄时为水平线）
+  // 月龄标准范围线：绿色虚线（每天按其月龄取标准值；跨月龄切换日（25号）标准值变化时呈阶梯状垂直跳变）
   let stdSvg = '';
   (opts.stdLines || []).forEach(line => {
-    let p = '', started = false;
+    const pts = [];
     line.values.forEach((v, i) => {
       if (v == null) return;
-      const cx = (PL + slotW * i + slotW / 2).toFixed(1);
-      const cy = yf(v).toFixed(1);
-      p += (started ? 'L' : 'M') + cx + ' ' + cy + ' ';
-      started = true;
+      pts.push({ x: PL + slotW * i + slotW / 2, v });
     });
-    if (p) stdSvg += `<path d="${p.trim()}" fill="none" stroke="#2ecc71" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.9"/>`;
+    if (!pts.length) return;
+    let p = `M${pts[0].x.toFixed(1)} ${yf(pts[0].v).toFixed(1)} `;
+    for (let k = 1; k < pts.length; k++) {
+      const prev = pts[k - 1], cur = pts[k];
+      if (prev.v === cur.v) {
+        p += `L${cur.x.toFixed(1)} ${yf(cur.v).toFixed(1)} `;
+      } else {
+        // 阶梯跳变：水平延伸至两柱中间 → 垂直跳到新值 → 水平到下一点
+        const mid = ((prev.x + cur.x) / 2).toFixed(1);
+        p += `L${mid} ${yf(prev.v).toFixed(1)} L${mid} ${yf(cur.v).toFixed(1)} L${cur.x.toFixed(1)} ${yf(cur.v).toFixed(1)} `;
+      }
+    }
+    stdSvg += `<path d="${p.trim()}" fill="none" stroke="#2ecc71" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.9"/>`;
   });
   return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
     grid + ylabels + xlabels + bars + stdSvg + tip + `</svg></div>`;
