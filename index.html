@@ -906,6 +906,8 @@ const SLEEP_STD = [
   { month: 21, min: 11, max: 14 }, { month: 22, min: 11, max: 14 }, { month: 23, min: 11, max: 14 },
   { month: 24, min: 11, max: 14 }
 ];
+// ---------- 大便次数标准（0-36 月龄；仅 max 有参考意义，min 均为 0）----------
+const POOP_STD = Array.from({ length: 37 }, (_, m) => ({ month: m, max: m <= 5 ? 7 : 3 }));
 // ---------- WHO 生长参考曲线（0-24 月龄，男孩）----------
 const WHO_HEIGHT = [
   { month: 0, p3: 46.3, p50: 49.9, p75: 51.2 }, { month: 1, p3: 51.1, p50: 54.7, p75: 56.0 },
@@ -1177,7 +1179,7 @@ function checkAchievementPush(achArr, totalMilk) {
     }).join('');
     const content = `<h3>小咕噜的今日成就 ${ds}</h3>` +
       `<p><b>🏆 今日成就:</b></p><ul>${items}</ul>` +
-      `<p><b>🍼 总奶量:</b> ${totalMilk} ml</p>`;
+      `<p><b>🍼 水+奶量:</b> ${Math.round(totalMilk * 1.12)} ml</p>`;
     notifyPushplus(displayTitle, content).then(ok => { if (!ok) console.warn('PushPlus推送未成功'); });
   } catch (e) { console.warn('推送检查失败:', e); }
 }
@@ -1228,7 +1230,7 @@ function updateOverview() {
   } else {
     html += `<div class="overview-item"><span class="ov-label">下一次喝奶</span><span class="ov-value">暂无记录</span></div>`;
   }
-  html += `<div class="overview-item"><span class="ov-label">总奶量:</span><span class="ov-value">${totalMilk} ml</span></div>`;
+  html += `<div class="overview-item"><span class="ov-label">水+奶量:</span><span class="ov-value">${Math.round(totalMilk * 1.12)} ml</span></div>`;
   html += '</div>';
 
   const achArr = computeAchievements(records);
@@ -1753,7 +1755,7 @@ function loadHistory() {
   let totalMilk = 0;
   records.forEach(r => { if (r.type === 'milk' && r.milkAmount) totalMilk += r.milkAmount; });
   const achArr = computeAchievements(records);
-  let sHtml = `<div class="history-sum-row"><span class="hs-label">🍼 总奶量</span><span class="hs-value">${totalMilk} ml</span></div>`;
+  let sHtml = `<div class="history-sum-row"><span class="hs-label">🍼 水+奶量</span><span class="hs-value">${Math.round(totalMilk * 1.12)} ml</span></div>`;
   sHtml += `<div class="history-sum-row"><span class="hs-label">🏆 今日成就</span><span class="hs-value">${achArr.length > 0 ? achArr.join(' | ') : '无'}</span></div>`;
   if (summary) { summary.innerHTML = sHtml; summary.style.display = 'flex'; }
   // 按活动开始时间正序排列
@@ -2278,10 +2280,11 @@ function openAnalysis() {
   const milkStdRows = days.map(d => getStdRow(MILK_STD, d.ds));
   const countStdRows = days.map(d => getStdRow(MILK_COUNT_STD, d.ds));
   const sleepStdRows = days.map(d => getStdRow(SLEEP_STD, d.ds));
+  const poopStdRows = days.map(d => getStdRow(POOP_STD, d.ds));
   html += makeBarChart(milkData, { title: '🍼 每日奶量（水+奶，近15天）', unit: 'ml', color: '#74b9ff', tickStep: 100, stdLines: [{ values: milkStdRows.map(r => r.min) }, { values: milkStdRows.map(r => r.max) }] });
   html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#fd79a8', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
   html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#a29bfe', fmt: v => v.toFixed(1), tickStep: 1, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
-  html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#fab1a0', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}` });
+  html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#fab1a0', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
   html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#ffeaa7', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT } });
   html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#74b9ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT } });
   content.innerHTML = html;
