@@ -268,6 +268,67 @@
   .fab-btn .fab-plus { color: #fff; font-size: 16px; font-weight: 700; }
   .fab-btn:active { transform: scale(0.95); opacity: 0.9; }
 
+  /* ===== 语音速记（按住说话） ===== */
+  .voice-hold-btn {
+    position: relative;
+    padding: 7px 14px 7px 34px; border-radius: 20px;
+    border: none;
+    background: linear-gradient(135deg, #e17055 0%, #fd79a8 100%);
+    color: #fff; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+    display: inline-flex; align-items: center; gap: 5px;
+    box-shadow: 0 4px 18px rgba(225,112,85,0.4);
+    user-select: none; -webkit-user-select: none;
+    touch-action: none;
+  }
+  .voice-hold-btn:active { transform: scale(0.95); opacity: 0.9; }
+  .voice-hold-btn.recording { background: linear-gradient(135deg, #ff7675 0%, #e17055 100%); box-shadow: 0 4px 24px rgba(255,118,117,0.6); }
+  .voice-hold-btn .voice-icon {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    width: 18px; height: 18px;
+  }
+  .voice-hold-btn .voice-icon svg { width: 100%; height: 100%; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; }
+  .voice-hold-hint { font-size: 12px; color: #b2bec3; text-align: center; margin-top: 4px; }
+
+  .voice-modal-top {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;
+    font-size: 14px; color: #b2bec3; line-height: 1.5;
+    min-height: 44px;
+  }
+  .voice-modal-top .voice-raw-label { font-size: 12px; color: #636e72; margin-bottom: 4px; }
+  .voice-modal-top .voice-raw-text { color: #fff; font-size: 14px; }
+  .voice-modal-actions {
+    display: flex; justify-content: flex-end; gap: 10px;
+    margin-top: 14px; padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .voice-record-item {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; padding: 10px 12px; margin-top: 8px;
+  }
+  .voice-record-item .vri-name { font-size: 14px; color: #fff; font-weight: 600; flex: 1; }
+  .voice-record-item input.vri-num {
+    width: 64px; background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2); border-radius: 6px;
+    color: #fff; font-size: 14px; padding: 3px 6px; text-align: center; outline: none;
+  }
+  .voice-record-item input.vri-time {
+    width: 58px; background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2); border-radius: 6px;
+    color: #fff; font-size: 13px; padding: 3px 5px; text-align: center; outline: none;
+  }
+  .voice-record-item .vri-unit { font-size: 12px; color: #b2bec3; }
+  .voice-record-item .vri-del {
+    color: rgba(255,255,255,0.45); font-size: 17px; cursor: pointer; padding: 0 4px; line-height: 1;
+  }
+  .voice-record-item .vri-del:active { color: #ff7675; }
+  .voice-record-item.vri-warn { border-color: rgba(253,121,168,0.55); }
+  .voice-empty-tip { font-size: 13px; color: #b2bec3; text-align: center; padding: 10px 0 2px; }
+
   .bottom-bar .divider {
     height: 1px; background: rgba(255,255,255,0.12);
     margin: 0 14px;
@@ -691,6 +752,16 @@
 <div class="bottom-bar">
   <div class="fab-wrap">
     <button class="fab-btn" id="fabBtn" onclick="openAddModal()"><span class="fab-plus">+</span> 添加记录</button>
+    <button class="voice-hold-btn" id="voiceHoldBtn"
+      ontouchstart="event.preventDefault(); startVoiceHold();"
+      ontouchend="event.preventDefault(); stopVoiceHold();"
+      onmousedown="startVoiceHold();"
+      onmouseup="stopVoiceHold();"
+      onmouseleave="if(voiceRecActive) stopVoiceHold();"
+      title="按住说话">
+      <span class="voice-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg></span>
+      按住说话
+    </button>
   </div>
   <div class="divider"></div>
   <div class="nav-row">
@@ -735,6 +806,22 @@
     </div>
     <div class="history-summary" id="historySummary" style="display:none;"></div>
     <div class="history-list" id="historyList"></div>
+  </div>
+</div>
+<!-- 语音识别弹窗 -->
+<div class="modal-overlay" id="voiceModal" onclick="closeModal(event,'voiceModal')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="hideModal('voiceModal')">&times;</button>
+    <div class="modal-title">&#127908; 语音识别</div>
+    <div class="voice-modal-top">
+      <div class="voice-raw-label">识别描述</div>
+      <div class="voice-raw-text" id="voiceRawText">（无）</div>
+    </div>
+    <div id="voiceResultList"></div>
+    <div class="voice-modal-actions">
+      <button class="btn" onclick="clearVoiceModal()">清空</button>
+      <button class="btn btn-success" id="voiceConfirmBtn" onclick="confirmVoiceAdd()" style="display:none;">确认添加</button>
+    </div>
   </div>
 </div>
 <!-- 管理 -->
@@ -1680,6 +1767,395 @@ function confirmAdd() {
   showToast(`已添加 ${newestIds.length} 条记录`);
 }
 
+/* ==================== 语音速记 ==================== */
+// 中文数字转数值（支持 一百三十 / 两百五 / 三十八点五 / 三十八度五）
+function cnNum(s) {
+  if (s === null || s === undefined) return null;
+  s = String(s).trim();
+  if (!s) return null;
+  if (/^\d+(?:\.\d+)?$/.test(s)) return parseFloat(s);
+  s = s.replace(/度/g, '点');
+  if (!/^[零一二两三四五六七八九十百千万点]+$/.test(s)) return null;
+  const D = { '零':0,'一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9 };
+  const parts = s.split('点');
+  function intOf(p) {
+    if (!p) return 0;
+    let total = 0, num = 0;
+    for (const ch of p) {
+      if (D[ch] !== undefined && ch !== '零') { num = D[ch]; }
+      else if (ch === '十') { total += (num || 1) * 10; num = 0; }
+      else if (ch === '百') { total += (num || 1) * 100; num = 0; }
+      else if (ch === '千') { total += (num || 1) * 1000; num = 0; }
+      else if (ch === '万') { total = (total + num) * 10000; num = 0; }
+    }
+    return total + num;
+  }
+  let r = intOf(parts[0]);
+  if (parts[1]) { let dec = 0, sc = 0.1; for (const ch of parts[1]) { if (D[ch] === undefined) break; dec += D[ch] * sc; sc /= 10; } r += dec; }
+  return r;
+}
+// 时长解析 → 分钟（"一小时二十分钟"→80 "半小时"→30 "两小时"→120 "90分钟"→90）
+function parseDurationMin(seg) {
+  const N = '(\\d+(?:\\.\\d+)?|[零一二两三四五六七八九十百千]+)';
+  const re = new RegExp(N + '(个半)?(小时|钟头|分钟|分)(?![钟])|半小时', 'g');
+  let total = 0, found = false, m;
+  while ((m = re.exec(seg)) !== null) {
+    found = true;
+    if (m[0] === '半小时') { total += 30; continue; }
+    const n = cnNum(m[1]); if (n === null) { continue; }
+    if (m[2] === '个半') { total += n * 60 + 30; }
+    else if (m[3] === '小时' || m[3] === '钟头') {
+      total += n * 60;
+      if (/^\s*半/.test(seg.slice(m.index + m[0].length))) total += 30;
+    } else { total += n; }
+  }
+  return found ? Math.round(total) : null;
+}
+// 体温解析（"38度5"/"三十八度五"/"38.5度" → 38.5）
+function parseTempNum(seg) {
+  const N = '(\\d+(?:\\.\\d+)?|[零一二两三四五六七八九十百]+)';
+  let v = null, m;
+  if ((m = seg.match(new RegExp(N + '\\s*[度]\\s*' + N + '(?!\\s*(?:分钟|小时|粒|针|ml|毫升))')))) {
+    const a = cnNum(m[1]), b = cnNum(m[2]);
+    if (a !== null && b !== null && b < 10) v = a + b / 10;
+  }
+  if (v === null && (m = seg.match(new RegExp(N + '\\s*[点]\\s*' + N)))) {
+    const a = cnNum(m[1]), b = cnNum(m[2]);
+    if (a !== null && b !== null && b < 10) v = a + b / 10;
+  }
+  if (v === null && (m = seg.match(new RegExp(N + '\\s*[度℃]')))) v = cnNum(m[1]);
+  if (v === null && (m = seg.match(/(3\d\.\d)/))) v = parseFloat(m[1]);
+  if (v === null || isNaN(v) || v < 34 || v > 43) return null;
+  return Math.round(v * 10) / 10;
+}
+// 相对/绝对时刻解析 → {h, m} 或 null（"半小时前"/"两点半"/"下午3点15分"）
+function parseVoiceTimeHint(seg) {
+  const N = '(\\d{1,2}|[零一二两三四五六七八九十]+)';
+  let m, min = null;
+  if (/半小时前/.test(seg)) min = 30;
+  if (min === null) {
+    if ((m = seg.match(new RegExp(N + '\\s*个?小时(?:钟头)?(?:之|以)?前')))) { const n = cnNum(m[1]); if (n !== null) min = n * 60; }
+    else if ((m = seg.match(new RegExp(N + '\\s*分钟(?:之|以)?前|' + N + '\\s*分前')))) { const n = cnNum(m[1]); if (n !== null) min = n; }
+    else if (/刚才|刚刚/.test(seg)) min = 0;
+  }
+  const now = new Date();
+  if (min !== null) {
+    const t = new Date(now.getTime() - min * 60000);
+    return { h: t.getHours(), m: t.getMinutes() };
+  }
+  // 绝对时刻："下午三点半"/"晚上8点"/"两点半"/"15:20"
+  const AMPM = '(凌晨|早上|上午|中午|下午|傍晚|晚上)?';
+  let T_RE;
+  try { T_RE = new RegExp(AMPM + N + '\\s*(?:点|:|(?<!小)时)\\s*(半|三|一刻|右|\\d{1,2}|[一二三四五六十]+)?\\s*分?', ''); }
+  catch (e) { T_RE = new RegExp(AMPM + N + '\\s*(?:点|:)\\s*(半|三|一刻|右|\\d{1,2}|[一二三四五六十]+)?\\s*分?', ''); }
+  if ((m = seg.match(T_RE))) {
+    let h = cnNum(m[2]); if (h === null) return null;
+    let mm = 0;
+    if (m[3] === '半') mm = 30; else if (m[3] === '三') mm = 15; else if (m[3] === '一刻') mm = 15;
+    else if (m[3]) { const x = cnNum(m[3]); mm = (x !== null && x < 60) ? x : 0; }
+    const ap = m[1];
+    if (ap === '下午' || ap === '傍晚' || ap === '晚上') { if (h < 12) h += 12; }
+    else if (ap === '中午') { if (h < 11) h += 12; }
+    else if (ap === '凌晨' || ap === '早上' || ap === '上午') { if (h === 12) h = 0; }
+    else {
+      // 无上下午前缀：取不超过当前时刻且最近的解释（录的是刚发生的事）
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const c1 = h * 60 + mm, c2 = (h + 12) * 60 + mm;
+      const cands = [c1, c2].filter(c => c <= nowMin + 1);
+      const pick = cands.length ? Math.max(...cands) : Math.min(c1, c2);
+      return { h: Math.floor(pick / 60), m: pick % 60 };
+    }
+    if (h > 23 || mm > 59) return null;
+    return { h, m: mm };
+  }
+  return null;
+}
+function voiceNowHM() { const n = new Date(); return String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0'); }
+
+// 语音规则表（顺序即优先级；每条返回 record 就绪的参数字段，与 confirmAdd 字段一一对应）
+const VOICE_RULES = [
+  { id: 'vaccine', re: /疫苗|接种|打了?(?:一针|加强针)|乙肝|五联|轮状|肺炎|流脑|麻塞风|麻腮风|水痘|甲肝|手足口/,
+    parse: (zone) => {
+      const types = [];
+      [['乙肝','乙肝'],['五联','五联'],['轮状','轮状病毒'],['肺炎','肺炎'],['流脑','流脑'],['麻塞风','麻塞风'],['麻腮风','麻塞风'],['水痘','水痘'],['甲肝','甲肝'],['手足口','手足口']]
+        .forEach(([kw, val]) => { if (zone.includes(kw) && !types.includes(val)) types.push(val); });
+      let dose = 1; const dm = zone.match(/([一二两三四五六七八九十]|\d+)\s*[针剂]/); if (dm) { const n = cnNum(dm[1]); if (n !== null && n >= 1 && n <= 10) dose = n; }
+      return { params: { vaccineTypes: types, vaccineDose: dose }, warn: types.length === 0 };
+    } },
+  { id: 'supplement', re: /AD|ad|Ad|维D|维生素\s*[ADad]|D3|d3|鱼肝油|补剂/,
+    parse: (zone) => {
+      const types = [];
+      if (/AD|ad|Ad|维生素\s*[ADad]|鱼肝油/.test(zone)) types.push('AD');
+      if (/D3|d3|维D/.test(zone) && !types.includes('D3')) types.push('D3');
+      let amount = 1; const am = zone.match(/([一二两三四五六七八九十]|\d+)\s*[粒颗滴]/); if (am) { const n = cnNum(am[1]); if (n !== null && n >= 1 && n <= 10) amount = n; }
+      return { params: { supplementTypes: types.length ? types : ['AD'], supplementAmount: amount } };
+    } },
+  { id: 'temperature', re: /体温|发烧|额温|耳温|烧到|发低烧|低烧|高烧|有点烧/,
+    parse: (zone) => {
+      const v = parseTempNum(zone);
+      return v === null ? { params: {}, warn: true } : { params: { temperature: v, tempStatus: v <= 37.5 ? 'normal' : 'high' } };
+    } },
+  { id: 'poop', re: /拉肚子|腹泻|大便|拉屎|拉臭|臭臭|便便|粑粑|排便|便血|青屎|拉了|拉粑/,
+    parse: (zone) => {
+      let st = '正常';
+      if (/拉肚|腹泻|稀/.test(zone)) st = '拉肚子';
+      else if (/青|绿/.test(zone)) st = '青屎';
+      else if (/血/.test(zone)) st = '便血';
+      return { params: { poopStatus: st } };
+    } },
+  { id: 'milk', re: /喂奶|喝奶|吃奶|毫升奶|奶粉|喝完奶|奶喝完|亲喂/,
+    parse: (zone) => {
+      let amount = null;
+      const re = /(\d+(?:\.\d+)?|[零一二两三四五六七八九十百千]+)/g; let m;
+      while ((m = re.exec(zone)) !== null) {
+        const after = zone.slice(m.index + m[0].length, m.index + m[0].length + 3);
+        const before = zone.slice(Math.max(0, m.index - 1), m.index);
+        if (/^[点时:]/.test(after) || /度/.test(before)) continue; // 时间/体温数字不算奶量
+        const n = cnNum(m[0]);
+        if (n !== null && n >= 20 && n <= 400) { amount = Math.round(n); break; }
+      }
+      return amount === null ? { params: { milkAmount: 120 }, warn: true } : { params: { milkAmount: amount } };
+    } },
+  { id: 'sleep', re: /睡着了|睡觉了?|睡了|小睡|午睡|睡了一|睡眠|哄睡|补觉/,
+    parse: (zone) => {
+      const d = parseDurationMin(zone);
+      return d === null ? { params: { duration: 0 }, warn: true } : { params: { duration: d } };
+    } },
+  { id: 'outdoor', re: /户外|出门|出去了?玩?|遛弯|散步|晒太阳|外面[耍玩]/,
+    parse: (zone) => {
+      const d = parseDurationMin(zone);
+      return d === null ? { params: { duration: 0 }, warn: true } : { params: { duration: d } };
+    } },
+  { id: 'bath', re: /洗澡|沐浴|洗了?个澡/,
+    parse: (zone) => ({ params: { shampoo: /沐浴露|洗发|洗头|香波/.test(zone) ? '头发和身体' : '无' } }) },
+  { id: 'listenStory', re: /听故事|讲故事|故事/,
+    parse: (zone) => {
+      const langs = [];
+      if (/英文|英语/.test(zone)) langs.push('英文');
+      if (/中文|国语|普通话/.test(zone) || langs.length === 0) langs.push('中文');
+      return { params: { storyLangs: langs } };
+    } },
+  { id: 'readBook', re: /读书|看书|绘本|亲子阅读|讲书/, parse: () => ({ params: {} }) },
+  { id: 'listenMusic', re: /听歌|听音乐|音乐|儿歌/, parse: () => ({ params: {} }) },
+  { id: 'drinkWater', re: /喝水|喂水|喝了?点水/, parse: () => ({ params: {} }) },
+  { id: 'airButt', re: /晾屁/,
+    parse: (zone) => {
+      const d = parseDurationMin(zone);
+      let level = '正常';
+      if (/发红/.test(zone)) level = '发红'; else if (/红疹|疹/.test(zone)) level = '红疹'; else if (/溃烂|破/.test(zone)) level = '溃烂';
+      return { params: { duration: d === null ? 0 : d, level } };
+    } },
+  { id: 'wash', re: /洗手|洗脸|洗了?手脸/, parse: () => ({ params: {} }) },
+  { id: 'cleanNose', re: /鼻涕|擤鼻|清理鼻子?/, parse: () => ({ params: {} }) },
+  { id: 'cutNails', re: /剪指甲|指甲/, parse: (zone) => ({ params: { note: zone } }) },
+  { id: 'grossMotor', re: /大运动|抬头|翻身|会爬|练爬|爬了|爬行|会坐|坐稳|练坐|会站|扶站|站起|练站|走路|学步|会走|跑步|会跑/,
+    parse: (zone) => {
+      const items = [];
+      grossMotorOptions.forEach(o => { if (zone.includes(o) && !items.includes(o)) items.push(o); });
+      const map = { '抬头':'会抬头','翻身':'会翻身','爬':'会爬','坐':'会坐','站':'会站','走路':'会走路','跑':'会跑步' };
+      Object.keys(map).forEach(k => { if (new RegExp('(?:会|练|在|刚)?' + k).test(zone) && !items.includes(map[k])) items.push(map[k]); });
+      return { params: { grossMotorItems: items }, warn: items.length === 0 };
+    } },
+  { id: 'fineMotor', re: /精细动作|抓握|摇头|点头|挥手|放东西|捏|戳|对拍/,
+    parse: (zone) => {
+      const items = [];
+      fineMotorOptions.forEach(o => { if (zone.includes(o) && !items.includes(o)) items.push(o); });
+      return { params: { fineMotorItems: items }, warn: items.length === 0 };
+    } },
+  { id: 'learnLanguage', re: /学语言|学说话/, parse: (zone) => ({ params: { note: zone } }) },
+  { id: 'learnLogic', re: /学逻辑/, parse: (zone) => ({ params: { note: zone } }) },
+];
+
+function parseVoiceText(text) {
+  const items = []; const unmatched = [];
+  const segs = [];
+  String(text || '').split(/[\n，,。；;！!？?、]+/).forEach(s => {
+    s.split(/然后|接着|再然后/).forEach(x => { x = x.trim(); if (x) segs.push(x); });
+  });
+  segs.forEach(seg => {
+    const hits = [];
+    VOICE_RULES.forEach(r => {
+      const re = new RegExp(r.re.source, 'g'); let mm;
+      while ((mm = re.exec(seg)) !== null) { hits.push({ rule: r, idx: mm.index }); if (mm.index === re.lastIndex) re.lastIndex++; }
+    });
+    const seen = new Set(); const uniq = [];
+    hits.sort((a, b) => a.idx - b.idx).forEach(h => { if (!seen.has(h.rule.id)) { seen.add(h.rule.id); uniq.push(h); } });
+    if (uniq.length === 0) { unmatched.push(seg); return; }
+    let segOk = false;
+    uniq.forEach((h, i) => {
+      const zone = seg.slice(h.idx, i + 1 < uniq.length ? uniq[i + 1].idx : seg.length);
+      // 单活动时整段解析（关键词前的参数如"听英文故事"的"英文"不丢失）；多活动时仅本区间
+      const parseZone = uniq.length === 1 ? seg : zone;
+      const parsed = h.rule.parse(parseZone);
+      if (!parsed) return;
+      segOk = true;
+      const act = ACTIVITIES.find(a => a.id === h.rule.id);
+      // 单活动时时间提示可在整段任意位置；多活动时仅限本活动区间
+      const th = parseVoiceTimeHint(uniq.length === 1 ? seg : zone);
+      let recTime = th ? (String(th.h).padStart(2, '0') + ':' + String(th.m).padStart(2, '0')) : null;
+      // 时长类活动（睡眠/户外/晾屁股）说了时长没说时刻 → 开始时刻回推
+      if (!recTime && parsed.params && parsed.params.duration > 0 && (act.type === 'sleep' || act.type === 'duration' || act.type === 'airButt')) {
+        const t = new Date(Date.now() - parsed.params.duration * 60000);
+        recTime = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
+      }
+      if (!recTime) recTime = voiceNowHM();
+      items.push({ actId: h.rule.id, icon: act.icon, name: act.name, params: parsed.params || {}, recTime, warn: !!parsed.warn, zone });
+    });
+    if (!segOk) unmatched.push(seg);
+  });
+  return { items, unmatched: unmatched.join('；') };
+}
+
+// ---- 语音 UI 与识别（按住说话） ----
+let voiceRecog = null, voiceRecActive = false, voiceFinalText = '', voiceItems = [];
+
+function startVoiceHold() {
+  if (isReadOnlyMode()) return;
+  const btn = document.getElementById('voiceHoldBtn');
+  if (btn) btn.classList.add('recording');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast('当前浏览器不支持语音识别'); if (btn) btn.classList.remove('recording'); return; }
+  if (voiceRecActive) return;
+  voiceFinalText = '';
+  voiceItems = [];
+  try {
+    voiceRecog = new SR();
+    voiceRecog.lang = 'zh-CN'; voiceRecog.interimResults = true; voiceRecog.continuous = false; voiceRecog.maxAlternatives = 1;
+    voiceRecog.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) voiceFinalText += t; else interim += t;
+      }
+      voiceFinalText = (voiceFinalText + interim).trim();
+    };
+    voiceRecog.onerror = (e) => {
+      if (e.error === 'not-allowed') showToast('麦克风权限被拒');
+      else if (e.error === 'no-speech') showToast('没有听到声音');
+      else if (e.error === 'network') showToast('语音服务连接失败');
+    };
+    voiceRecog.onend = () => {
+      voiceRecActive = false;
+      if (btn) btn.classList.remove('recording');
+      if (voiceFinalText) {
+        const r = parseVoiceText(voiceFinalText);
+        voiceItems = r.items;
+        showVoiceModal(voiceFinalText, r.unmatched);
+      }
+    };
+    voiceRecog.start();
+    voiceRecActive = true;
+  } catch (err) {
+    showToast('语音识别启动失败');
+    if (btn) btn.classList.remove('recording');
+  }
+}
+function stopVoiceHold() {
+  if (voiceRecog && voiceRecActive) { try { voiceRecog.stop(); } catch (e) {} }
+}
+
+function showVoiceModal(rawText, unmatched) {
+  showModal('voiceModal');
+  const rawEl = document.getElementById('voiceRawText');
+  if (rawEl) rawEl.textContent = rawText || '（无）';
+  renderVoiceItems(unmatched);
+}
+function clearVoiceModal() {
+  voiceFinalText = ''; voiceItems = [];
+  const rawEl = document.getElementById('voiceRawText');
+  if (rawEl) rawEl.textContent = '（无）';
+  renderVoiceItems();
+}
+
+function voiceItemParamDef(item) {
+  const p = item.params;
+  if (p.milkAmount !== undefined) return { key: 'milkAmount', label: '奶量', value: p.milkAmount, unit: 'ml', min: 1, step: 1 };
+  if (p.duration !== undefined && (item.actId === 'sleep' || item.actId === 'outdoor' || item.actId === 'airButt')) return { key: 'duration', label: item.actId === 'sleep' ? '睡眠' : '时长', value: p.duration, unit: '分钟', min: 0, step: 1 };
+  if (p.temperature !== undefined) return { key: 'temperature', label: '体温', value: p.temperature, unit: '℃', min: 30, step: 0.1 };
+  if (p.supplementAmount !== undefined) return { key: 'supplementAmount', label: '数量', value: p.supplementAmount, unit: '粒', min: 1, step: 1 };
+  if (p.vaccineDose !== undefined) return { key: 'vaccineDose', label: '第几针', value: p.vaccineDose, unit: '针', min: 1, step: 1 };
+  return null;
+}
+function renderVoiceItems(unmatched) {
+  const box = document.getElementById('voiceResultList');
+  const btn = document.getElementById('voiceConfirmBtn');
+  let html = '';
+  if (voiceItems.length === 0) {
+    html = '<div class="voice-empty-tip">未识别到活动。试试：喂奶130 · 睡了一小时 · 洗澡了 · 大便拉肚子 · 体温38度5</div>';
+  } else {
+    voiceItems.forEach((it, i) => {
+      const pd = voiceItemParamDef(it);
+      const extra = [];
+      if (it.params.poopStatus) extra.push(it.params.poopStatus);
+      if (it.params.shampoo && it.params.shampoo !== '无') extra.push('沐浴露');
+      if (it.params.storyLangs) extra.push(it.params.storyLangs.join('+'));
+      if (it.params.supplementTypes) extra.push(it.params.supplementTypes.join('+'));
+      if (it.params.vaccineTypes && it.params.vaccineTypes.length) extra.push(it.params.vaccineTypes.join('+'));
+      if (it.params.grossMotorItems && it.params.grossMotorItems.length) extra.push(it.params.grossMotorItems.join('+'));
+      if (it.params.fineMotorItems && it.params.fineMotorItems.length) extra.push(it.params.fineMotorItems.join('+'));
+      html += `<div class="voice-record-item${it.warn ? ' vri-warn' : ''}">
+        <span class="vri-name">${it.icon} ${it.name}${extra.length ? '<span class="vri-unit"> · ' + extra.join(' · ') + '</span>' : ''}</span>
+        ${pd ? `<input class="vri-num" type="number" min="${pd.min}" step="${pd.step}" value="${pd.value}" id="vin_${i}" oninput="voiceItems[${i}].params.${pd.key} = (this.value === '' ? 0 : parseFloat(this.value))">` +
+          `<span class="vri-unit">${pd.unit}</span>` : ''}
+        <input class="vri-time" type="time" value="${it.recTime}" id="vit_${i}" onchange="voiceItems[${i}].recTime = this.value">
+        ${it.warn ? '<span class="vri-unit" style="color:#fd79a8;">待补</span>' : ''}
+        <span class="vri-del" onclick="voiceItems.splice(${i},1);renderVoiceItems();">&#10005;</span>
+      </div>`;
+    });
+  }
+  if (unmatched) html += `<div class="voice-empty-tip" style="color:#fab1a0;">未识别：${unmatched}（已忽略）</div>`;
+  const warnCount = voiceItems.filter(x => x.warn).length;
+  if (warnCount > 0) html += `<div class="voice-empty-tip" style="color:#fd79a8;">${warnCount} 条参数未听清（粉框），请补充后确认</div>`;
+  box.innerHTML = html;
+  btn.style.display = voiceItems.length ? '' : 'none';
+  btn.textContent = `确认添加 ${voiceItems.length} 条`;
+}
+function confirmVoiceAdd() {
+  if (voiceItems.length === 0) return;
+  if (isReadOnlyMode()) { showToast('只读模式下无法添加记录'); return; }
+  const records = getTodayRecords();
+  const now = new Date(), ts = Date.now(), timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  const newestIds = [];
+  // 读取卡片上可能被手动修改的值
+  voiceItems.forEach((it, i) => {
+    const pd = voiceItemParamDef(it);
+    const nEl = document.getElementById('vin_' + i);
+    if (pd && nEl && nEl.value !== '' && !isNaN(parseFloat(nEl.value))) it.params[pd.key] = parseFloat(nEl.value);
+    const tEl = document.getElementById('vit_' + i);
+    if (tEl && tEl.value) it.recTime = tEl.value;
+  });
+  voiceItems.forEach(it => {
+    const act = ACTIVITIES.find(a => a.id === it.actId); if (!act) return;
+    const p = it.params;
+    const record = { type: it.actId, name: act.name, time: timeStr, recTime: it.recTime, timestamp: ts, note: p.note || '' };
+    if (act.type === 'milk') { record.milkTime = it.recTime; record.milkAmount = Math.max(1, Math.round(p.milkAmount || 120)); }
+    else if (act.type === 'sleep') { record.sleepStartTime = it.recTime; record.duration = Math.max(0, Math.round(p.duration || 0)); }
+    else if (act.type === 'drinkWater') { record.drinkTime = it.recTime; }
+    else if (act.type === 'poop') { record.poopTime = it.recTime; record.poopStatus = p.poopStatus || '正常'; }
+    else if (act.type === 'supplement') { record.supplementTypes = (p.supplementTypes && p.supplementTypes.length) ? p.supplementTypes : ['AD']; record.supplementTime = it.recTime; record.supplementAmount = Math.max(1, Math.round(p.supplementAmount || 1)); }
+    else if (act.type === 'vaccine') { record.vaccineTypes = p.vaccineTypes || []; record.vaccineTime = it.recTime; record.vaccineDose = Math.max(1, Math.round(p.vaccineDose || 1)); }
+    else if (act.type === 'listenStory') { record.storyLangs = (p.storyLangs && p.storyLangs.length) ? p.storyLangs : ['中文']; record.storyTime = it.recTime; }
+    else if (act.type === 'grossMotor') { record.grossMotorItems = p.grossMotorItems || []; record.grossMotorTime = it.recTime; }
+    else if (act.type === 'fineMotor') { record.fineMotorItems = p.fineMotorItems || []; record.fineMotorTime = it.recTime; }
+    else if (act.type === 'duration') { record.duration = Math.max(0, parseFloat(p.duration || 0)); record.durationTime = it.recTime; }
+    else if (act.type === 'airButt') { record.duration = Math.max(0, parseFloat(p.duration || 0)); record.level = p.level || '正常'; record.airButtTime = it.recTime; }
+    else if (act.type === 'bath') { record.shampoo = p.shampoo || '无'; record.bathTime = it.recTime; }
+    else if (act.type === 'note') { record.noteTime = it.recTime; if (p.note) record.note = p.note; }
+    else if (act.type === 'temperature') { const v = parseFloat(p.temperature); if (!(v >= 34 && v <= 43)) { showToast(act.name + '体温异常，请检查'); return; } record.temperature = v; record.tempStatus = v <= 37.5 ? 'normal' : 'high'; record.tempTime = it.recTime; }
+    else if (act.type === 'simple') { record.simpleTime = it.recTime; }
+    records.push(record); newestIds.push(it.actId);
+  });
+  localStorage.setItem(getTodayKey(), JSON.stringify(records));
+  syncUpload('records', getTodayDateStr());
+  hideModal('voiceModal');
+  voiceFinalText = ''; voiceItems = [];
+  const rawEl = document.getElementById('voiceRawText');
+  if (rawEl) rawEl.textContent = '（无）';
+  renderVoiceItems();
+  renderCards(newestIds); updateOverview();
+  showToast(`语音速记已添加 ${newestIds.length} 条记录`);
+}
+
 /* ==================== 日报 ==================== */
 function openReport() {
   const records = getTodayRecords(); const content = document.getElementById('reportContent');
@@ -1816,7 +2292,10 @@ function toggleReadOnly() {
 }
 function updateAddButtonVisibility() {
   const fab = document.getElementById('fabBtn');
-  if (fab) fab.style.display = isReadOnlyMode() ? 'none' : '';
+  const mic = document.getElementById('voiceHoldBtn');
+  const hide = isReadOnlyMode() ? 'none' : '';
+  if (fab) fab.style.display = hide;
+  if (mic) mic.style.display = hide;
 }
 function toggleManage(id) {
   const idx = hiddenActivities.indexOf(id);
