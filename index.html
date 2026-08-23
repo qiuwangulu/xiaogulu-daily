@@ -269,35 +269,33 @@
   .fab-btn:active { transform: scale(0.95); opacity: 0.9; }
 
   /* ===== 底部操作按钮 ===== */
-  .bottom-bar .fab-wrap { gap: 10px; }
+  .bottom-bar .fab-wrap { gap: 20px; }
   .fab-btn {
     padding: 7px 18px 7px 12px; border-radius: 20px;
-    border: none;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: 1px solid rgba(255,255,255,0.35);
+    background: transparent;
     color: #fff; font-size: 15px; font-weight: 600;
     cursor: pointer; transition: all 0.2s;
     display: inline-flex; align-items: center; gap: 6px;
-    box-shadow: 0 4px 18px rgba(102,126,234,0.4);
   }
   .fab-btn .fab-icon {
     width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
   }
   .fab-btn .fab-icon svg { width: 100%; height: 100%; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .fab-btn:active { transform: scale(0.95); opacity: 0.9; }
+  .fab-btn:active { background: rgba(255,255,255,0.08); }
 
   .voice-hold-btn {
     padding: 7px 18px 7px 12px; border-radius: 20px;
-    border: none;
-    background: linear-gradient(135deg, #e17055 0%, #fd79a8 100%);
+    border: 1px solid rgba(255,255,255,0.35);
+    background: transparent;
     color: #fff; font-size: 15px; font-weight: 600;
     cursor: pointer; transition: all 0.2s;
     display: inline-flex; align-items: center; gap: 6px;
-    box-shadow: 0 4px 18px rgba(225,112,85,0.4);
     user-select: none; -webkit-user-select: none;
     touch-action: none;
   }
-  .voice-hold-btn:active { transform: scale(0.95); opacity: 0.9; }
-  .voice-hold-btn.recording { background: linear-gradient(135deg, #ff7675 0%, #e17055 100%); box-shadow: 0 4px 24px rgba(255,118,117,0.6); }
+  .voice-hold-btn:active { background: rgba(255,255,255,0.08); }
+  .voice-hold-btn.recording { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.55); }
   .voice-hold-btn .voice-icon {
     width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
   }
@@ -684,14 +682,14 @@
 
   /* ===== 分析图表 ===== */
   .chart-card {
-    background: rgba(0,0,0,0.25);
-    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: 12px;
     padding: 12px 10px 8px 10px;
     margin-bottom: 14px;
   }
   .chart-title {
-    font-size: 14px; font-weight: 600; color: #74b9ff;
+    font-size: 14px; font-weight: 600; color: #fff;
     margin-bottom: 6px; padding-left: 4px;
   }
   .chart-svg { width: 100%; height: auto; display: block; }
@@ -2576,7 +2574,7 @@ function makeLineChart(data, opts) {
   };
   const yf = v => PT + ih - ((v - min) / (max - min)) * ih;
   const fmtV = opts.fmt ? opts.fmt : (v => v);
-  const labelColor = opts.labelColor || '#b2bec3';
+  const labelColor = opts.labelColor || '#8a90a6';
   const tipId = 'ctip' + (++_chartTipSeq);
   // 折线（无数据日断开）+ 可点击数据点（含透明命中区）
   let path = '', dots = '', started = false;
@@ -2590,8 +2588,8 @@ function makeLineChart(data, opts) {
     dots += `<circle class="chart-dot" cx="${px}" cy="${py}" r="3" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
       `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
   });
-  // 点击提示浮层（默认隐藏）：白色加粗文字，与柱状图保持一致
-  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.5)" stroke-width="0.5"/><text font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  // 点击提示浮层（默认隐藏）：白色加粗文字
+  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="rgba(0,0,0,0.7)" stroke="rgba(255,255,255,0.3)" stroke-width="0.5"/><text font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
   // 网格线 + y轴刻度（按 ticks）
   let grid = '', ylabels = '';
   ticks.forEach(v => {
@@ -2617,7 +2615,7 @@ function makeLineChart(data, opts) {
       }
       Array.from(keyMap.keys()).sort((a, b) => a - b).forEach(ts => {
         const x = (PL + (iw * (ts - tMin)) / (tMax - tMin)).toFixed(1);
-        xlabels += `<text x="${x}" y="${H - 8}" fill="${labelColor}" font-size="9" text-anchor="middle">${keyMap.get(ts)}</text>`;
+        xlabels += `<text x="${x}" y="${H - 8}" fill="#8a90a6" font-size="9" text-anchor="middle">${keyMap.get(ts)}</text>`;
       });
     } else {
       // 无时间戳时退化为数据点判断（首/末/25号数据点）
@@ -2625,14 +2623,14 @@ function makeLineChart(data, opts) {
         const dt = d.t != null ? new Date(d.t) : null;
         const isKey = i === 0 || i === n - 1 || (dt && dt.getUTCDate() === 25);
         if (!isKey) return;
-        xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="${labelColor}" font-size="9" text-anchor="middle">${d.label}</text>`;
+        xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="#8a90a6" font-size="9" text-anchor="middle">${d.label}</text>`;
       });
     }
   } else {
     const step = Math.max(1, Math.ceil(n / 7));
     data.forEach((d, i) => {
       if (i % step !== 0 && i !== n - 1) return;
-      xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="${labelColor}" font-size="9" text-anchor="middle">${d.label}</text>`;
+      xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="#8a90a6" font-size="9" text-anchor="middle">${d.label}</text>`;
     });
   }
   // WHO 参考曲线渲染：p3~p75 半透明填充带（最底层）+ 3条虚线 + 右端标注
@@ -2642,12 +2640,12 @@ function makeLineChart(data, opts) {
     // 填充带：p3 正序 + p75 逆序闭合
     const bandA = whoPts.map(p => `${xfT(p.t).toFixed(1)} ${yf(p.row.p3).toFixed(1)}`);
     const bandB = [...whoPts].reverse().map(p => `${xfT(p.t).toFixed(1)} ${yf(p.row.p75).toFixed(1)}`);
-    whoBand = `<path d="M${bandA.join(' L')} L${bandB.join(' L')} Z" fill="rgba(255,255,255,0.07)" stroke="none"/>`;
-    // 3条参考虚线：p3 红 / p50 绿 / p75 橘；右端标注百分比（p50 标注放线下方避免与 p75 重叠）
+    whoBand = `<path d="M${bandA.join(' L')} L${bandB.join(' L')} Z" fill="rgba(255,255,255,0.04)" stroke="none"/>`;
+    // 3条参考虚线：p3 柔红 / p50 中性灰 / p75 琥珀；右端标注百分比（p50 标注放线下方避免与 p75 重叠）
     const lineDefs = [
-      { key: 'p3', color: '#ff7675', label: '3%', dy: -3 },
-      { key: 'p50', color: '#2ecc71', label: '50%', dy: 10 },
-      { key: 'p75', color: '#ffa502', label: '75%', dy: -3 }
+      { key: 'p3', color: '#e87878', label: '3%', dy: -3 },
+      { key: 'p50', color: '#8a90a6', label: '50%', dy: 10 },
+      { key: 'p75', color: '#d4a03a', label: '75%', dy: -3 }
     ];
     lineDefs.forEach(def => {
       const pts = whoPts.map(p => `${xfT(p.t).toFixed(1)} ${yf(p.row[def.key]).toFixed(1)}`);
@@ -2730,14 +2728,14 @@ function makeBarChart(data, opts) {
     bars += `<rect class="bar-rect" x="${(cxBar - barW / 2).toFixed(1)}" y="${barTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="${color}"/>` +
       `<rect class="bar-hit" x="${(cxBar - slotW / 2).toFixed(1)}" y="${PT.toFixed(1)}" width="${slotW.toFixed(1)}" height="${ih.toFixed(1)}" fill="transparent" data-cx="${cxBar.toFixed(1)}" data-cy="${barTop.toFixed(1)}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
   });
-  // 点击提示浮层：白色加粗文字 + 深色背景，放在最后绘制保证不被柱子遮挡
-  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.5)" stroke-width="0.5"/><text font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  // 点击提示浮层：深色半透明背景 + 白色文字
+  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="rgba(0,0,0,0.7)" stroke="rgba(255,255,255,0.3)" stroke-width="0.5"/><text font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
   // 网格线 + y轴刻度（按 ticks）
   let grid = '', ylabels = '';
   ticks.forEach(v => {
     const gy = yf(v).toFixed(1);
     grid += `<line x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
-    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#b2bec3" font-size="9" text-anchor="end">${fmtV(Math.round(v * 10) / 10)}</text>`;
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#8a90a6" font-size="9" text-anchor="end">${fmtV(Math.round(v * 10) / 10)}</text>`;
   });
   // x轴标签
   const step = Math.max(1, Math.ceil(n / 7));
@@ -2745,7 +2743,7 @@ function makeBarChart(data, opts) {
   data.forEach((d, i) => {
     const cxBar = PL + slotW * i + slotW / 2;
     if (i % step !== 0 && i !== n - 1) return;
-    xlabels += `<text x="${cxBar.toFixed(1)}" y="${H - 8}" fill="#b2bec3" font-size="9" text-anchor="middle">${d.label}</text>`;
+    xlabels += `<text x="${cxBar.toFixed(1)}" y="${H - 8}" fill="#8a90a6" font-size="9" text-anchor="middle">${d.label}</text>`;
   });
   // 月龄标准范围线：绿色虚线（每天按其月龄取标准值；跨月龄切换日（25号）标准值变化时呈阶梯状垂直跳变）
   let stdSvg = '';
@@ -2767,7 +2765,7 @@ function makeBarChart(data, opts) {
         p += `L${mid} ${yf(prev.v).toFixed(1)} L${mid} ${yf(cur.v).toFixed(1)} L${cur.x.toFixed(1)} ${yf(cur.v).toFixed(1)} `;
       }
     }
-    stdSvg += `<path d="${p.trim()}" fill="none" stroke="#2ecc71" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.9"/>`;
+    stdSvg += `<path d="${p.trim()}" fill="none" stroke="#5eead4" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.9"/>`;
   });
   return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
     grid + ylabels + xlabels + bars + stdSvg + tip + `</svg></div>`;
@@ -2797,12 +2795,12 @@ function openAnalysis() {
   const countStdRows = days.map(d => getStdRow(MILK_COUNT_STD, d.ds));
   const sleepStdRows = days.map(d => getStdRow(SLEEP_STD, d.ds));
   const poopStdRows = days.map(d => getStdRow(POOP_STD, d.ds));
-  html += makeBarChart(milkData, { title: '🍼 每日奶量（水+奶，近15天）', unit: 'ml', color: '#74b9ff', tickStep: 100, stdLines: [{ values: milkStdRows.map(r => r.min) }, { values: milkStdRows.map(r => r.max) }] });
-  html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#fd79a8', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
-  html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#a29bfe', fmt: v => v.toFixed(1), tickStep: 1, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
-  html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#fab1a0', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
-  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#ffeaa7', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT } });
-  html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#74b9ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT } });
+  html += makeBarChart(milkData, { title: '🍼 每日奶量（水+奶，近15天）', unit: 'ml', color: '#7da8e6', tickStep: 100, stdLines: [{ values: milkStdRows.map(r => r.min) }, { values: milkStdRows.map(r => r.max) }] });
+  html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
+  html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 1, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
+  html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
+  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#e8b87d', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT } });
+  html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#7da8e6', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT } });
   content.innerHTML = html;
   showModal('analysisModal');
 }
