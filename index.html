@@ -1164,6 +1164,19 @@ function saveHiddenActivities() { localStorage.setItem('hiddenActivities', JSON.
 function getTodayRecords() {
   try { return JSON.parse(localStorage.getItem(getTodayKey()) || '[]'); } catch { return []; }
 }
+// 统一持久化今日记录：时间戳单独存 records_<日期>_ts，供云端同步做"本地 vs 云端"冲突判断
+// 注意：时间戳不能塞进 records 数组（JSON.stringify 不会序列化数组的非索引属性）
+function persistRecords(records) {
+  const ts = Date.now();
+  localStorage.setItem(getTodayKey(), JSON.stringify(records));
+  localStorage.setItem(getTodayKey() + '_ts', String(ts));
+  return records;
+}
+// 读取某日记录的本地修改时间戳（无则为 0）
+function getLocalRecordTs(ds) {
+  const v = localStorage.getItem('records_' + ds + '_ts');
+  return v ? parseInt(v) || 0 : 0;
+}
 
 function getMilkInterval() {
   const h = new Date().getHours();
@@ -1434,7 +1447,7 @@ function deleteRecord(type, timestamp) {
   if (!confirm('删除这条记录？')) return;
   let records = getTodayRecords();
   records = records.filter(r => !(r.type === type && r.timestamp === timestamp));
-  localStorage.setItem(getTodayKey(), JSON.stringify(records));
+  persistRecords(records);
   syncUpload('records', getTodayDateStr());
   renderCards(); updateOverview(); showToast('已删除');
 }
@@ -1573,7 +1586,7 @@ function saveEditRecord() {
   const noteEl = document.getElementById('edt_note');
   if (noteEl) rec.note = noteEl.value.trim();
 
-  localStorage.setItem(getTodayKey(), JSON.stringify(records));
+  persistRecords(records);
   syncUpload('records', getTodayDateStr());
   hideModal('editModal'); renderCards(); updateOverview();
   showToast('已更新');
@@ -1766,7 +1779,7 @@ function confirmAdd() {
     records.push(record); newestIds.push(id);
   });
 
-  localStorage.setItem(getTodayKey(), JSON.stringify(records));
+  persistRecords(records);
   syncUpload('records', getTodayDateStr());
   addSelectedSet = new Set();
   hideModal('addModal'); renderCards(newestIds); updateOverview();
@@ -2361,7 +2374,7 @@ function confirmVoiceAdd() {
     else if (act.type === 'simple') { record.simpleTime = it.recTime; }
     records.push(record); newestIds.push(it.actId);
   });
-  localStorage.setItem(getTodayKey(), JSON.stringify(records));
+  persistRecords(records);
   syncUpload('records', getTodayDateStr());
   hideModal('voiceModal');
   voiceFinalText = ''; voiceItems = [];
@@ -3106,7 +3119,12 @@ async function syncUpload(category, dateStr) {
     if (category === 'records') {
       const records = JSON.parse(localStorage.getItem(`records_${dateStr}`) || '[]');
       const { data, iv } = await encrypt(key, JSON.stringify(records));
-      await supabaseUpsert('family_records', { family_id: fid, record_date: dateStr, encrypted_data: data, iv, last_modified: Date.now(), modified_by: getDeviceName() });
+      // last_modified 用本地修改时间戳（若缺失则用当前时间，保证比旧数据新）
+      const localTs = getLocalRecordTs(dateStr);
+      const modTime = localTs > 0 ? localTs : Date.now();
+      await supabaseUpsert('family_records', { family_id: fid, record_date: dateStr, encrypted_data: data, iv, last_modified: modTime, modified_by: getDeviceName() });
+      // 上传后把本地时间戳对齐到云端时间，避免下次拉取误判
+      if (localTs === 0) localStorage.setItem(`records_${dateStr}_ts`, String(modTime));
     } else if (category === 'config') {
       const configKeys = ['hiddenActivities','grossMotorOptions','fineMotorOptions','babyHeight','babyWeight','bodyHistory'];
       for (const ck of configKeys) {
@@ -3136,11 +3154,19 @@ async function syncPullAll() {
         const rows = await supabaseGet(`family_records?family_id=eq.${fid}&record_date=eq.${ds}&select=encrypted_data,iv,last_modified`);
         if (rows.length > 0) {
           const localRaw = localStorage.getItem(`records_${ds}`);
-          const localTs = localRaw ? (JSON.parse(localRaw)._lastModified || 0) : 0;
-          if (rows[0].last_modified > localTs) {
+          const localTs = getLocalRecordTs(ds);
+          const cloudTs = rows[0].last_modified || 0;
+          if (cloudTs > localTs) {
+            // 云端比本地新 → 拉取云端，覆盖本地（含旧数据无 _ts 的情况）
             const plaintext = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
             const records = JSON.parse(plaintext);
-            if (Array.isArray(records)) { records._lastModified = rows[0].last_modified; localStorage.setItem(`records_${ds}`, JSON.stringify(records)); changed = true; }
+            if (Array.isArray(records)) { localStorage.setItem(`records_${ds}`, JSON.stringify(records)); localStorage.setItem(`records_${ds}_ts`, String(cloudTs)); changed = true; }
+          } else if (localTs > cloudTs && cloudTs > 0) {
+            // 本地比云端新 → 反向推送本地到云端（防止本地新增/修改被云端旧数据覆盖）
+            const localRecords = JSON.parse(localRaw);
+            const { data, iv } = await encrypt(key, JSON.stringify(localRecords));
+            await supabaseUpsert('family_records', { family_id: fid, record_date: ds, encrypted_data: data, iv, last_modified: localTs, modified_by: getDeviceName() });
+            changed = true;
           }
         }
       } catch {}
@@ -3256,15 +3282,18 @@ async function uploadAllLocalData() {
   if (!isSyncReady()) { showToast('请先保存配置'); return; }
   showToast('上传中...');
   try {
-    // 上传所有本地记录
+    // 上传所有本地记录（跳过 records_<日期>_ts 时间戳键）
     const keys = [];
-    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('records_')) keys.push(k); }
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('records_') && !k.endsWith('_ts')) keys.push(k); }
     const key = await getCryptoKey(); const fid = getFamilyId();
     for (const k of keys) {
       const ds = k.replace('records_', '');
       const records = JSON.parse(localStorage.getItem(k) || '[]');
       const { data, iv } = await encrypt(key, JSON.stringify(records));
-      await supabaseUpsert('family_records', { family_id: fid, record_date: ds, encrypted_data: data, iv, last_modified: Date.now(), modified_by: getDeviceName() });
+      const localTs = getLocalRecordTs(ds);
+      const modTime = localTs > 0 ? localTs : Date.now();
+      await supabaseUpsert('family_records', { family_id: fid, record_date: ds, encrypted_data: data, iv, last_modified: modTime, modified_by: getDeviceName() });
+      if (localTs === 0) localStorage.setItem(`records_${ds}_ts`, String(modTime));
     }
     await syncUpload('config');
     showToast(`已上传 ${keys.length} 天记录`);
