@@ -1719,7 +1719,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.4.1 0824-1426'; // 紧急修复：禁用自动同步/增加salt保护/本地备份
+const APP_VERSION = 'v3.4.2 0824-1450'; // 修复同步salt自动检测与修复
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3440,15 +3440,48 @@ async function syncUpload(category, dateStr) {
   if (!navigator.onLine) { enqueueSync(category, dateStr); return; }
   try {
     const key = await getCryptoKey(); if (!key) return;
-    // salt 一致性检查：防止用错误的 salt 加密上传，导致云端数据无法解密
+    // salt 一致性检查与自动修复：防止用错误的 salt 加密上传
     const localSalt = localStorage.getItem('family_salt');
     if (localSalt && isSyncReady()) {
       try {
         const saltRows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq._salt&select=encrypted_data`);
         if (saltRows.length > 0 && saltRows[0].encrypted_data && saltRows[0].encrypted_data !== localSalt) {
-          console.warn('[Sync] salt 不一致，跳过上传以防止覆盖');
-          showToast('同步密钥异常，已暂停自动上传，请检查管理页配置');
-          return;
+          // salt 不一致：尝试用本地 salt 解密云端一条数据，验证哪个 salt 正确
+          let localSaltValid = false, cloudSaltValid = false;
+          try {
+            const testRows = await supabaseGet(`family_records?family_id=eq.${getFamilyId()}&record_date=eq.${getTodayDateStr()}&select=encrypted_data,iv`);
+            if (testRows.length > 0) {
+              // 尝试用本地 salt 解密
+              try { await decrypt(key, testRows[0].encrypted_data, testRows[0].iv); localSaltValid = true; } catch {}
+              // 尝试用云端 salt 解密（需要临时派生密钥）
+              if (!localSaltValid) {
+                try {
+                  const cloudKey = await deriveKey(localStorage.getItem('family_code'), saltRows[0].encrypted_data);
+                  await decrypt(cloudKey, testRows[0].encrypted_data, testRows[0].iv);
+                  cloudSaltValid = true;
+                } catch {}
+              }
+            }
+          } catch {}
+          if (!localSaltValid && !cloudSaltValid) {
+            // 两者都无法解密：云端数据已损坏，用本地 salt 覆盖修复
+            console.warn('[Sync] 云端 salt 和数据均无法解密，用本地 salt 修复');
+            await uploadSalt(localSalt);
+            showToast('检测到云端密钥损坏，已自动修复，请重新点击同步');
+            return;
+          } else if (!localSaltValid && cloudSaltValid) {
+            // 云端 salt 能解密，本地不能：拉取云端 salt
+            console.warn('[Sync] 本地 salt 错误，拉取云端 salt');
+            localStorage.setItem('family_salt', saltRows[0].encrypted_data);
+            _cryptoKey = null;
+            showToast('已同步云端密钥，请重新操作');
+            return;
+          } else if (localSaltValid && !cloudSaltValid) {
+            // 本地 salt 能解密，云端不能：用本地覆盖云端
+            console.warn('[Sync] 云端 salt 错误，用本地 salt 修复');
+            await uploadSalt(localSalt);
+          }
+          // 两者都能解密（理论上不可能，但安全起见继续）
         }
       } catch (e) {}
     }
