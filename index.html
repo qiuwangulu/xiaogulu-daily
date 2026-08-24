@@ -275,7 +275,7 @@
   .bottom-bar .fab-wrap { gap: 20px; }
   .fab-btn {
     padding: 7px 18px 7px 12px; border-radius: 20px;
-    border: 1px solid #25375f;
+    border: 1px solid #fff;
     background: #25375f;
     color: #fff; font-size: 14px; font-weight: 600;
     cursor: pointer; transition: all 0.2s;
@@ -295,7 +295,7 @@
   .voice-hold-btn {
     position: relative;
     padding: 7px 18px 7px 12px; border-radius: 20px;
-    border: 1px solid #25375f;
+    border: 1px solid #fff;
     background: #25375f;
     color: #fff; font-size: 14px; font-weight: 600;
     display: inline-flex; align-items: center; gap: 6px;
@@ -477,17 +477,17 @@
   }
   .btn {
     padding: 8px 18px; border-radius: 20px;
-    border: 1px solid #25375f;
+    border: 1px solid #fff;
     background: #25375f;
     color: #fff; font-size: 15px;
     cursor: pointer; transition: all 0.2s;
     display: inline-flex; align-items: center; gap: 4px;
   }
   .btn:active { transform: scale(0.95); opacity: 0.85; }
-  /* 日报/管理/添加/编辑等弹窗按钮统一为深蓝底白字 */
-  .btn-primary { background: #25375f; border-color: #25375f; color: #fff; }
+  /* 日报/管理/添加/编辑等弹窗按钮统一为深蓝底白字白框 */
+  .btn-primary { background: #25375f; border-color: #fff; color: #fff; }
   .btn-primary:active { opacity: 0.85; }
-  .btn-success { background: #25375f; border-color: #25375f; color: #fff; font-size: 16px; }
+  .btn-success { background: #25375f; border-color: #fff; color: #fff; font-size: 16px; }
   .btn-success:active { opacity: 0.85; }
 
   /* ===== 添加弹窗 ===== */
@@ -790,7 +790,7 @@
   .copy-float .btn {
     box-shadow: 0 4px 14px rgba(0,0,0,0.45);
     background: #25375f;
-    border-color: #25375f;
+    border-color: #fff;
     color: #fff;
     font-size: 15px; padding: 9px 22px;
   }
@@ -1693,6 +1693,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
+const APP_VERSION = 'v3.1 0824-1300'; // 版本号（用于确认缓存是否刷新）
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -1701,8 +1702,13 @@ function openAddModal() {
   addModalCategory = 'all';
   addSelectedSet = new Set();
   document.getElementById('addSearchInput').value = '';
-  renderAddModal();
-  showModal('addModal');
+  showModal('addModal'); // 先弹窗再渲染：即使渲染出错，弹窗也必定打开
+  try {
+    renderAddModal();
+  } catch (e) {
+    console.error('renderAddModal error:', e);
+    showToast('活动列表加载异常：' + (e && e.message ? e.message : e));
+  }
 }
 
 function getNowTimeStr() { const n = new Date(); return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0'); }
@@ -3621,6 +3627,29 @@ function setupSyncListeners() {
   window.addEventListener('online', () => { if (isSyncReady()) { flushSyncQueue(); syncPullAll(); } });
   setInterval(() => { if (isSyncReady() && navigator.onLine) syncPullAll(); }, SYNC_CONFIG.pollInterval);
 }
+
+// ===== 全局兜底：未捕获 JS 错误 toast 提示（便于真机定位问题） =====
+window.addEventListener('error', (e) => {
+  try { showToast('脚本异常: ' + (e.message || 'unknown').slice(0, 60)); } catch (_) {}
+});
+window.addEventListener('unhandledrejection', (e) => {
+  try { showToast('异步异常: ' + String(e.reason && e.reason.message || e.reason || '').slice(0, 60)); } catch (_) {}
+});
+
+// ===== fabBtn 三重事件兜底：click 内联 + touchstart 内联之外，再加 JS 绑定 click =====
+// （部分国产浏览器内联事件可能失效，addEventListener 绑定独立于内联属性）
+setTimeout(() => {
+  const fab = document.getElementById('fabBtn');
+  if (fab && !fab.dataset.jsClickBound) {
+    fab.dataset.jsClickBound = '1';
+    fab.addEventListener('click', () => openAddModal());
+  }
+  // 版本号显示：页面标题栏右上角小字（点击管理弹窗标题旁也可见）
+  const ver = document.createElement('div');
+  ver.textContent = APP_VERSION;
+  ver.style.cssText = 'position:fixed;top:4px;right:8px;font-size:10px;color:rgba(178,190,195,0.45);z-index:50;pointer-events:none;';
+  document.body.appendChild(ver);
+}, 0);
 
 init();
 </script>
