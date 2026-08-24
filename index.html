@@ -1279,8 +1279,20 @@ function getTodayRecords() {
 // 注意：时间戳不能塞进 records 数组（JSON.stringify 不会序列化数组的非索引属性）
 function persistRecords(records) {
   const ts = Date.now();
-  localStorage.setItem(getTodayKey(), JSON.stringify(records));
-  localStorage.setItem(getTodayKey() + '_ts', String(ts));
+  const key = getTodayKey();
+  const json = JSON.stringify(records);
+  localStorage.setItem(key, json);
+  localStorage.setItem(key + '_ts', String(ts));
+  // 自动本地备份（保留最近 10 份，防止同步覆盖或意外丢失）
+  try {
+    const backups = JSON.parse(localStorage.getItem('record_backups') || '[]');
+    backups.push({ date: key, ts: ts, data: records });
+    // 只保留最近 10 份备份 + 每日期保留最新一份
+    const byDate = {};
+    for (const b of backups) { if (!byDate[b.date] || byDate[b.date].ts < b.ts) byDate[b.date] = b; }
+    const kept = Object.values(byDate).sort((a, b) => b.ts - a.ts).slice(0, 10);
+    localStorage.setItem('record_backups', JSON.stringify(kept));
+  } catch (e) {}
   return records;
 }
 // 读取某日记录的本地修改时间戳（无则为 0）
@@ -1707,7 +1719,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.4 0824-1356'; // 版本号（显示在管理弹窗顶部，用于确认缓存是否刷新）
+const APP_VERSION = 'v3.4.1 0824-1426'; // 紧急修复：禁用自动同步/增加salt保护/本地备份
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3383,7 +3395,25 @@ async function decrypt(key, dataB64, ivB64) {
 async function getCryptoKey() {
   const fc = localStorage.getItem('family_code'); if (!fc) return null;
   let salt = localStorage.getItem('family_salt');
-  if (!salt) { salt = bufToB64(crypto.getRandomValues(new Uint8Array(16))); localStorage.setItem('family_salt', salt); await uploadSalt(salt); }
+  if (!salt) {
+    // 本地没有 salt：先查云端是否已有（加入已有家庭），绝不自动生成覆盖
+    if (isSyncReady()) {
+      try {
+        const saltRows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq._salt&select=encrypted_data`);
+        if (saltRows.length > 0 && saltRows[0].encrypted_data) {
+          salt = saltRows[0].encrypted_data;
+          localStorage.setItem('family_salt', salt);
+          console.log('[Crypto] 已拉取云端 salt，加入现有家庭');
+          return await deriveKey(fc, salt);
+        }
+      } catch (e) {}
+    }
+    // 云端也没有才新建（首次创建家庭）
+    salt = bufToB64(crypto.getRandomValues(new Uint8Array(16)));
+    localStorage.setItem('family_salt', salt);
+    await uploadSalt(salt);
+    console.log('[Crypto] 新建家庭 salt');
+  }
   return await deriveKey(fc, salt);
 }
 async function uploadSalt(saltB64) {
@@ -3410,6 +3440,18 @@ async function syncUpload(category, dateStr) {
   if (!navigator.onLine) { enqueueSync(category, dateStr); return; }
   try {
     const key = await getCryptoKey(); if (!key) return;
+    // salt 一致性检查：防止用错误的 salt 加密上传，导致云端数据无法解密
+    const localSalt = localStorage.getItem('family_salt');
+    if (localSalt && isSyncReady()) {
+      try {
+        const saltRows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq._salt&select=encrypted_data`);
+        if (saltRows.length > 0 && saltRows[0].encrypted_data && saltRows[0].encrypted_data !== localSalt) {
+          console.warn('[Sync] salt 不一致，跳过上传以防止覆盖');
+          showToast('同步密钥异常，已暂停自动上传，请检查管理页配置');
+          return;
+        }
+      } catch (e) {}
+    }
     const fid = getFamilyId();
     if (category === 'records') {
       let records = JSON.parse(localStorage.getItem(`records_${dateStr}`) || '[]');
@@ -3664,9 +3706,11 @@ async function initSync() {
   showFamilySetup();
 }
 function setupSyncListeners() {
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && isSyncReady()) syncPullAll(); });
-  window.addEventListener('online', () => { if (isSyncReady()) { flushSyncQueue(); syncPullAll(); } });
-  setInterval(() => { if (isSyncReady() && navigator.onLine) syncPullAll(); }, SYNC_CONFIG.pollInterval);
+  // 自动同步已禁用（防止测试/异常环境覆盖云端数据）
+  // 如需同步，请手动点击「管理」→「立即同步」
+  // document.addEventListener('visibilitychange', () => { if (!document.hidden && isSyncReady()) syncPullAll(); });
+  // window.addEventListener('online', () => { if (isSyncReady()) { flushSyncQueue(); syncPullAll(); } });
+  // setInterval(() => { if (isSyncReady() && navigator.onLine) syncPullAll(); }, SYNC_CONFIG.pollInterval);
 }
 
 // ===== 全局兜底：未捕获 JS 错误 toast 提示（便于真机定位问题） =====
