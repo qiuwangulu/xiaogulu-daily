@@ -1722,7 +1722,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.4.5 0824-1736'; // 语音奶量时间误拆修复 + 语音波纹放大2倍
+const APP_VERSION = 'v3.4.6 0824-1810'; // PWA安装横幅：已安装自动隐藏+用户可手动关闭
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3696,11 +3696,15 @@ function setupPWA() {
   });
 }
 function showInstallPrompt() {
+  // 已作为 PWA 运行（主屏幕/桌面快捷方式），不显示安装横幅
+  if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true) return;
+  // 用户之前手动关闭过安装横幅，尊重用户选择
+  if (localStorage.getItem('pwa_install_dismissed') === 'yes') return;
   if (document.getElementById('pwaInstallBar')) return;
   const bar = document.createElement('div');
   bar.id = 'pwaInstallBar';
   bar.style.cssText = 'position:fixed;top:0;left:0;width:100%;z-index:200;background:#1a1f2e;border-bottom:1px solid rgba(255,255,255,0.1);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;color:#fff;';
-  bar.innerHTML = '<span>📲 安装到主屏幕，像 App 一样使用</span><button id="pwaInstallBtn" style="padding:6px 14px;border-radius:16px;border:none;background:#667eea;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">安装</button>';
+  bar.innerHTML = '<span>📲 安装到主屏幕，像 App 一样使用</span><div style="display:flex;align-items:center;gap:8px;"><button id="pwaInstallBtn" style="padding:6px 14px;border-radius:16px;border:none;background:#667eea;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">安装</button><button id="pwaDismissBtn" style="padding:4px 8px;border-radius:12px;border:none;background:transparent;color:#b2bec3;font-size:18px;line-height:1;cursor:pointer;" title="不再提示">×</button></div>';
   document.body.appendChild(bar);
   document.getElementById('pwaInstallBtn').addEventListener('click', async () => {
     const prompt = window.deferredInstallPrompt;
@@ -3708,6 +3712,10 @@ function showInstallPrompt() {
     prompt.prompt();
     const { outcome } = await prompt.userChoice;
     if (outcome === 'accepted') { window.deferredInstallPrompt = null; bar.remove(); }
+  });
+  document.getElementById('pwaDismissBtn').addEventListener('click', () => {
+    localStorage.setItem('pwa_install_dismissed', 'yes');
+    bar.remove();
   });
 }
 // 如果已作为 PWA 运行，隐藏浏览器 UI 提示
