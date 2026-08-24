@@ -1447,9 +1447,9 @@ function updateOverview() {
     ld.setHours(h, m, 0, 0);
     const nd = new Date(ld.getTime() + intv * 3600000);
     const nh = String(nd.getHours()).padStart(2, '0'), nm = String(nd.getMinutes()).padStart(2, '0');
-    html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶</span><span class="ov-time">${nh}:${nm}</span></div>`;
+    html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶:</span><span class="ov-time">${nh}:${nm}</span></div>`;
   } else {
-    html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶</span><span class="ov-value">暂无记录</span></div>`;
+    html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶:</span><span class="ov-value">暂无记录</span></div>`;
   }
   html += `<div class="overview-item"><span class="ov-label">水+奶量:</span><span class="ov-value">${Math.round(totalMilk * 1.12)} ml</span></div>`;
   html += '</div>';
@@ -1723,7 +1723,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.4.7 0824-1815'; // 总览排版：两端对齐+成就文字justify+不换行
+const APP_VERSION = 'v3.4.8 0824-1924'; // 总览：下次喝奶后加冒号
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
