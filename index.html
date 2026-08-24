@@ -289,16 +289,16 @@
   .fab-btn:active .fab-icon svg { stroke: #fff; }
 
   /* ===== 语音按钮三态 =====
-     状态1 默认：底 #272C48 / 字 #B4C0E8，静态
+     状态1 默认：与添加按钮一致——透明底 + 灰边框 #b2bec3 + 灰字，静态
      状态2 按住(.holding)：底 #343B63 / 细高亮边 #6388FF / 字 #E0E8FF，图标放大，tip「松开结束录音」
      状态3 录入中(.recording)：底 #422E4E / 呼吸光晕 + 5条竖纹声波，文字「录音中」
      仅监听 touchstart/touchend，不支持 click */
   .voice-hold-btn {
     position: relative;
     padding: 7px 18px 7px 12px; border-radius: 20px;
-    border: 1px solid #272C48;
-    background: #272C48;
-    color: #B4C0E8; font-size: 14px; font-weight: 600;
+    border: 1px solid #b2bec3;
+    background: transparent;
+    color: #b2bec3; font-size: 14px; font-weight: 600;
     display: inline-flex; align-items: center; gap: 6px;
     user-select: none; -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
@@ -312,7 +312,7 @@
     width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
     transition: transform 0.2s;
   }
-  .voice-hold-btn .voice-icon svg { width: 100%; height: 100%; fill: none; stroke: #B4C0E8; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .voice-hold-btn .voice-icon svg { width: 100%; height: 100%; fill: none; stroke: #b2bec3; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .voice-hold-btn .voice-label { transition: color 0.2s; }
 
   /* 状态2 按住：高亮边框 + 背景加深 + 图标放大 + tip */
@@ -790,12 +790,12 @@
   }
   .copy-float .btn {
     box-shadow: 0 4px 14px rgba(0,0,0,0.45);
-    background: transparent;
+    background: #141b2d; /* 不透明深底，覆盖后面滚动的文字 */
     border-color: #b2bec3;
     color: #b2bec3;
     font-size: 15px; padding: 9px 22px;
   }
-  .copy-float .btn:active { color: #fff; border-color: #fff; background: transparent; }
+  .copy-float .btn:active { color: #fff; border-color: #fff; }
   .chart-dot { cursor: pointer; }
   .chart-hit { cursor: pointer; }
   .bar-hit { cursor: pointer; }
@@ -1185,6 +1185,7 @@ function init() {
   setupPWA();
   initSync();
   bindVoiceTouch();
+  bindFastTaps();
   // 自动清理测试残留数据（仅一次， harmless）
   cleanupTestData();
   // 页面加载后检查喝奶提醒（已到时间则 toast，仅提醒一次）
@@ -2148,8 +2149,9 @@ function saveXfyunConfig() {
   const appid = document.getElementById('xfAppidInput').value.trim();
   const apiKey = document.getElementById('xfApiKeyInput').value.trim();
   const apiSecret = document.getElementById('xfApiSecretInput').value.trim();
-  // 三个都留空 = 使用 app-config.js 默认值，清除本地自定义
-  if (!appid && !apiKey && !apiSecret) { clearXfyunConfig(); return; }
+  // 三个都留空/保持掩码原样 = 使用 app-config.js 默认值，清除本地自定义
+  const untouched = (!appid && !apiKey && !apiSecret) || (appid === XF_MASK && apiKey === XF_MASK && apiSecret === XF_MASK);
+  if (untouched) { clearXfyunConfig(); return; }
   if (!appid || !apiKey || !apiSecret) { showToast('请填写完整的 APPID / API Key / API Secret（或全部留空使用默认）'); return; }
   localStorage.setItem('xfyun_appid', appid);
   localStorage.setItem('xfyun_api_key', apiKey);
@@ -2172,7 +2174,9 @@ function toggleXfyunSee() {
     el.type = show ? 'text' : 'password';
   });
 }
-// 回填 UI：本地有自定义则掩码展示；无则留空并提示已启用默认
+// 回填 UI：星号掩码表示已配置（默认或自定义），点输入框自动清空便于修改
+const XF_MASK = '********';
+const XF_INPUT_IDS = ['xfAppidInput', 'xfApiKeyInput', 'xfApiSecretInput'];
 function loadXfyunConfigUI() {
   const appid = localStorage.getItem('xfyun_appid');
   const apiKey = localStorage.getItem('xfyun_api_key');
@@ -2180,25 +2184,25 @@ function loadXfyunConfigUI() {
   const el = id => document.getElementById(id);
   const see = document.getElementById('xfSeeToggle');
   if (see) see.checked = false;
-  // 本地无自定义 → 留空（默认值在 app-config.js），提示已生效
-  if (!(appid && apiKey && apiSecret)) {
-    el('xfAppidInput').value = '';
-    el('xfApiKeyInput').value = '';
-    el('xfApiSecretInput').value = '';
-    if (el('xfAppidInput')) el('xfAppidInput').type = 'password';
-    if (el('xfApiKeyInput')) el('xfApiKeyInput').type = 'password';
-    if (el('xfApiSecretInput')) el('xfApiSecretInput').type = 'password';
-    // 提示默认配置已生效（不显示明文，只显示已配置状态）
-    const hint = document.getElementById('xfDefaultHint');
-    if (hint) hint.textContent = _DEFAULT_XFYUN ? '已使用默认语音配置（留空即用，无需填写）。如需覆盖，请填写并保存。' : '未配置语音，请填写讯飞三要素（或使用默认）。';
-    return;
-  }
-  // 本地有自定义 → 掩码占位展示，切换「显示明文」才可见
-  el('xfAppidInput').value = '••••••';
-  el('xfApiKeyInput').value = '••••••';
-  el('xfApiSecretInput').value = '••••••';
+  XF_INPUT_IDS.forEach(id => { if (el(id)) el(id).type = 'password'; });
+  // 全部填星号掩码：有默认配置或本地自定义时均表示"已配置"
+  const hasCustom = !!(appid && apiKey && apiSecret);
+  XF_INPUT_IDS.forEach(id => { if (el(id)) el(id).value = (hasCustom || _DEFAULT_XFYUN) ? XF_MASK : ''; });
+  bindXfMaskEvents();
   const hint = document.getElementById('xfDefaultHint');
-  if (hint) hint.textContent = '已启用自定义语音配置（掩码显示）。勾选「显示明文」可查看/修改。';
+  if (hint) hint.textContent = hasCustom
+    ? '已启用自定义语音配置。点输入框可修改，「清除」恢复默认。'
+    : (_DEFAULT_XFYUN ? '已使用默认语音配置（星号表示已配置，无需填写）。点输入框可覆盖自定义。' : '未配置语音，请填写讯飞三要素。');
+}
+// 星号掩码交互：focus 清空便于输入，blur 空值时恢复星号
+function bindXfMaskEvents() {
+  XF_INPUT_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.maskBound) return;
+    el.dataset.maskBound = '1';
+    el.addEventListener('focus', () => { if (el.value === XF_MASK) el.value = ''; el.type = 'text'; });
+    el.addEventListener('blur', () => { if (!el.value.trim()) { el.value = XF_MASK; el.type = 'password'; } });
+  });
 }
 // 构建带鉴权的 WebSocket URL（HMAC-SHA256 签名，讯飞 WebAPI 标准）
 async function buildXfyunUrl(cfg) {
@@ -2498,6 +2502,37 @@ function bindVoiceTouch() {
   const endVoice = (e) => { e.preventDefault(); if (voiceRecActive || btn.classList.contains('holding') || btn.classList.contains('recording')) { if (!_voiceHoldCanceled) stopVoiceHold(); } };
   btn.addEventListener('touchend', endVoice, { passive: false });
   btn.addEventListener('touchcancel', (e) => { e.preventDefault(); cancelVoiceHold(); }, { passive: false });
+}
+
+// 触摸直发兜底：部分手机浏览器 click 合成可能失效（尤其语音按钮 preventDefault 之后），
+// 对底部栏关键按钮直接用 touchend 触发，确保点击必定响应；桌面端仍走 onclick
+function enableFastTap(el, handler) {
+  if (!el) return;
+  let sx = 0, sy = 0, moved = false;
+  el.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    sx = t.clientX; sy = t.clientY; moved = false;
+  }, { passive: true });
+  el.addEventListener('touchmove', (e) => {
+    const t = e.touches[0];
+    if (Math.abs(t.clientX - sx) > 10 || Math.abs(t.clientY - sy) > 10) moved = true; // 滑动不触发
+  }, { passive: true });
+  el.addEventListener('touchend', (e) => {
+    if (moved) return;
+    e.preventDefault(); // 阻止本次合成 click，避免与 onclick 重复触发
+    handler();
+  }, { passive: false });
+}
+function bindFastTaps() {
+  // 添加按钮：触摸直发打开添加弹窗
+  enableFastTap(document.getElementById('fabBtn'), () => openAddModal());
+  // 底部导航：日报 / 历史 / 分析 / 管理
+  const navs = { openReport: openReport, openHistory: openHistory, openAnalysis: openAnalysis, openManage: openManage };
+  document.querySelectorAll('.nav-item').forEach(el => {
+    const fn = el.getAttribute('onclick') || '';
+    const m = fn.match(/(\w+)\s*\(\)/);
+    if (m && navs[m[1]]) enableFastTap(el, navs[m[1]]);
+  });
 }
 
 function showVoiceModal(rawText, unmatched) {
