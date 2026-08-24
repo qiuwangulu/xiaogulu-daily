@@ -336,7 +336,7 @@
   /* 声波条（默认隐藏，录音中显示） */
   .voice-hold-btn .voice-wave { display: none; }
   .voice-hold-btn.recording .voice-wave {
-    display: inline-flex; align-items: center; gap: 3px; height: 16px;
+    display: inline-flex; align-items: center; gap: 3px; height: 32px;
   }
   .voice-hold-btn .voice-wave .vwb {
     width: 3px; height: 6px; border-radius: 2px;
@@ -349,15 +349,15 @@
   .voice-hold-btn .voice-wave .vwb:nth-child(4) { animation-delay: 180ms; }
   .voice-hold-btn .voice-wave .vwb:nth-child(5) { animation-delay: 240ms; }
 
-  /* 呼吸光晕：周期1200ms，缩放0.8~1.15，透明度0.25~0.5 */
+  /* 呼吸光晕：周期1200ms，缩放0.8~1.15，透明度0.25~0.5（面积放大2倍便于看清） */
   @keyframes voiceBreathe {
-    0%, 100% { box-shadow: 0 0 0 4px rgba(236,102,140,0.25); }
-    50% { box-shadow: 0 0 0 14px rgba(236,102,140,0.5); }
+    0%, 100% { box-shadow: 0 0 0 8px rgba(236,102,140,0.25); }
+    50% { box-shadow: 0 0 0 28px rgba(236,102,140,0.5); }
   }
-  /* 声波竖纹：高度0~16px */
+  /* 声波竖纹：高度0~32px（放大2倍便于看清） */
   @keyframes voiceBar {
-    0% { height: 3px; }
-    100% { height: 16px; }
+    0% { height: 6px; }
+    100% { height: 32px; }
   }
 
   /* tip：悬浮提示「松开结束录音」，绝对定位不占布局 */
@@ -1722,7 +1722,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.4.4 0824-1648'; // PushPlus token内置到app-config，UI保持只显示群组编码
+const APP_VERSION = 'v3.4.5 0824-1736'; // 语音奶量时间误拆修复 + 语音波纹放大2倍
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -2068,7 +2068,9 @@ const VOICE_RULES = [
       while ((m = re.exec(zone)) !== null) {
         const after = zone.slice(m.index + m[0].length, m.index + m[0].length + 3);
         const before = zone.slice(Math.max(0, m.index - 1), m.index);
-        if (/^[点时:]/.test(after) || /度/.test(before)) continue; // 时间/体温数字不算奶量
+        // 时间/体温数字不算奶量：数字后跟 点/时/冒号/度(16:50的"16"、16点50的"16"、38.5度)、
+        // 数字前是 冒号/点/时(16:50的"50"、16点50的"50")、前是"度"
+        if (/^[点时:度]/.test(after) || /[:点时]/.test(before) || /度/.test(before)) continue;
         const n = cnNum(m[0]);
         if (n !== null && n >= 20 && n <= 400) { amount = Math.round(n); break; }
       }
