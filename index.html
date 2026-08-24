@@ -1096,8 +1096,23 @@ function init() {
   setInterval(() => { try { updateOverview(); } catch(e) { console.error(e); } }, 60000);
   setupPWA();
   initSync();
+  // 自动清理测试残留数据（仅一次， harmless）
+  cleanupTestData();
   // 页面加载后检查喝奶提醒（已到时间则 toast，仅提醒一次）
   setTimeout(checkMilkReminder, 1200);
+}
+
+// 清理本地测试残留数据（开发/测试期间写入的脏数据）
+function cleanupTestData() {
+  const testKws = ['同步bug测试', '双设备同步验证', '本地新增', '本地更新', '不被覆盖', '正常新增'];
+  const recs = getTodayRecords();
+  const clean = recs.filter(r => !testKws.some(kw => (r.note || '').includes(kw)));
+  if (clean.length < recs.length) {
+    persistRecords(clean);
+    syncUpload('records', getTodayDateStr());
+    renderCards(); updateOverview();
+    console.log('已清理 ' + (recs.length - clean.length) + ' 条测试残留记录');
+  }
 }
 
 function updateAgeInfo() {
