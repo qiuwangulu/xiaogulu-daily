@@ -19,7 +19,10 @@ window.APP_CONFIG = {
     apiSecret: 'ODFkMmNjMTM0YWE2ZmZkMjUyNzg1YWI3'
   },
 
-  // PushPlus 群组编码（一对多消息 topic，家人扫码入群同步接收）
+  // PushPlus 推送配置（一对多群组消息）
+  // token: 发送者个人 Token（从 pushplus.plus 获取）
+  // topic: 群组编码（一对多消息 → 创建群组后复制）
+  pushplusToken: '0be5d6fbe09f4974aab98a50b698f2b8',
   pushplusTopic: 'xiaogulu_daily',
 
   // 云端同步默认配置（Supabase REST 端点）

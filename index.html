@@ -1089,6 +1089,7 @@ const _STD = window.STD_CONFIG || {};
 const _APP = window.APP_CONFIG || {};
 const _DEFAULT_XFYUN = _APP.xfyun || null;
 const _DEFAULT_PUSHTOPIC = _APP.pushplusTopic || 'xiaogulu_daily';
+const _DEFAULT_PUSHTOKEN = _APP.pushplusToken || '';
 const _DEFAULT_SUPABASE_URL = (_APP.supabase && _APP.supabase.url) || '';
 const _DEFAULT_SUPABASE_KEY = (_APP.supabase && _APP.supabase.anonKey) || '';
 const _DEFAULT_FAMILY_CODE = _APP.familyCode || '';
@@ -1341,7 +1342,8 @@ function savePushTopic() {
   showToast('群组编码已保存');
 }
 async function notifyPushplus(title, content) {
-  const token = localStorage.getItem('pushplus_token');
+  // token 优先从 localStorage 读取（用户自定义），否则使用应用默认值
+  const token = localStorage.getItem('pushplus_token') || _DEFAULT_PUSHTOKEN;
   if (!token) { console.warn('PushPlus Token未配置，无法推送'); return false; }
   try {
     const payload = { token: token, title: title, content: content, template: 'html' };
@@ -1719,7 +1721,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.4.3 0824-1558'; // 修复statuses未定义/底部padding增加
+const APP_VERSION = 'v3.4.4 0824-1648'; // PushPlus token内置到app-config，UI保持只显示群组编码
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
