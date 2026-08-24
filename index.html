@@ -464,6 +464,12 @@
     color: #fff; margin-bottom: 16px;
     text-align: center;
   }
+  .modal-version {
+    font-size: 11px;
+    color: rgba(178,190,195,0.6);
+    text-align: center;
+    margin: -6px 0 10px 0;
+  }
   .modal-close {
     position: absolute; top: 16px; right: 18px;
     font-size: 26px; color: rgba(255,255,255,0.5);
@@ -926,6 +932,7 @@
   <div class="modal-box" onclick="event.stopPropagation()">
     <button class="modal-close" onclick="hideModal('manageModal')">&times;</button>
     <div class="modal-title">&#9881; 管理</div>
+    <div class="modal-version" id="appVersionTag"></div>
     <div class="sync-section">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0 0 0;">
         <div class="cos-title" style="margin:0;">🔒 只读模式</div>
@@ -1696,7 +1703,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.2 0824-1310'; // 版本号（用于确认缓存是否刷新）
+const APP_VERSION = 'v3.3 0824-0946'; // 版本号（显示在管理弹窗顶部，用于确认缓存是否刷新）
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3653,11 +3660,9 @@ setTimeout(() => {
     fab.dataset.jsClickBound = '1';
     fab.addEventListener('click', () => openAddModal());
   }
-  // 版本号显示：页面标题栏右上角小字（点击管理弹窗标题旁也可见）
-  const ver = document.createElement('div');
-  ver.textContent = APP_VERSION;
-  ver.style.cssText = 'position:fixed;top:4px;right:8px;font-size:10px;color:rgba(178,190,195,0.45);z-index:50;pointer-events:none;';
-  document.body.appendChild(ver);
+  // 版本号显示：管理弹窗最上方（标题下方小字）
+  const verTag = document.getElementById('appVersionTag');
+  if (verTag) verTag.textContent = APP_VERSION;
 }, 0);
 
 init();
