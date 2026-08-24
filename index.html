@@ -275,30 +275,29 @@
   .bottom-bar .fab-wrap { gap: 20px; }
   .fab-btn {
     padding: 7px 18px 7px 12px; border-radius: 20px;
-    border: 1px solid #b2bec3;
-    background: transparent;
-    color: #b2bec3; font-size: 14px; font-weight: 600;
+    border: 1px solid #25375f;
+    background: #25375f;
+    color: #fff; font-size: 14px; font-weight: 600;
     cursor: pointer; transition: all 0.2s;
     display: inline-flex; align-items: center; gap: 6px;
   }
   .fab-btn .fab-icon {
     width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
   }
-  .fab-btn .fab-icon svg { width: 100%; height: 100%; fill: none; stroke: #b2bec3; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .fab-btn:active { color: #fff; border-color: #fff; }
-  .fab-btn:active .fab-icon svg { stroke: #fff; }
+  .fab-btn .fab-icon svg { width: 100%; height: 100%; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .fab-btn:active { transform: scale(0.95); opacity: 0.85; }
 
   /* ===== 语音按钮三态 =====
-     状态1 默认：与添加按钮一致——透明底 + 灰边框 #b2bec3 + 灰字，静态
+     状态1 默认：深蓝底 #25375f + 白字，醒目
      状态2 按住(.holding)：底 #343B63 / 细高亮边 #6388FF / 字 #E0E8FF，图标放大，tip「松开结束录音」
      状态3 录入中(.recording)：底 #422E4E / 呼吸光晕 + 5条竖纹声波，文字「录音中」
      仅监听 touchstart/touchend，不支持 click */
   .voice-hold-btn {
     position: relative;
     padding: 7px 18px 7px 12px; border-radius: 20px;
-    border: 1px solid #b2bec3;
-    background: transparent;
-    color: #b2bec3; font-size: 14px; font-weight: 600;
+    border: 1px solid #25375f;
+    background: #25375f;
+    color: #fff; font-size: 14px; font-weight: 600;
     display: inline-flex; align-items: center; gap: 6px;
     user-select: none; -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
@@ -312,7 +311,7 @@
     width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
     transition: transform 0.2s;
   }
-  .voice-hold-btn .voice-icon svg { width: 100%; height: 100%; fill: none; stroke: #b2bec3; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .voice-hold-btn .voice-icon svg { width: 100%; height: 100%; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .voice-hold-btn .voice-label { transition: color 0.2s; }
 
   /* 状态2 按住：高亮边框 + 背景加深 + 图标放大 + tip */
@@ -437,7 +436,7 @@
     padding: 6px 10px;
     border-radius: 8px;
   }
-  .nav-item:active { background: rgba(255,255,255,0.08); }
+  .nav-item:active { background: #25375f; color: #fff; }
   .nav-item .nav-icon { font-size: 22px; }
   .nav-item .nav-label { font-size: 14px; }
 
@@ -478,18 +477,18 @@
   }
   .btn {
     padding: 8px 18px; border-radius: 20px;
-    border: 1px solid #b2bec3;
-    background: transparent;
-    color: #b2bec3; font-size: 15px;
+    border: 1px solid #25375f;
+    background: #25375f;
+    color: #fff; font-size: 15px;
     cursor: pointer; transition: all 0.2s;
     display: inline-flex; align-items: center; gap: 4px;
   }
-  .btn:active { transform: scale(0.95); color: #fff; border-color: #fff; }
-  /* 日报/管理/添加/编辑等弹窗按钮统一为灰色文字+外框风格（与添加、语音按钮一致） */
-  .btn-primary { background: transparent; border-color: #b2bec3; color: #b2bec3; }
-  .btn-primary:active { color: #fff; border-color: #fff; background: transparent; }
-  .btn-success { background: transparent; border-color: #b2bec3; color: #b2bec3; font-size: 16px; }
-  .btn-success:active { color: #fff; border-color: #fff; background: transparent; }
+  .btn:active { transform: scale(0.95); opacity: 0.85; }
+  /* 日报/管理/添加/编辑等弹窗按钮统一为深蓝底白字 */
+  .btn-primary { background: #25375f; border-color: #25375f; color: #fff; }
+  .btn-primary:active { opacity: 0.85; }
+  .btn-success { background: #25375f; border-color: #25375f; color: #fff; font-size: 16px; }
+  .btn-success:active { opacity: 0.85; }
 
   /* ===== 添加弹窗 ===== */
   .add-search-wrap {
@@ -790,12 +789,12 @@
   }
   .copy-float .btn {
     box-shadow: 0 4px 14px rgba(0,0,0,0.45);
-    background: #141b2d; /* 不透明深底，覆盖后面滚动的文字 */
-    border-color: #b2bec3;
-    color: #b2bec3;
+    background: #25375f;
+    border-color: #25375f;
+    color: #fff;
     font-size: 15px; padding: 9px 22px;
   }
-  .copy-float .btn:active { color: #fff; border-color: #fff; }
+  .copy-float .btn:active { opacity: 0.85; }
   .chart-dot { cursor: pointer; }
   .chart-hit { cursor: pointer; }
   .bar-hit { cursor: pointer; }
@@ -848,7 +847,7 @@
 
 <div class="bottom-bar">
   <div class="fab-wrap">
-    <button class="fab-btn" id="fabBtn" onclick="openAddModal()">
+    <button class="fab-btn" id="fabBtn" onclick="openAddModal()" ontouchstart="openAddModal()">
       <span class="fab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></span>
       添加
     </button>
@@ -956,9 +955,9 @@
       <div class="push-token-row">
         <input type="password" id="xfApiSecretInput" placeholder="API Secret" autocomplete="off">
       </div>
-      <div class="push-token-row">
+      <div class="push-token-row" style="justify-content: flex-end;">
         <label class="xf-see-row"><input type="checkbox" id="xfSeeToggle" onchange="toggleXfyunSee()"><span style="font-size:13px;color:#b2bec3;">显示明文</span></label>
-        <button class="btn btn-primary" onclick="saveXfyunConfig()">保存语音配置</button>
+        <button class="btn btn-primary" onclick="saveXfyunConfig()">保存</button>
         <button class="btn" onclick="clearXfyunConfig()">清除</button>
       </div>
       <div class="push-token-hint" id="xfDefaultHint"></div>
@@ -972,10 +971,6 @@
         <button class="btn btn-primary" onclick="hideModal('manageModal');openSyncSettings()">同步设置</button>
         <button class="btn" onclick="syncPullAllAndRefresh()">立即同步</button>
       </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-primary" onclick="saveManage()">保存</button>
-      <button class="btn" onclick="hideModal('manageModal')">取消</button>
     </div>
   </div>
 </div>
@@ -1698,7 +1693,11 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
+let _addModalOpening = false;
 function openAddModal() {
+  if (_addModalOpening) return;
+  _addModalOpening = true;
+  setTimeout(() => { _addModalOpening = false; }, 400);
   addModalCategory = 'all';
   addSelectedSet = new Set();
   document.getElementById('addSearchInput').value = '';
@@ -2524,9 +2523,7 @@ function enableFastTap(el, handler) {
   }, { passive: false });
 }
 function bindFastTaps() {
-  // 添加按钮：触摸直发打开添加弹窗
-  enableFastTap(document.getElementById('fabBtn'), () => openAddModal());
-  // 底部导航：日报 / 历史 / 分析 / 管理
+  // 底部导航：日报 / 历史 / 分析 / 管理（添加按钮已在 HTML 内联 ontouchstart 兜底）
   const navs = { openReport: openReport, openHistory: openHistory, openAnalysis: openAnalysis, openManage: openManage };
   document.querySelectorAll('.nav-item').forEach(el => {
     const fn = el.getAttribute('onclick') || '';
