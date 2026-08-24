@@ -55,7 +55,7 @@
     position: relative; z-index:1;
     max-width: 480px; margin: 0 auto;
     min-height: 100vh;
-    padding: 10px 12px 120px;
+    padding: 10px 12px 150px;
   }
 
   .header {
@@ -1719,7 +1719,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.4.2 0824-1450'; // 修复同步salt自动检测与修复
+const APP_VERSION = 'v3.4.3 0824-1558'; // 修复statuses未定义/底部padding增加
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3029,6 +3029,7 @@ function dailyPoopInfo(ds) {
   // 返回 { count, statuses: [状态文字] }，无记录返回 null
   let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
   if (!Array.isArray(recs)) recs = [];
+  const statuses = [];
   recs.forEach(r => { if (r.type === 'poop') statuses.push(r.poopStatus || '正常'); });
   return statuses.length > 0 ? { count: statuses.length, statuses: statuses } : null;
 }
