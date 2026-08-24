@@ -288,23 +288,99 @@
   .fab-btn:active { color: #fff; border-color: #fff; }
   .fab-btn:active .fab-icon svg { stroke: #fff; }
 
+  /* ===== 语音按钮三态 =====
+     状态1 默认：底 #272C48 / 字 #B4C0E8，静态
+     状态2 按住(.holding)：底 #343B63 / 细高亮边 #6388FF / 字 #E0E8FF，图标放大，tip「松开结束录音」
+     状态3 录入中(.recording)：底 #422E4E / 呼吸光晕 + 5条竖纹声波，文字「录音中」
+     仅监听 touchstart/touchend，不支持 click */
   .voice-hold-btn {
+    position: relative;
     padding: 7px 18px 7px 12px; border-radius: 20px;
-    border: 1px solid #b2bec3;
-    background: transparent;
-    color: #b2bec3; font-size: 14px; font-weight: 600;
-    cursor: pointer; transition: all 0.2s;
+    border: 1px solid #272C48;
+    background: #272C48;
+    color: #B4C0E8; font-size: 14px; font-weight: 600;
     display: inline-flex; align-items: center; gap: 6px;
     user-select: none; -webkit-user-select: none;
-    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none; cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+    /* 呼吸光晕默认透明 */
+    box-shadow: 0 0 0 0 transparent;
+    animation: none;
   }
-  .voice-hold-btn:active { color: #fff; border-color: #fff; }
-  .voice-hold-btn.recording { color: #fff; border-color: #fff; }
   .voice-hold-btn .voice-icon {
     width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+    transition: transform 0.2s;
   }
-  .voice-hold-btn .voice-icon svg { width: 100%; height: 100%; fill: none; stroke: #b2bec3; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .voice-hold-btn:active .voice-icon svg, .voice-hold-btn.recording .voice-icon svg { stroke: #fff; }
+  .voice-hold-btn .voice-icon svg { width: 100%; height: 100%; fill: none; stroke: #B4C0E8; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .voice-hold-btn .voice-label { transition: color 0.2s; }
+
+  /* 状态2 按住：高亮边框 + 背景加深 + 图标放大 + tip */
+  .voice-hold-btn.holding {
+    background: #343B63;
+    border-color: #6388FF;
+    box-shadow: 0 0 0 1px #6388FF;
+  }
+  .voice-hold-btn.holding .voice-icon { transform: scale(1.15); }
+  .voice-hold-btn.holding .voice-icon svg { stroke: #E0E8FF; }
+  .voice-hold-btn.holding .voice-label { color: #E0E8FF; }
+
+  /* 状态3 录入中：呼吸光晕 + 声波，文字变「录音中」 */
+  .voice-hold-btn.recording {
+    background: #422E4E;
+    border-color: transparent;
+    color: #EC668C;
+    animation: voiceBreathe 1200ms ease-in-out infinite;
+  }
+  .voice-hold-btn.recording .voice-icon { display: none; }
+  .voice-hold-btn.recording .voice-label { color: #EC668C; }
+  /* 声波条（默认隐藏，录音中显示） */
+  .voice-hold-btn .voice-wave { display: none; }
+  .voice-hold-btn.recording .voice-wave {
+    display: inline-flex; align-items: center; gap: 3px; height: 16px;
+  }
+  .voice-hold-btn .voice-wave .vwb {
+    width: 3px; height: 6px; border-radius: 2px;
+    background: #EC668C;
+    animation: voiceBar 300ms ease-in-out infinite alternate;
+  }
+  .voice-hold-btn .voice-wave .vwb:nth-child(1) { animation-delay: 0ms; }
+  .voice-hold-btn .voice-wave .vwb:nth-child(2) { animation-delay: 60ms; }
+  .voice-hold-btn .voice-wave .vwb:nth-child(3) { animation-delay: 120ms; }
+  .voice-hold-btn .voice-wave .vwb:nth-child(4) { animation-delay: 180ms; }
+  .voice-hold-btn .voice-wave .vwb:nth-child(5) { animation-delay: 240ms; }
+
+  /* 呼吸光晕：周期1200ms，缩放0.8~1.15，透明度0.25~0.5 */
+  @keyframes voiceBreathe {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(236,102,140,0.25); }
+    50% { box-shadow: 0 0 0 14px rgba(236,102,140,0.5); }
+  }
+  /* 声波竖纹：高度0~16px */
+  @keyframes voiceBar {
+    0% { height: 3px; }
+    100% { height: 16px; }
+  }
+
+  /* tip：悬浮提示「松开结束录音」，绝对定位不占布局 */
+  .voice-hold-btn .voice-tip {
+    position: absolute;
+    bottom: calc(100% + 10px); left: 50%;
+    transform: translateX(-50%);
+    background: rgba(20,27,45,0.95);
+    border: 1px solid rgba(99,136,255,0.5);
+    color: #E0E8FF; font-size: 12px; font-weight: 500;
+    padding: 4px 10px; border-radius: 8px;
+    white-space: nowrap;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.15s;
+    z-index: 20;
+  }
+  .voice-hold-btn.holding .voice-tip { opacity: 1; }
+  .voice-hold-btn.holding .voice-tip::after {
+    content: ''; position: absolute; top: 100%; left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent; border-top-color: rgba(99,136,255,0.5);
+  }
 
   .voice-modal-top {
     background: rgba(255,255,255,0.05);
@@ -402,16 +478,18 @@
   }
   .btn {
     padding: 8px 18px; border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.2);
-    background: rgba(255,255,255,0.08);
-    color: #dfe6e9; font-size: 15px;
+    border: 1px solid #b2bec3;
+    background: transparent;
+    color: #b2bec3; font-size: 15px;
     cursor: pointer; transition: all 0.2s;
     display: inline-flex; align-items: center; gap: 4px;
   }
-  .btn:active { transform: scale(0.95); background: rgba(255,255,255,0.15); }
-  .btn-primary { background: rgba(100,149,237,0.25); border-color: rgba(100,149,237,0.4); }
-  .btn-success { background: rgba(46,204,113,0.2); border-color: rgba(46,204,113,0.4); font-size: 16px; }
-  .btn-success:active { background: rgba(46,204,113,0.35); }
+  .btn:active { transform: scale(0.95); color: #fff; border-color: #fff; }
+  /* 日报/管理/添加/编辑等弹窗按钮统一为灰色文字+外框风格（与添加、语音按钮一致） */
+  .btn-primary { background: transparent; border-color: #b2bec3; color: #b2bec3; }
+  .btn-primary:active { color: #fff; border-color: #fff; background: transparent; }
+  .btn-success { background: transparent; border-color: #b2bec3; color: #b2bec3; font-size: 16px; }
+  .btn-success:active { color: #fff; border-color: #fff; background: transparent; }
 
   /* ===== 添加弹窗 ===== */
   .add-search-wrap {
@@ -627,7 +705,8 @@
     border-radius: 6px; color: #fff; font-size: 13px;
     padding: 6px 8px; outline: none;
   }
-  .push-token-hint { font-size: 12px; color: #74b9ff; margin-top: 4px; font-style: italic; }
+  .push-token-hint { font-size: 12px; color: #b2bec3; margin-top: 4px; font-style: italic; }
+  .xf-see-row { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 
   .history-summary {
     display: flex; flex-direction: column; gap: 6px;
@@ -711,10 +790,12 @@
   }
   .copy-float .btn {
     box-shadow: 0 4px 14px rgba(0,0,0,0.45);
-    background: rgba(46,204,113,0.92);
-    border-color: rgba(46,204,113,0.5);
+    background: transparent;
+    border-color: #b2bec3;
+    color: #b2bec3;
     font-size: 15px; padding: 9px 22px;
   }
+  .copy-float .btn:active { color: #fff; border-color: #fff; background: transparent; }
   .chart-dot { cursor: pointer; }
   .chart-hit { cursor: pointer; }
   .bar-hit { cursor: pointer; }
@@ -771,15 +852,13 @@
       <span class="fab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></span>
       添加
     </button>
-    <button class="voice-hold-btn" id="voiceHoldBtn"
-      ontouchstart="event.preventDefault(); startVoiceHold();"
-      ontouchend="event.preventDefault(); stopVoiceHold();"
-      onmousedown="startVoiceHold();"
-      onmouseup="stopVoiceHold();"
-      onmouseleave="if(voiceRecActive) stopVoiceHold();"
-      title="按住说话">
+    <button class="voice-hold-btn" id="voiceHoldBtn" type="button" title="按住说话">
       <span class="voice-icon"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>
-      语音
+      <span class="voice-label">语音</span>
+      <span class="voice-wave" aria-hidden="true">
+        <span class="vwb" style="height:6px"></span><span class="vwb" style="height:12px"></span><span class="vwb" style="height:16px"></span><span class="vwb" style="height:10px"></span><span class="vwb" style="height:8px"></span>
+      </span>
+      <span class="voice-tip">松开结束录音</span>
     </button>
   </div>
   <div class="divider"></div>
@@ -861,7 +940,7 @@
     <div class="sync-section">
       <div class="cos-title">📮 订阅推送</div>
       <div class="push-token-row">
-        <input type="text" id="pushTopicInput" placeholder="群组编码" value="xiaogulu_daily">
+        <input type="text" id="pushTopicInput" placeholder="群组编码">
         <button class="btn btn-primary" onclick="savePushTopic()">保存</button>
       </div>
       <div class="push-token-hint">pushplus.plus → 发送消息 → 一对多消息 → 群组编码填到这里，家人扫码入群即可同步接收成就提醒</div>
@@ -869,19 +948,20 @@
     <div class="sync-section">
       <div class="cos-title">🎤 语音识别（讯飞）</div>
       <div class="push-token-row">
-        <input type="text" id="xfAppidInput" placeholder="APPID">
+        <input type="password" id="xfAppidInput" placeholder="APPID" autocomplete="off">
       </div>
       <div class="push-token-row">
-        <input type="text" id="xfApiKeyInput" placeholder="API Key">
+        <input type="password" id="xfApiKeyInput" placeholder="API Key" autocomplete="off">
       </div>
       <div class="push-token-row">
-        <input type="text" id="xfApiSecretInput" placeholder="API Secret">
+        <input type="password" id="xfApiSecretInput" placeholder="API Secret" autocomplete="off">
       </div>
       <div class="push-token-row">
+        <label class="xf-see-row"><input type="checkbox" id="xfSeeToggle" onchange="toggleXfyunSee()"><span style="font-size:13px;color:#b2bec3;">显示明文</span></label>
         <button class="btn btn-primary" onclick="saveXfyunConfig()">保存语音配置</button>
         <button class="btn" onclick="clearXfyunConfig()">清除</button>
       </div>
-      <div class="push-token-hint">国内手机推荐：讯飞开放平台 xfyun.cn 免费注册 → 创建应用 → 开通「语音听写（流式版）」→ 填入以上三个值。配置后语音功能走讯飞（国内直连，每天免费500次）；不填则使用浏览器自带语音（国内多不可用）</div>
+      <div class="push-token-hint" id="xfDefaultHint"></div>
     </div>
     <div class="manage-list" id="manageList"></div>
     <div class="custom-options-section" id="customOptionsSection"></div>
@@ -986,6 +1066,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="std-config.js"></script>
+<script src="app-config.js"></script>
 <script>
 const BIRTH_DATE = new Date(2026, 3, 25);
 const BABY_NAME = '小咕噜';
@@ -998,6 +1079,13 @@ function getAgeMonths(ds) {
 }
 // ---------- 月龄标准范围（0-24 月龄）：数据统一在 std-config.js 中配置 ----------
 const _STD = window.STD_CONFIG || {};
+// ---------- 应用默认配置（讯飞/推送/云端同步）：统一在 app-config.js 中配置 ----------
+const _APP = window.APP_CONFIG || {};
+const _DEFAULT_XFYUN = _APP.xfyun || null;
+const _DEFAULT_PUSHTOPIC = _APP.pushplusTopic || 'xiaogulu_daily';
+const _DEFAULT_SUPABASE_URL = (_APP.supabase && _APP.supabase.url) || '';
+const _DEFAULT_SUPABASE_KEY = (_APP.supabase && _APP.supabase.anonKey) || '';
+const _DEFAULT_FAMILY_CODE = _APP.familyCode || '';
 const MILK_STD = _STD.MILK_STD || [];
 const MILK_COUNT_STD = _STD.MILK_COUNT_STD || [];
 const SLEEP_STD = _STD.SLEEP_STD || [];
@@ -1096,6 +1184,7 @@ function init() {
   setInterval(() => { try { updateOverview(); } catch(e) { console.error(e); } }, 60000);
   setupPWA();
   initSync();
+  bindVoiceTouch();
   // 自动清理测试残留数据（仅一次， harmless）
   cleanupTestData();
   // 页面加载后检查喝奶提醒（已到时间则 toast，仅提醒一次）
@@ -1236,7 +1325,7 @@ async function notifyPushplus(title, content) {
   if (!token) { console.warn('PushPlus Token未配置，无法推送'); return false; }
   try {
     const payload = { token: token, title: title, content: content, template: 'html' };
-    const topic = localStorage.getItem('pushplus_topic') || 'xiaogulu_daily';
+    const topic = localStorage.getItem('pushplus_topic') || _DEFAULT_PUSHTOPIC;
     payload.topic = topic; // 默认按群组编码一对多推送
     const res = await fetch('https://www.pushplus.plus/send', {
       method: 'POST',
@@ -2048,17 +2137,24 @@ function getXfyunConfig() {
   const appid = localStorage.getItem('xfyun_appid');
   const apiKey = localStorage.getItem('xfyun_api_key');
   const apiSecret = localStorage.getItem('xfyun_api_secret');
+  // 本地有自定义配置则优先；否则回退到 app-config.js 的默认值（无需每次填写）
   if (appid && apiKey && apiSecret) return { appid: appid, apiKey: apiKey, apiSecret: apiSecret };
+  if (_DEFAULT_XFYUN && _DEFAULT_XFYUN.appid && _DEFAULT_XFYUN.apiKey && _DEFAULT_XFYUN.apiSecret) {
+    return { appid: _DEFAULT_XFYUN.appid, apiKey: _DEFAULT_XFYUN.apiKey, apiSecret: _DEFAULT_XFYUN.apiSecret };
+  }
   return null;
 }
 function saveXfyunConfig() {
   const appid = document.getElementById('xfAppidInput').value.trim();
   const apiKey = document.getElementById('xfApiKeyInput').value.trim();
   const apiSecret = document.getElementById('xfApiSecretInput').value.trim();
-  if (!appid || !apiKey || !apiSecret) { showToast('请填写完整的 APPID / API Key / API Secret'); return; }
+  // 三个都留空 = 使用 app-config.js 默认值，清除本地自定义
+  if (!appid && !apiKey && !apiSecret) { clearXfyunConfig(); return; }
+  if (!appid || !apiKey || !apiSecret) { showToast('请填写完整的 APPID / API Key / API Secret（或全部留空使用默认）'); return; }
   localStorage.setItem('xfyun_appid', appid);
   localStorage.setItem('xfyun_api_key', apiKey);
   localStorage.setItem('xfyun_api_secret', apiSecret);
+  loadXfyunConfigUI();
   showToast('语音配置已保存，语音将使用讯飞识别');
 }
 function clearXfyunConfig() {
@@ -2066,12 +2162,43 @@ function clearXfyunConfig() {
   localStorage.removeItem('xfyun_api_key');
   localStorage.removeItem('xfyun_api_secret');
   loadXfyunConfigUI();
-  showToast('已清除语音配置，改用浏览器自带语音');
+  showToast('已恢复默认语音配置');
 }
+// 显示/隐藏明文切换
+function toggleXfyunSee() {
+  const show = document.getElementById('xfSeeToggle').checked;
+  ['xfAppidInput', 'xfApiKeyInput', 'xfApiSecretInput'].forEach(id => {
+    const el = document.getElementById(id);
+    el.type = show ? 'text' : 'password';
+  });
+}
+// 回填 UI：本地有自定义则掩码展示；无则留空并提示已启用默认
 function loadXfyunConfigUI() {
-  document.getElementById('xfAppidInput').value = localStorage.getItem('xfyun_appid') || '';
-  document.getElementById('xfApiKeyInput').value = localStorage.getItem('xfyun_api_key') || '';
-  document.getElementById('xfApiSecretInput').value = localStorage.getItem('xfyun_api_secret') || '';
+  const appid = localStorage.getItem('xfyun_appid');
+  const apiKey = localStorage.getItem('xfyun_api_key');
+  const apiSecret = localStorage.getItem('xfyun_api_secret');
+  const el = id => document.getElementById(id);
+  const see = document.getElementById('xfSeeToggle');
+  if (see) see.checked = false;
+  // 本地无自定义 → 留空（默认值在 app-config.js），提示已生效
+  if (!(appid && apiKey && apiSecret)) {
+    el('xfAppidInput').value = '';
+    el('xfApiKeyInput').value = '';
+    el('xfApiSecretInput').value = '';
+    if (el('xfAppidInput')) el('xfAppidInput').type = 'password';
+    if (el('xfApiKeyInput')) el('xfApiKeyInput').type = 'password';
+    if (el('xfApiSecretInput')) el('xfApiSecretInput').type = 'password';
+    // 提示默认配置已生效（不显示明文，只显示已配置状态）
+    const hint = document.getElementById('xfDefaultHint');
+    if (hint) hint.textContent = _DEFAULT_XFYUN ? '已使用默认语音配置（留空即用，无需填写）。如需覆盖，请填写并保存。' : '未配置语音，请填写讯飞三要素（或使用默认）。';
+    return;
+  }
+  // 本地有自定义 → 掩码占位展示，切换「显示明文」才可见
+  el('xfAppidInput').value = '••••••';
+  el('xfApiKeyInput').value = '••••••';
+  el('xfApiSecretInput').value = '••••••';
+  const hint = document.getElementById('xfDefaultHint');
+  if (hint) hint.textContent = '已启用自定义语音配置（掩码显示）。勾选「显示明文」可查看/修改。';
 }
 // 构建带鉴权的 WebSocket URL（HMAC-SHA256 签名，讯飞 WebAPI 标准）
 async function buildXfyunUrl(cfg) {
@@ -2144,7 +2271,10 @@ async function startXfyunDictation() {
         data: { status: 0, format: 'audio/L16;rate=16000', encoding: 'raw', audio: '' }
       }));
       await startXfyunMic(sess);
+      // 讯飞识别已激活 → 切换到"录音中"态（状态3）
+      if (!_voiceHoldCanceled && voiceRecActive) setVoiceState('recording');
     } catch (e) {
+      disarmVoiceTimeout();
       showToast('无法访问麦克风：请检查浏览器录音权限');
       sess.endSent = true;
       finalizeXfyun(sess);
@@ -2237,10 +2367,47 @@ function stopXfyunDictation() {
   }
 }
 // 识别完成统一入口（Web Speech API 与讯飞共用）
-function finishVoiceRecognition() {
-  voiceRecActive = false;
+// 语音按钮三态切换：idle(默认) / holding(按住) / recording(录音中)
+let _voiceHoldCanceled = false;      // 本次按住是否被上滑取消
+let _voiceTimeoutTimer = null;       // 录音超时定时器
+const VOICE_MAX_SEC = 60;            // 单次录音上限（秒），超时自动结束
+const VOICE_LABEL = { idle: '语音', recording: '录音中' };
+function setVoiceState(state) {
   const btn = document.getElementById('voiceHoldBtn');
-  if (btn) btn.classList.remove('recording');
+  if (!btn) return;
+  btn.classList.toggle('holding', state === 'holding');
+  btn.classList.toggle('recording', state === 'recording');
+  const label = btn.querySelector('.voice-label');
+  if (label) label.textContent = (state === 'holding') ? '语音' : (VOICE_LABEL[state] || '语音');
+  if (state === 'idle') { if (label) label.textContent = '语音'; }
+}
+// 开始录音超时倒计时（到点自动结束录音）
+function armVoiceTimeout() {
+  clearTimeout(_voiceTimeoutTimer);
+  _voiceTimeoutTimer = setTimeout(() => { stopVoiceHold(); }, VOICE_MAX_SEC * 1000);
+}
+function disarmVoiceTimeout() { clearTimeout(_voiceTimeoutTimer); _voiceTimeoutTimer = null; }
+// 取消录音（上滑移出按钮或 touchcancel）：丢弃本次识别结果
+function cancelVoiceHold() {
+  disarmVoiceTimeout();
+  _voiceHoldCanceled = true;
+  const btn = document.getElementById('voiceHoldBtn');
+  if (btn) btn.classList.remove('holding', 'recording');
+  if (btn) { const l = btn.querySelector('.voice-label'); if (l) l.textContent = '语音'; }
+  voiceRecActive = false;
+  voiceFinalText = ''; voiceItems = [];
+  // 中止讯飞会话
+  if (xfSession) { try { xfSession.endSent = true; xfSession.finalized = true; try { xfSession.ws && xfSession.ws.close(); } catch(e){} try { xfSession.stream && xfSession.stream.getTracks().forEach(t=>t.stop()); } catch(e){} xfSession = null; } catch(e){} }
+  // 中止 Web Speech
+  if (voiceRecog) { try { voiceRecog.onend = null; voiceRecog.stop(); } catch (e) {} }
+  showToast('已取消录音');
+}
+
+function finishVoiceRecognition() {
+  disarmVoiceTimeout();
+  voiceRecActive = false;
+  setVoiceState('idle');
+  if (_voiceHoldCanceled) { _voiceHoldCanceled = false; return; }
   if (voiceFinalText) {
     const r = parseVoiceText(voiceFinalText);
     voiceItems = r.items;
@@ -2250,21 +2417,23 @@ function finishVoiceRecognition() {
 
 function startVoiceHold() {
   if (isReadOnlyMode()) return;
-  const btn = document.getElementById('voiceHoldBtn');
-  if (btn) btn.classList.add('recording');
   if (voiceRecActive) return;
+  _voiceHoldCanceled = false;
   voiceFinalText = '';
   voiceItems = [];
+  const btn = document.getElementById('voiceHoldBtn');
+  setVoiceState('holding'); // 状态2：先进入按住态（高亮边 + tip），等识别真正激活再切录音中
+  armVoiceTimeout();
   // 优先讯飞（国内直连可用）；未配置则回退浏览器自带 Web Speech API（海外可用）
   if (getXfyunConfig()) {
     voiceRecActive = true;
     startXfyunDictation().then(started => {
-      if (!started) { voiceRecActive = false; if (btn) btn.classList.remove('recording'); }
+      if (!started) { disarmVoiceTimeout(); voiceRecActive = false; setVoiceState('idle'); }
     });
     return;
   }
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showToast('当前浏览器不支持语音识别：请到「管理」页配置讯飞语音'); if (btn) btn.classList.remove('recording'); return; }
+  if (!SR) { disarmVoiceTimeout(); showToast('当前浏览器不支持语音识别：请到「管理」页配置讯飞语音'); if (btn) btn.classList.remove('holding', 'recording'); return; }
   try {
     voiceRecog = new SR();
     voiceRecog.lang = 'zh-CN'; voiceRecog.interimResults = true; voiceRecog.continuous = false; voiceRecog.maxAlternatives = 1;
@@ -2277,8 +2446,9 @@ function startVoiceHold() {
       voiceFinalText = (voiceFinalText + interim).trim();
     };
     voiceRecog.onerror = (e) => {
+      disarmVoiceTimeout();
       voiceRecActive = false;
-      if (btn) btn.classList.remove('recording');
+      setVoiceState('idle');
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') showToast('麦克风权限被拒：点地址栏左侧🔒→权限→麦克风→允许');
       else if (e.error === 'no-speech') showToast('没有听到声音');
       else if (e.error === 'network') showToast('语音服务连接失败：国内请在「管理」页配置讯飞语音');
@@ -2288,14 +2458,46 @@ function startVoiceHold() {
     voiceRecog.onend = finishVoiceRecognition;
     voiceRecog.start();
     voiceRecActive = true;
+    setVoiceState('recording'); // 状态3：录音中
   } catch (err) {
+    disarmVoiceTimeout();
     showToast('语音识别启动失败');
-    if (btn) btn.classList.remove('recording');
+    setVoiceState('idle');
   }
 }
 function stopVoiceHold() {
+  disarmVoiceTimeout();
+  if (_voiceHoldCanceled) return;
   if (xfSession) { stopXfyunDictation(); return; }
   if (voiceRecog && voiceRecActive) { try { voiceRecog.stop(); } catch (e) {} }
+}
+// 语音按钮触摸事件绑定（仅 touch，不支持 click；上滑移出=取消）
+function bindVoiceTouch() {
+  const btn = document.getElementById('voiceHoldBtn');
+  if (!btn) return;
+  let startY = 0, startX = 0, movedOut = false;
+  btn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const t = e.touches[0];
+    startX = t.clientX; startY = t.clientY; movedOut = false;
+    startVoiceHold();
+  }, { passive: false });
+  btn.addEventListener('touchmove', (e) => {
+    if (!voiceRecActive && !btn.classList.contains('holding') && !btn.classList.contains('recording')) return;
+    const t = e.touches[0];
+    const dx = t.clientX - startX, dy = t.clientY - startY;
+    // 判定是否滑出按钮区域（向上滑出或移出边界视为取消）
+    const r = btn.getBoundingClientRect();
+    const outX = t.clientX < r.left - 6 || t.clientX > r.right + 6;
+    const outY = t.clientY < r.top - 6 || t.clientY > r.bottom + 6;
+    if ((dy < -30) || outX || outY) { // 上滑>30px 或移出边界 → 取消
+      if (!movedOut) { movedOut = true; cancelVoiceHold(); }
+    } else { movedOut = false; }
+    e.preventDefault();
+  }, { passive: false });
+  const endVoice = (e) => { e.preventDefault(); if (voiceRecActive || btn.classList.contains('holding') || btn.classList.contains('recording')) { if (!_voiceHoldCanceled) stopVoiceHold(); } };
+  btn.addEventListener('touchend', endVoice, { passive: false });
+  btn.addEventListener('touchcancel', (e) => { e.preventDefault(); cancelVoiceHold(); }, { passive: false });
 }
 
 function showVoiceModal(rawText, unmatched) {
@@ -2517,7 +2719,7 @@ function openManage() {
   list.innerHTML = html;
   renderCustomOptionsSection();
   document.getElementById('readOnlyToggle').checked = isReadOnlyMode();
-  document.getElementById('pushTopicInput').value = localStorage.getItem('pushplus_topic') || 'xiaogulu_daily';
+  document.getElementById('pushTopicInput').value = localStorage.getItem('pushplus_topic') || _DEFAULT_PUSHTOPIC;
   loadXfyunConfigUI();
   updateReadOnlySlider();
   showModal('manageModal');
@@ -3047,8 +3249,9 @@ function showToast(msg, ms) { const toast = document.getElementById('toast'); to
 /* ==================== 云端同步模块 ==================== */
 
 // ---------- 配置 ----------
-const SYNC_CONFIG = { supabaseUrl: 'https://ectqfthdbqceifuprdjf.supabase.co', supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjdHFmdGhkYnFjZWlmdXByZGpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1MTMxODgsImV4cCI6MjEwMTA4OTE4OH0.-BMsuLZg2vXeNn9ml7sFQZEICGij0o8DBNPNt9Vau7s', pollInterval: 5*60*1000, historyDays: 30 };
-const PRESET_FAMILY_CODE = 'maowo3545';
+// Supabase 默认端点 / 家庭码统一在 app-config.js 中维护（不在代码里写死）
+const SYNC_CONFIG = { supabaseUrl: _DEFAULT_SUPABASE_URL, supabaseKey: _DEFAULT_SUPABASE_KEY, pollInterval: 5*60*1000, historyDays: 30 };
+const PRESET_FAMILY_CODE = _DEFAULT_FAMILY_CODE;
 let _cryptoKey = null, _cryptoFamilyCode = null, _isSyncing = false;
 
 function loadSyncConfig() {
