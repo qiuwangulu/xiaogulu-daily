@@ -108,16 +108,17 @@
     margin: 10px 0 14px;
     font-size: 15px;
   }
-  .overview-row { display: flex; gap: 24px; flex-wrap: wrap; justify-content: flex-start; margin-bottom: 8px; }
+  .overview-row { display: flex; gap: 24px; flex-wrap: nowrap; justify-content: space-between; margin-bottom: 8px; }
   .overview-row:last-child { margin-bottom: 0; }
-  .overview-item { display: flex; align-items: center; gap: 5px; }
+  .overview-item { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
   .overview-item .ov-icon { font-size: 15px; }
   .overview-item .ov-label { color: #fff; }
   .overview-item .ov-value { color: #fff; font-weight: 600; }
   .overview-item .ov-time { color: #fff; font-weight: 600; }
   .overview-item .ov-countdown { color: #55efc4; }
-  .overview-achievement { color: #fff; font-size: 15px; text-align: left; margin-top: 6px; display: flex; align-items: flex-start; gap: 5px; }
-  .overview-achievement .ov-icon { font-size: 15px; }
+  .overview-achievement { color: #fff; font-size: 15px; text-align: justify; text-align-last: left; margin-top: 6px; display: flex; align-items: flex-start; gap: 5px; }
+  .overview-achievement .ov-icon { font-size: 15px; flex-shrink: 0; }
+  .overview-achievement .ov-text { flex: 1; }
 
   /* ===== 分类侧边栏 ===== */
   .category-bar {
@@ -1455,9 +1456,9 @@ function updateOverview() {
 
   const achArr = computeAchievements(records);
   if (achArr.length > 0) {
-    html += `<div class="overview-achievement"><span class="ov-icon">🏆</span><span>今日成就: ${achArr.join(' | ')}</span></div>`;
+    html += `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text">今日成就: ${achArr.join(' | ')}</span></div>`;
   } else {
-    html += `<div class="overview-achievement"><span class="ov-icon">🏆</span><span>今日成就: 无</span></div>`;
+    html += `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text">今日成就: 无</span></div>`;
   }
 
   bar.innerHTML = html;
@@ -1722,7 +1723,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.4.6 0824-1810'; // PWA安装横幅：已安装自动隐藏+用户可手动关闭
+const APP_VERSION = 'v3.4.7 0824-1815'; // 总览排版：两端对齐+成就文字justify+不换行
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
