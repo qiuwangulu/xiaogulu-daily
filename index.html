@@ -198,15 +198,15 @@
     align-items: center;
   }
   .record-tag.newest {
-    background: rgba(46,204,113,0.25);
-    color: #ffffff;
-    font-weight: 500;
-    border: 1px solid rgba(46,204,113,0.5);
+    background: rgba(0,0,0,0.3);
+    color: #c8d6e5;
+    font-weight: 400;
+    border: 1px solid transparent;
     animation: tagFlash 0.8s ease;
   }
   @keyframes tagFlash {
-    0% { background: rgba(46,204,113,0.55); }
-    100% { background: rgba(46,204,113,0.2); }
+    0% { background: rgba(178,190,195,0.35); }
+    100% { background: rgba(0,0,0,0.3); }
   }
   .record-tag .rec-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
   .record-tag .rec-time { font-size: 13px; color: #74b9ff; white-space: nowrap; font-weight: 600; }
@@ -274,15 +274,15 @@
   /* ===== 底部操作按钮 ===== */
   .bottom-bar .fab-wrap { gap: 20px; }
   .fab-btn {
-    padding: 7px 18px 7px 12px; border-radius: 20px;
+    padding: 9px 22px 9px 15px; border-radius: 25px;
     border: 1px solid #b2bec3;
     background: #25375f;
     color: #b2bec3; font-size: 14px; font-weight: 600;
     cursor: pointer; transition: all 0.2s;
-    display: inline-flex; align-items: center; gap: 6px;
+    display: inline-flex; align-items: center; gap: 8px;
   }
   .fab-btn .fab-icon {
-    width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+    width: 25px; height: 25px; display: flex; align-items: center; justify-content: center;
   }
   .fab-btn .fab-icon svg { width: 100%; height: 100%; fill: none; stroke: #b2bec3; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .fab-btn:active { transform: scale(0.95); opacity: 0.85; }
@@ -294,11 +294,11 @@
      仅监听 touchstart/touchend，不支持 click */
   .voice-hold-btn {
     position: relative;
-    padding: 7px 18px 7px 12px; border-radius: 20px;
+    padding: 9px 22px 9px 15px; border-radius: 25px;
     border: 1px solid #b2bec3;
     background: #25375f;
     color: #b2bec3; font-size: 14px; font-weight: 600;
-    display: inline-flex; align-items: center; gap: 6px;
+    display: inline-flex; align-items: center; gap: 8px;
     user-select: none; -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
     touch-action: none; cursor: pointer;
@@ -308,7 +308,7 @@
     animation: none;
   }
   .voice-hold-btn .voice-icon {
-    width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+    width: 25px; height: 25px; display: flex; align-items: center; justify-content: center;
     transition: transform 0.2s;
   }
   .voice-hold-btn .voice-icon svg { width: 100%; height: 100%; fill: none; stroke: #b2bec3; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -396,10 +396,14 @@
     border-top: 1px solid rgba(255,255,255,0.08);
   }
   .voice-record-item {
-    display: flex; align-items: center; gap: 8px;
+    display: block;
     background: rgba(255,255,255,0.06);
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 10px; padding: 10px 12px; margin-top: 8px;
+  }
+  .voice-record-item .vri-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
   }
   .voice-record-item .vri-name { font-size: 14px; color: #fff; font-weight: 600; flex: 1; }
   .voice-record-item input.vri-num {
@@ -920,7 +924,7 @@
       <div class="voice-raw-label">识别描述</div>
       <div class="voice-raw-text" id="voiceRawText">（无）</div>
     </div>
-    <div id="voiceResultList"></div>
+    <div id="voiceResultList" class="add-inputs show"></div>
     <div class="voice-modal-actions">
       <button class="btn" onclick="clearVoiceModal()">清空</button>
       <button class="btn btn-success" id="voiceConfirmBtn" onclick="confirmVoiceAdd()" style="display:none;">确认添加</button>
@@ -1060,8 +1064,8 @@
     <div class="modal-title">✏️ 编辑记录</div>
     <div id="editFormContent" class="add-inputs show"></div>
     <div class="modal-actions">
-      <button class="btn btn-success" onclick="saveEditRecord()">保存</button>
       <button class="btn" onclick="hideModal('editModal')">取消</button>
+      <button class="btn btn-success" onclick="saveEditRecord()">确认</button>
     </div>
   </div>
 </div>
@@ -1703,7 +1707,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.3 0824-0946'; // 版本号（显示在管理弹窗顶部，用于确认缓存是否刷新）
+const APP_VERSION = 'v3.4 0824-1356'; // 版本号（显示在管理弹窗顶部，用于确认缓存是否刷新）
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -2360,7 +2364,7 @@ function finalizeXfyun(sess) {
   try { sess.ws && sess.ws.close(); } catch (e) {}
   try { sess.source && sess.source.disconnect(); } catch (e) {}
   try { sess.processor && sess.processor.disconnect(); } catch (e) {}
-  try { sess.audioCtx && sess.audioCtx.close(); } catch (e) {}
+  try { if (sess.audioCtx && sess.audioCtx.state !== 'closed') { const cp = sess.audioCtx.close(); if (cp && cp.catch) cp.catch(() => {}); } } catch (e) {}
   try { sess.stream && sess.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
   if (xfSession === sess) xfSession = null;
   finishVoiceRecognition();
@@ -2371,7 +2375,7 @@ function stopXfyunDictation() {
   if (!sess) return;
   try { sess.source && sess.source.disconnect(); } catch (e) {}
   try { sess.processor && sess.processor.disconnect(); } catch (e) {}
-  try { sess.audioCtx && sess.audioCtx.close(); } catch (e) {}
+  try { if (sess.audioCtx && sess.audioCtx.state !== 'closed') { const cp = sess.audioCtx.close(); if (cp && cp.catch) cp.catch(() => {}); } } catch (e) {}
   try { sess.stream && sess.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
   clearInterval(sess.sendTimer);
   sess.queue.length = 0;
@@ -2431,6 +2435,8 @@ function finishVoiceRecognition() {
     const r = parseVoiceText(voiceFinalText);
     voiceItems = r.items;
     showVoiceModal(voiceFinalText, r.unmatched);
+  } else {
+    showToast('未识别到语音，请靠近一点再试试');
   }
 }
 
@@ -2564,10 +2570,10 @@ function clearVoiceModal() {
 function voiceItemParamDef(item) {
   const p = item.params;
   if (p.milkAmount !== undefined) return { key: 'milkAmount', label: '奶量', value: p.milkAmount, unit: 'ml', min: 1, step: 1 };
-  if (p.duration !== undefined && (item.actId === 'sleep' || item.actId === 'outdoor' || item.actId === 'airButt')) return { key: 'duration', label: item.actId === 'sleep' ? '睡眠' : '时长', value: p.duration, unit: '分钟', min: 0, step: 1 };
+  if (p.duration !== undefined && (item.actId === 'sleep' || item.actId === 'outdoor' || item.actId === 'airButt')) return { key: 'duration', label: '时长', value: p.duration, unit: '分钟', min: 0, step: 1 };
   if (p.temperature !== undefined) return { key: 'temperature', label: '体温', value: p.temperature, unit: '℃', min: 30, step: 0.1 };
-  if (p.supplementAmount !== undefined) return { key: 'supplementAmount', label: '数量', value: p.supplementAmount, unit: '粒', min: 1, step: 1 };
-  if (p.vaccineDose !== undefined) return { key: 'vaccineDose', label: '第几针', value: p.vaccineDose, unit: '针', min: 1, step: 1 };
+  if (p.supplementAmount !== undefined) return { key: 'supplementAmount', label: '用量', value: p.supplementAmount, unit: '粒', min: 1, step: 1 };
+  if (p.vaccineDose !== undefined) return { key: 'vaccineDose', label: '第几剂', value: p.vaccineDose, unit: '剂', min: 1, step: 1 };
   return null;
 }
 function renderVoiceItems(unmatched) {
@@ -2587,13 +2593,21 @@ function renderVoiceItems(unmatched) {
       if (it.params.vaccineTypes && it.params.vaccineTypes.length) extra.push(it.params.vaccineTypes.join('+'));
       if (it.params.grossMotorItems && it.params.grossMotorItems.length) extra.push(it.params.grossMotorItems.join('+'));
       if (it.params.fineMotorItems && it.params.fineMotorItems.length) extra.push(it.params.fineMotorItems.join('+'));
+      // 时间与数值输入同添加弹窗：HH:MM 数字直填 + 参数行（时长类拆 h/min）
+      const [vhh, vmm] = (it.recTime || getNowTimeStr()).split(':').map(x => String(parseInt(x) || 0).padStart(2, '0'));
+      const isDur = pd && pd.key === 'duration';
+      const dh = isDur ? Math.floor((pd.value || 0) / 60) : 0;
+      const dm = isDur ? Math.round((pd.value || 0) % 60) : 0;
       html += `<div class="voice-record-item${it.warn ? ' vri-warn' : ''}">
-        <span class="vri-name">${it.icon} ${it.name}${extra.length ? '<span class="vri-unit"> · ' + extra.join(' · ') + '</span>' : ''}</span>
-        ${pd ? `<input class="vri-num" type="number" min="${pd.min}" step="${pd.step}" value="${pd.value}" id="vin_${i}" oninput="voiceItems[${i}].params.${pd.key} = (this.value === '' ? 0 : parseFloat(this.value))">` +
-          `<span class="vri-unit">${pd.unit}</span>` : ''}
-        <input class="vri-time" type="time" value="${it.recTime}" id="vit_${i}" onchange="voiceItems[${i}].recTime = this.value">
-        ${it.warn ? '<span class="vri-unit" style="color:#fd79a8;">待补</span>' : ''}
-        <span class="vri-del" onclick="voiceItems.splice(${i},1);renderVoiceItems();">&#10005;</span>
+        <div class="vri-head">
+          <span class="vri-name">${it.icon} ${it.name}${extra.length ? '<span class="vri-unit"> · ' + extra.join(' · ') + '</span>' : ''}</span>
+          ${it.warn ? '<span class="vri-unit" style="color:#fd79a8;">待补</span>' : ''}
+          <span class="vri-del" onclick="voiceItems.splice(${i},1);renderVoiceItems();">&#10005;</span>
+        </div>
+        <div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" min="0" max="23" value="${vhh}" id="vit_h_${i}"><span>:</span><input type="number" min="0" max="59" value="${vmm}" id="vit_m_${i}"></div></div>
+        ${isDur
+          ? `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">${pd.label}:</label><input type="number" min="0" id="vinh_${i}" value="${dh}" style="width:50px;"><span class="unit">h</span><input type="number" min="0" max="59" id="vinm_${i}" value="${dm}" style="width:50px;margin-left:8px;"><span class="unit">min</span></div>`
+          : (pd ? `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">${pd.label}:</label><input type="number" min="${pd.min}" step="${pd.step}" value="${pd.value != null ? pd.value : ''}" id="vin_${i}"><span class="unit">${pd.unit}</span></div>` : '')}
       </div>`;
     });
   }
@@ -2610,13 +2624,24 @@ function confirmVoiceAdd() {
   const records = getTodayRecords();
   const now = new Date(), ts = Date.now(), timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
   const newestIds = [];
-  // 读取卡片上可能被手动修改的值
+  // 读取卡片上可能被手动修改的值（时间 HH:MM 直填 + 数值/时长 h·min）
   voiceItems.forEach((it, i) => {
     const pd = voiceItemParamDef(it);
-    const nEl = document.getElementById('vin_' + i);
-    if (pd && nEl && nEl.value !== '' && !isNaN(parseFloat(nEl.value))) it.params[pd.key] = parseFloat(nEl.value);
-    const tEl = document.getElementById('vit_' + i);
-    if (tEl && tEl.value) it.recTime = tEl.value;
+    const hEl = document.getElementById('vit_h_' + i);
+    const mEl = document.getElementById('vit_m_' + i);
+    if (hEl && mEl) {
+      const hh = String(parseInt(hEl.value) || 0).padStart(2, '0');
+      const mm = String(parseInt(mEl.value) || 0).padStart(2, '0');
+      it.recTime = hh + ':' + mm;
+    }
+    if (pd && pd.key === 'duration') {
+      const dhEl = document.getElementById('vinh_' + i);
+      const dmEl = document.getElementById('vinm_' + i);
+      if (dhEl && dmEl) it.params.duration = (parseInt(dhEl.value) || 0) * 60 + (parseInt(dmEl.value) || 0);
+    } else if (pd) {
+      const nEl = document.getElementById('vin_' + i);
+      if (nEl && nEl.value !== '' && !isNaN(parseFloat(nEl.value))) it.params[pd.key] = parseFloat(nEl.value);
+    }
   });
   voiceItems.forEach(it => {
     const act = ACTIVITIES.find(a => a.id === it.actId); if (!act) return;
