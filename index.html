@@ -1904,7 +1904,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.11 0825-2035'; // 推送设置UI重组(token去保存钮/群组编码加密)+图表点空白取消标注
+const APP_VERSION = 'v3.5.12 0825-2055'; // WHO参考曲线3%/50%/75%数据点可点击显示标准值标注
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3490,6 +3490,15 @@ function makeLineChart(data, opts) {
       whoLines += `<path d="M${pts.join(' L')}" fill="none" stroke="${def.color}" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.8"/>`;
       const lastRow = whoPts[whoPts.length - 1].row;
       whoLines += `<text x="${(W - PR - 1).toFixed(1)}" y="${(yf(lastRow[def.key]) + def.dy).toFixed(1)}" fill="${def.color}" font-size="8.5" text-anchor="end" opacity="0.95">${def.label}</text>`;
+      // v3.5.12 WHO 参考值数据点：关键点（首末日+每月25号）渲染可见小圆点+透明命中区，点击显示该日标准值标注
+      whoPts.forEach(p => {
+        const x = xfT(p.t).toFixed(1), y = yf(p.row[def.key]).toFixed(1);
+        const dt = new Date(p.t);
+        const labelText = `${dt.getUTCMonth() + 1}/${dt.getUTCDate()}`;
+        const valText = `WHO ${def.label}: ${fmtV(p.row[def.key])}${unit}`;
+        whoLines += `<circle cx="${x}" cy="${y}" r="2.5" fill="${def.color}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
+          `<circle class="chart-hit" cx="${x}" cy="${y}" r="9" fill="transparent" data-cx="${x}" data-cy="${y}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
+      });
     });
   }
   return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
