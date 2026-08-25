@@ -1913,7 +1913,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.17 0825-2220'; // 折线图viewBox增宽(W360/PR42)给WHO标注留足右侧空间
+const APP_VERSION = 'v3.5.18 0825-2245'; // WHO图例移到标题行HTML(免SVG裁剪)，SVG内只留数据点+tooltip
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3380,6 +3380,14 @@ function makeLineChart(data, opts) {
   const tArr = data.map(d => d.t).filter(t => t != null);
   const hasT = tArr.length === n && n > 1 && Math.max(...tArr) > Math.min(...tArr);
   const tMin = hasT ? Math.min(...tArr) : 0, tMax = hasT ? Math.max(...tArr) : 1;
+  // v3.5.18 WHO 图例移到标题行（HTML，不受 SVG 裁剪），SVG 内只保留 WHO 数据点+tooltip
+  const whoLegend = opts.who && hasT
+    ? `<span style="float:right;font-size:10px;color:#b2bec3;margin-right:4px;">` +
+      `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#e87878;margin-right:2px;vertical-align:middle;"></span>3% ` +
+      `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#8a90a6;margin-right:2px;vertical-align:middle;"></span>50% ` +
+      `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#d4a03a;margin-right:2px;vertical-align:middle;"></span>75%</span>`
+    : '';
+  const head2 = `<div class="chart-card"><div class="chart-title">${title}${whoLegend}${zoomBtn}</div>`;
   // WHO 参考曲线关键点：两端日期 + 范围内每月25号（月龄切换日），每点按该日期月龄取 p3/p50/p75
   let whoPts = null;
   if (opts.who && hasT) {
@@ -3515,8 +3523,7 @@ function makeLineChart(data, opts) {
     lineDefs.forEach(def => {
       const pts = whoPts.map(p => `${xfT(p.t).toFixed(1)} ${yf(p.row[def.key]).toFixed(1)}`);
       whoLines += `<path d="M${pts.join(' L')}" fill="none" stroke="${def.color}" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.8"/>`;
-      const lastRow = whoPts[whoPts.length - 1].row;
-      whoLines += `<text x="${(W - PR - 30).toFixed(1)}" y="${(yf(lastRow[def.key]) + def.dy).toFixed(1)}" fill="${def.color}" font-size="8.5" text-anchor="end" opacity="0.95">${def.label}</text>`;
+      // v3.5.18：右端文字标注已移到标题行图例，SVG 内只保留 WHO 数据点+tooltip
       // v3.5.12 WHO 参考值数据点：关键点（首末日+每月25号）渲染可见小圆点+透明命中区，点击显示该日标准值标注
       whoPts.forEach(p => {
         const x = xfT(p.t).toFixed(1), y = yf(p.row[def.key]).toFixed(1);
@@ -3530,7 +3537,7 @@ function makeLineChart(data, opts) {
   }
   // v3.5.13 clipPath：绘图区裁剪（紧凑档下 WHO 参考线超出 Y 轴范围的部分不溢出图表）
   const clipId = 'cclip' + (++_chartTipSeq);
-  return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
+  return head2 + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
     `<defs><clipPath id="${clipId}"><rect x="${PL}" y="${PT}" width="${iw}" height="${ih}"/></clipPath></defs>` +
     grid + ylabels + xlabels +
     `<g clip-path="url(#${clipId})">` + whoBand + whoLines +
