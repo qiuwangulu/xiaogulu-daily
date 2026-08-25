@@ -65,19 +65,19 @@
   .header-left { flex:1; }
   .title {
     font-size: 24px; font-weight: 700;
-    color: #fff; text-align: center;
+    color: #fff; text-align: left;
     text-shadow: 0 0 10px rgba(255,255,255,0.3);
-    margin-bottom: 5px;
+    margin-bottom: 5px; padding-left: 2px;
   }
   .title .star { color: #f1c40f; font-size: 26px; }
   .age-info {
-    text-align: center; font-size: 15px;
+    text-align: left; font-size: 15px;
     color: #fff; letter-spacing: 0.5px;
   }
   .age-info .highlight { color: #ffeaa7; font-weight: 600; }
   .body-measure {
-    text-align: center; margin-top: 5px;
-    display: flex; align-items: center; justify-content: center; gap: 14px;
+    text-align: left; margin-top: 5px;
+    display: flex; align-items: center; justify-content: flex-start; gap: 14px;
   }
   .body-measure label { font-size: 15px; color: #fff; }
   .body-measure input {
@@ -85,7 +85,7 @@
     border-radius: 6px; color: #fff; font-size: 14px;
     padding: 4px 7px; width: 60px; outline: none;
   }
-  .body-measure .unit { font-size: 13px; color: #b2bec3; }
+  .body-measure .unit { font-size: 13px; color: #fff; }
 
   .photo-wrap {
     width: 112px; height: 112px;
@@ -118,7 +118,7 @@
   .overview-item .ov-countdown { color: #55efc4; }
   .overview-achievement { color: #fff; font-size: 15px; text-align: justify; text-align-last: left; margin-top: 6px; display: flex; align-items: flex-start; gap: 5px; }
   .overview-achievement .ov-icon { font-size: 15px; flex-shrink: 0; }
-  .overview-achievement .ov-text { flex: 1; }
+  .overview-achievement .ov-text { flex: 1; color: #ffeaa7; }
 
   /* ===== 分类侧边栏 ===== */
   .category-bar {
@@ -161,7 +161,7 @@
     -webkit-user-select: none;
   }
   .card.highlight {
-    animation: highlightAnim 1.2s ease;
+    animation: highlightAnim 3s ease;
     border-color: rgba(100,149,237,0.6);
   }
   @keyframes highlightAnim {
@@ -203,7 +203,7 @@
     color: #c8d6e5;
     font-weight: 400;
     border: 1px solid transparent;
-    animation: tagFlash 0.8s ease;
+    animation: tagFlash 3s ease;
   }
   @keyframes tagFlash {
     0% { background: rgba(178,190,195,0.35); }
@@ -891,10 +891,10 @@
       <div class="age-info" id="ageInfo">计算中...</div>
       <div class="body-measure">
         <label>高:</label>
-        <input type="number" step="0.1" id="heightInput" placeholder="0" onchange="saveHeight()">
+        <input type="number" step="0.1" id="heightInput" placeholder="" onchange="saveHeight()">
         <span class="unit">cm</span>
         <label>重:</label>
-        <input type="number" step="0.1" id="weightInput" placeholder="0" onchange="saveWeight()">
+        <input type="number" step="0.1" id="weightInput" placeholder="" onchange="saveWeight()">
         <span class="unit">kg</span>
       </div>
     </div>
@@ -1866,7 +1866,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.0 0825-1330'; // 自绘日历/语音波纹蓝/管理加密/推送去重/10项UI
+const APP_VERSION = 'v3.5.1 0825-1500'; // 成就黄色/单位白色/标题左对齐/高亮3s
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
