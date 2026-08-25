@@ -1131,8 +1131,8 @@
       <label>设备昵称（可选）</label>
       <input type="text" id="deviceNameInput" placeholder="如：妈妈的手机">
     </div>
-    <div class="sync-config-row" style="justify-content: flex-end;">
-      <label class="xf-see-row" style="display:inline-flex !important;"><input type="checkbox" id="syncSeeToggle" onchange="toggleSyncSee()" style="accent-color:#74b9ff;"><span style="font-size:13px;color:#b2bec3;">显示明文</span></label>
+    <div class="sync-config-row" style="display:flex;justify-content:flex-end;">
+      <label class="xf-see-row" style="display:inline-flex !important;white-space:nowrap;"><input type="checkbox" id="syncSeeToggle" onchange="toggleSyncSee()" style="accent-color:#74b9ff;"><span style="font-size:13px;color:#b2bec3;white-space:nowrap;">显示明文</span></label>
     </div>
     <div class="sync-hint">
       <b>说明：</b>家庭码用于加密，所有数据端到端加密后上传，外人即使获取数据库也无法解密。家人输入同一家庭码即可共享。请牢记家庭码，<b>丢失后数据无法恢复</b>。
@@ -1913,7 +1913,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.15 0825-2145'; // 修复WHO标注再左移+同步设置label强制inline-flex
+const APP_VERSION = 'v3.5.16 0825-2157'; // WHO标注再左移+同步设置flex容器+文字nowrap
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3516,7 +3516,7 @@ function makeLineChart(data, opts) {
       const pts = whoPts.map(p => `${xfT(p.t).toFixed(1)} ${yf(p.row[def.key]).toFixed(1)}`);
       whoLines += `<path d="M${pts.join(' L')}" fill="none" stroke="${def.color}" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.8"/>`;
       const lastRow = whoPts[whoPts.length - 1].row;
-      whoLines += `<text x="${(W - PR - 30).toFixed(1)}" y="${(yf(lastRow[def.key]) + def.dy).toFixed(1)}" fill="${def.color}" font-size="8.5" text-anchor="end" opacity="0.95">${def.label}</text>`;
+      whoLines += `<text x="${(W - PR - 55).toFixed(1)}" y="${(yf(lastRow[def.key]) + def.dy).toFixed(1)}" fill="${def.color}" font-size="8.5" text-anchor="end" opacity="0.95">${def.label}</text>`;
       // v3.5.12 WHO 参考值数据点：关键点（首末日+每月25号）渲染可见小圆点+透明命中区，点击显示该日标准值标注
       whoPts.forEach(p => {
         const x = xfT(p.t).toFixed(1), y = yf(p.row[def.key]).toFixed(1);
