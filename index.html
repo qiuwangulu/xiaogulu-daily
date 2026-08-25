@@ -1876,7 +1876,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.9 0825-1650'; // 修复体重/身高曲线当天点被去重丢失
+const APP_VERSION = 'v3.5.10 0825-1940'; // 启动自动双向同步：云端新则拉取(含备份)，本地新则反推云端
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -4088,16 +4088,19 @@ async function initSync() {
       } catch (e) { console.warn('salt同步失败:', e); }
     }
     updateSyncUI();
-    // v3.5.5 安全修复：启动时不再自动 syncPullAll，避免云端"陈旧/测试残留"记录覆盖本地真实数据
-    // 如需拉取云端数据，必须由用户在「管理」→「立即同步」手动触发（syncPullAllAndRefresh）
-    // 这里只确保 salt 正确（首次加入家庭时必须），不下载任何记录
+    // v3.5.10 启动自动双向同步：复用 syncPullAll 内置的冲突判定与 v3.5.6 备份保护
+    // - cloudTs > localTs：拉取云端覆盖本地（覆盖前自动备份 records_<ds>_bak）
+    // - localTs > cloudTs：本地有未上传修改 → 自动反推云端（满足"家人打开即看到更新"+"本地修改自动同步"）
+    // - 相等或无云端记录：不动，保留本地
+    // 安全前提：syncPullAll 内部已有备份+冲突判定，此调用不绕过任何防护
+    try { await syncPullAll(); } catch (e) { console.warn('启动自动同步失败:', e); }
     return;
   }
   showFamilySetup();
 }
 function setupSyncListeners() {
-  // 自动同步已禁用（防止测试/异常环境覆盖云端数据）
-  // 如需同步，请手动点击「管理」→「立即同步」
+  // v3.5.10：启动自动双向同步已在 initSync() 内调用 syncPullAll()（含备份+冲突保护）
+  // 以下定时/visibility 同步仍保持禁用，避免高频拉取增加云端冲突风险；启动一次足够
   // document.addEventListener('visibilitychange', () => { if (!document.hidden && isSyncReady()) syncPullAll(); });
   // window.addEventListener('online', () => { if (isSyncReady()) { flushSyncQueue(); syncPullAll(); } });
   // setInterval(() => { if (isSyncReady() && navigator.onLine) syncPullAll(); }, SYNC_CONFIG.pollInterval);
