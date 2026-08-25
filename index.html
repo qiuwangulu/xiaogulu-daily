@@ -873,6 +873,15 @@
   .bar-hit { cursor: pointer; }
   .bar-rect { transition: opacity 0.15s; }
   .bar-rect:hover, .bar-hit:hover + .bar-rect { opacity: 0.75; }
+  /* v3.5.13 图表 Y 轴档位切换按钮（标题行右侧） */
+  .chart-zoom-btn {
+    float: right; font-size: 10px; line-height: 16px;
+    color: #74b9ff; background: rgba(116,185,255,0.12);
+    border: 1px solid rgba(116,185,255,0.35);
+    border-radius: 8px; padding: 1px 8px; margin-right: 4px;
+    cursor: pointer; user-select: none;
+  }
+  .chart-zoom-btn:active { opacity: 0.8; }
 
   .toast {
     position: fixed; top: 50%; left: 50%;
@@ -1904,7 +1913,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.12 0825-2055'; // WHO参考曲线3%/50%/75%数据点可点击显示标准值标注
+const APP_VERSION = 'v3.5.13 0825-2110'; // 体重/身高趋势Y轴档位切换(紧凑数据档/全量档+WHO裁剪)
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3349,10 +3358,20 @@ function dailyPoopInfo(ds) {
 }
 // 通用折线图（内联SVG，无外部依赖；点击数据点显示横纵坐标）
 let _chartTipSeq = 0;
+// v3.5.13 图表 Y 轴档位状态：compact/undefined=紧凑档（数据范围），full=全量档（含 WHO 参考线）
+let _chartZoomState = {};
+function toggleChartZoom(chartTitle) {
+  _chartZoomState[chartTitle] = (_chartZoomState[chartTitle] === 'full') ? 'compact' : 'full';
+  openAnalysis(); // 重新渲染分析弹窗
+}
 function makeLineChart(data, opts) {
   const title = opts.title, unit = opts.unit || '', color = opts.color || '#74b9ff';
   const valid = data.filter(d => d.value != null);
-  const head = `<div class="chart-card"><div class="chart-title">${title}</div>`;
+  // v3.5.13 档位切换按钮（仅配置 zoomTiers 的图表显示；显示当前档位，点击切换）
+  const zoomBtn = opts.zoomTiers
+    ? `<span class="chart-zoom-btn" onclick="event.stopPropagation();toggleChartZoom('${title.replace(/'/g, "\\'")}')">${_chartZoomState[title] === 'full' ? '全量' : '数据'}</span>`
+    : '';
+  const head = `<div class="chart-card"><div class="chart-title">${title}${zoomBtn}</div>`;
   if (valid.length === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
   const W = 330, H = 168, PL = 40, PR = 12, PT = 22, PB = 24;
   const iw = W - PL - PR, ih = H - PT - PB;
@@ -3381,11 +3400,19 @@ function makeLineChart(data, opts) {
     addWhoPt(tMax);
     whoPts = whoPts.filter((p, i) => i === 0 || p.t !== whoPts[i - 1].t); // 去重（末端恰为25号）
   }
-  // 纵坐标：可自定义 minV/tickStep/labelColor，否则按数据自动；WHO 参考曲线值纳入范围
+  // 纵坐标：v3.5.13 紧凑档（zoomTiers，默认）只按数据范围取轴；全量档含 WHO 参考曲线值
   const dataMax = Math.max(...valid.map(d => d.value));
   const dataMin = Math.min(...valid.map(d => d.value));
+  const compactMode = opts.zoomTiers && _chartZoomState[title] !== 'full';
   let min, max, ticks;
-  if (opts.yMin !== undefined && opts.yStep) {
+  if (compactMode) {
+    // 紧凑档：从 zoomTiers.min 到数据最大值所在档位，间隔 zoomTiers.step；WHO 线超出部分由 clipPath 裁剪
+    min = opts.zoomTiers.min;
+    max = Math.ceil(dataMax / opts.zoomTiers.step) * opts.zoomTiers.step;
+    if (max <= min) max = min + opts.zoomTiers.step;
+    ticks = [];
+    for (let v = min; v <= max + 0.0001; v += opts.zoomTiers.step) ticks.push(Math.round(v * 100) / 100);
+  } else if (opts.yMin !== undefined && opts.yStep) {
     min = opts.yMin;
     max = Math.ceil(dataMax / opts.yStep) * opts.yStep;
     if (max <= dataMax) max += opts.yStep;
@@ -3501,10 +3528,14 @@ function makeLineChart(data, opts) {
       });
     });
   }
+  // v3.5.13 clipPath：绘图区裁剪（紧凑档下 WHO 参考线超出 Y 轴范围的部分不溢出图表）
+  const clipId = 'cclip' + (++_chartTipSeq);
   return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
-    whoBand + grid + ylabels + xlabels + whoLines +
+    `<defs><clipPath id="${clipId}"><rect x="${PL}" y="${PT}" width="${iw}" height="${ih}"/></clipPath></defs>` +
+    grid + ylabels + xlabels +
+    `<g clip-path="url(#${clipId})">` + whoBand + whoLines +
     `<path d="${path.trim()}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` +
-    dots + tip + `</svg></div>`;
+    dots + `</g>` + tip + `</svg></div>`;
 }
 // 点击数据点显示/隐藏横纵坐标浮层（同一点再点隐藏）
 function chartTip(hitEl, tipId, label, valueText) {
@@ -3660,8 +3691,8 @@ function openAnalysis() {
   html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
   html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
   html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
-  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT } });
-  html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT } });
+  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT }, zoomTiers: { min: 3, step: 1 } });
+  html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT }, zoomTiers: { min: 50, step: 5 } });
   content.innerHTML = html;
   bindChartTipDismiss();
   showModal('analysisModal');
