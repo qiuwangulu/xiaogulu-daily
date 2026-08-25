@@ -72,14 +72,14 @@
   .title .star { color: #f1c40f; font-size: 26px; }
   .age-info {
     text-align: center; font-size: 15px;
-    color: #c8d6e5; letter-spacing: 0.5px;
+    color: #fff; letter-spacing: 0.5px;
   }
   .age-info .highlight { color: #ffeaa7; font-weight: 600; }
   .body-measure {
     text-align: center; margin-top: 5px;
     display: flex; align-items: center; justify-content: center; gap: 14px;
   }
-  .body-measure label { font-size: 15px; color: #b2bec3; }
+  .body-measure label { font-size: 15px; color: #fff; }
   .body-measure input {
     background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15);
     border-radius: 6px; color: #fff; font-size: 14px;
@@ -113,8 +113,8 @@
   .overview-item { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
   .overview-item .ov-icon { font-size: 15px; }
   .overview-item .ov-label { color: #fff; }
-  .overview-item .ov-value { color: #fff; font-weight: 600; }
-  .overview-item .ov-time { color: #fff; font-weight: 600; }
+  .overview-item .ov-value { color: #ffeaa7; font-weight: 600; }
+  .overview-item .ov-time { color: #ffeaa7; font-weight: 600; }
   .overview-item .ov-countdown { color: #55efc4; }
   .overview-achievement { color: #fff; font-size: 15px; text-align: justify; text-align-last: left; margin-top: 6px; display: flex; align-items: flex-start; gap: 5px; }
   .overview-achievement .ov-icon { font-size: 15px; flex-shrink: 0; }
@@ -273,7 +273,7 @@
   .fab-btn:active { transform: scale(0.95); opacity: 0.9; }
 
   /* ===== 底部操作按钮 ===== */
-  .bottom-bar .fab-wrap { gap: 20px; }
+  .bottom-bar .fab-wrap { gap: 40px; }
   .fab-btn {
     padding: 9px 22px 9px 15px; border-radius: 25px;
     border: 1px solid #b2bec3;
@@ -325,23 +325,23 @@
   .voice-hold-btn.holding .voice-icon svg { stroke: #E0E8FF; }
   .voice-hold-btn.holding .voice-label { color: #E0E8FF; }
 
-  /* 状态3 录入中：呼吸光晕 + 声波，文字变「录音中」 */
+  /* 状态3 录入中：呼吸光晕 + 声波，文字变「录音中」（蓝色波纹/光晕，范围扩大1倍） */
   .voice-hold-btn.recording {
-    background: #422E4E;
+    background: #1e3a5f;
     border-color: transparent;
-    color: #EC668C;
+    color: #74b9ff;
     animation: voiceBreathe 1200ms ease-in-out infinite;
   }
   .voice-hold-btn.recording .voice-icon { display: none; }
-  .voice-hold-btn.recording .voice-label { color: #EC668C; }
+  .voice-hold-btn.recording .voice-label { color: #74b9ff; }
   /* 声波条（默认隐藏，录音中显示） */
   .voice-hold-btn .voice-wave { display: none; }
   .voice-hold-btn.recording .voice-wave {
-    display: inline-flex; align-items: center; gap: 3px; height: 32px;
+    display: inline-flex; align-items: center; gap: 4px; height: 64px;
   }
   .voice-hold-btn .voice-wave .vwb {
-    width: 3px; height: 6px; border-radius: 2px;
-    background: #EC668C;
+    width: 4px; height: 8px; border-radius: 2px;
+    background: #74b9ff;
     animation: voiceBar 300ms ease-in-out infinite alternate;
   }
   .voice-hold-btn .voice-wave .vwb:nth-child(1) { animation-delay: 0ms; }
@@ -350,15 +350,15 @@
   .voice-hold-btn .voice-wave .vwb:nth-child(4) { animation-delay: 180ms; }
   .voice-hold-btn .voice-wave .vwb:nth-child(5) { animation-delay: 240ms; }
 
-  /* 呼吸光晕：周期1200ms，缩放0.8~1.15，透明度0.25~0.5（面积放大2倍便于看清） */
+  /* 呼吸光晕：周期1200ms，范围 16px→56px（扩大1倍便于看清） */
   @keyframes voiceBreathe {
-    0%, 100% { box-shadow: 0 0 0 8px rgba(236,102,140,0.25); }
-    50% { box-shadow: 0 0 0 28px rgba(236,102,140,0.5); }
+    0%, 100% { box-shadow: 0 0 0 16px rgba(116,185,255,0.25); }
+    50% { box-shadow: 0 0 0 56px rgba(116,185,255,0.5); }
   }
-  /* 声波竖纹：高度0~32px（放大2倍便于看清） */
+  /* 声波竖纹：高度8~64px（扩大1倍便于看清） */
   @keyframes voiceBar {
-    0% { height: 6px; }
-    100% { height: 32px; }
+    0% { height: 8px; }
+    100% { height: 64px; }
   }
 
   /* tip：悬浮提示「松开结束录音」，绝对定位不占布局 */
@@ -649,13 +649,55 @@
     display: flex; gap: 10px; align-items: center;
     margin-bottom: 16px; justify-content: center;
   }
-  .history-date-row input[type="date"] {
-    background: rgba(0,0,0,0.25);
-    border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 8px; color: #fff;
-    padding: 8px 12px; font-size: 16px;
-    color-scheme: dark;
+  .history-date-row input[type="date"] { display: none; }
+  /* 自绘日期选择器 */
+  .dp-month-nav {
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 4px 0 10px;
   }
+  .dp-month-nav .dp-month-label {
+    font-size: 17px; font-weight: 600; color: #74b9ff;
+  }
+  .dp-nav-btn {
+    background: rgba(116,185,255,0.15); color: #74b9ff;
+    border: 1px solid rgba(116,185,255,0.4); border-radius: 8px;
+    width: 36px; height: 36px; font-size: 20px; cursor: pointer;
+  }
+  .dp-nav-btn:active { background: rgba(116,185,255,0.3); }
+  .dp-weekdays {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    gap: 4px; margin-bottom: 6px;
+    font-size: 12px; color: #b2bec3; text-align: center;
+  }
+  .dp-grid {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    gap: 4px; margin-bottom: 12px;
+  }
+  .dp-cell {
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.05); color: #fff;
+    border-radius: 8px; font-size: 14px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .dp-cell.outside { color: rgba(255,255,255,0.2); background: transparent; }
+  .dp-cell.today { border-color: #74b9ff; }
+  .dp-cell.selected { background: #74b9ff; color: #fff; font-weight: 700; }
+  .dp-cell:active { background: rgba(116,185,255,0.4); }
+  .dp-cell.selected:active { background: #5fa8e0; }
+  .dp-quick { display: flex; gap: 6px; margin-bottom: 14px; justify-content: center; flex-wrap: wrap; }
+  .dp-quick-btn {
+    padding: 6px 12px; font-size: 13px; color: #b2bec3;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 16px;
+    cursor: pointer;
+  }
+  .dp-quick-btn:active { background: rgba(116,185,255,0.25); color: #74b9ff; }
+  .dp-footer { display: flex; gap: 10px; justify-content: flex-end; }
+  .dp-confirm {
+    background: #74b9ff !important; color: #fff !important;
+    border-color: #74b9ff !important; font-weight: 600;
+  }
+  .dp-confirm:active { background: #5fa8e0 !important; }
   .history-list { max-height: 50vh; overflow-y: auto; }
   .history-record {
     background: rgba(255,255,255,0.04);
@@ -717,6 +759,20 @@
   }
   .push-token-hint { font-size: 12px; color: #b2bec3; margin-top: 4px; font-style: italic; }
   .xf-see-row { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+  /* 讯飞配置行：左 label + 右 input（label 固定宽度对齐） */
+  .xf-config-row {
+    display: flex; align-items: center; gap: 8px; margin-top: 8px;
+  }
+  .xf-config-row label {
+    flex-shrink: 0; min-width: 78px;
+    font-size: 13px; color: #b2bec3; text-align: right;
+  }
+  .xf-config-row input {
+    flex: 1; background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px; color: #fff; font-size: 13px;
+    padding: 6px 8px; outline: none;
+  }
 
   .history-summary {
     display: flex; flex-direction: column; gap: 6px;
@@ -909,11 +965,38 @@
     <button class="modal-close" onclick="hideModal('historyModal')">&times;</button>
     <div class="modal-title">&#128197; 历史记录</div>
     <div class="history-date-row">
-      <input type="date" id="historyDate" onchange="loadHistory()">
+      <button class="btn btn-primary" onclick="openHistoryDatePicker()" id="historyDatePickerBtn">📅 选择日期</button>
+      <input type="hidden" id="historyDate">
       <button class="btn btn-primary" onclick="backToToday()">返回今天</button>
     </div>
     <div class="history-summary" id="historySummary" style="display:none;"></div>
     <div class="history-list" id="historyList"></div>
+  </div>
+</div>
+<!-- 自绘日期选择器（替代系统 picker，蓝色头部 + 蓝色"确定"按钮） -->
+<div class="modal-overlay" id="historyDatePickerModal" onclick="closeModal(event,'historyDatePickerModal')">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:380px;">
+    <button class="modal-close" onclick="hideModal('historyDatePickerModal')">&times;</button>
+    <div class="modal-title" style="color:#74b9ff;">📅 选择日期</div>
+    <div class="dp-month-nav">
+      <button class="dp-nav-btn" onclick="dpNavMonth(-1)">‹</button>
+      <div class="dp-month-label" id="dpMonthLabel"></div>
+      <button class="dp-nav-btn" onclick="dpNavMonth(1)">›</button>
+    </div>
+    <div class="dp-weekdays">
+      <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+    </div>
+    <div class="dp-grid" id="dpGrid"></div>
+    <div class="dp-quick">
+      <button class="dp-quick-btn" onclick="dpPickQuick(0)">今天</button>
+      <button class="dp-quick-btn" onclick="dpPickQuick(1)">昨天</button>
+      <button class="dp-quick-btn" onclick="dpPickQuick(2)">前天</button>
+      <button class="dp-quick-btn" onclick="dpPickQuick(7)">上周</button>
+    </div>
+    <div class="dp-footer">
+      <button class="btn" onclick="hideModal('historyDatePickerModal')">取消</button>
+      <button class="btn btn-primary dp-confirm" onclick="confirmHistoryDatePicker()" id="dpConfirmBtn">确定</button>
+    </div>
   </div>
 </div>
 <!-- 语音识别弹窗 -->
@@ -950,27 +1033,25 @@
     </div>
     <div class="sync-section">
       <div class="cos-title">📮 订阅推送</div>
-      <div class="push-token-row">
-        <input type="text" id="pushTopicInput" placeholder="群组编码">
+      <div class="xf-config-row"><label>创建者 token:</label><input type="password" id="pushTokenInput" placeholder="pushplus token" autocomplete="off"></div>
+      <div class="push-token-row" style="justify-content: flex-end;">
+        <label class="xf-see-row"><input type="checkbox" id="pushTokenSee" onchange="togglePushTokenSee()"><span style="font-size:13px;color:#b2bec3;">显示明文</span></label>
+        <button class="btn btn-primary" onclick="savePushToken()">保存</button>
+      </div>
+      <div class="xf-config-row"><label>群组编码:</label><input type="text" id="pushTopicInput" placeholder="群组编码"></div>
+      <div class="push-token-row" style="justify-content: flex-end;">
         <button class="btn btn-primary" onclick="savePushTopic()">保存</button>
       </div>
       <div class="push-token-hint">pushplus.plus → 发送消息 → 一对多消息 → 群组编码填到这里，家人扫码入群即可同步接收成就提醒</div>
     </div>
     <div class="sync-section">
-      <div class="cos-title">🎤 语音识别（讯飞）</div>
-      <div class="push-token-row">
-        <input type="password" id="xfAppidInput" placeholder="APPID" autocomplete="off">
-      </div>
-      <div class="push-token-row">
-        <input type="password" id="xfApiKeyInput" placeholder="API Key" autocomplete="off">
-      </div>
-      <div class="push-token-row">
-        <input type="password" id="xfApiSecretInput" placeholder="API Secret" autocomplete="off">
-      </div>
+      <div class="cos-title">🎤 语音识别</div>
+      <div class="xf-config-row"><label>APP ID:</label><input type="password" id="xfAppidInput" placeholder="APP ID" autocomplete="off"></div>
+      <div class="xf-config-row"><label>API Key:</label><input type="password" id="xfApiKeyInput" placeholder="API Key" autocomplete="off"></div>
+      <div class="xf-config-row"><label>API Secret:</label><input type="password" id="xfApiSecretInput" placeholder="API Secret" autocomplete="off"></div>
       <div class="push-token-row" style="justify-content: flex-end;">
         <label class="xf-see-row"><input type="checkbox" id="xfSeeToggle" onchange="toggleXfyunSee()"><span style="font-size:13px;color:#b2bec3;">显示明文</span></label>
         <button class="btn btn-primary" onclick="saveXfyunConfig()">保存</button>
-        <button class="btn" onclick="clearXfyunConfig()">清除</button>
       </div>
       <div class="push-token-hint" id="xfDefaultHint"></div>
     </div>
@@ -1030,6 +1111,9 @@
     <div class="sync-config-row">
       <label>设备昵称（可选）</label>
       <input type="text" id="deviceNameInput" placeholder="如：妈妈的手机">
+    </div>
+    <div class="sync-config-row" style="flex-direction:row;align-items:center;justify-content:flex-end;gap:6px;">
+      <label style="flex:0 0 auto;font-size:13px;color:#b2bec3;"><input type="checkbox" id="syncSeeToggle" onchange="toggleSyncSee()" style="accent-color:#74b9ff;"> 显示明文</label>
     </div>
     <div class="sync-hint">
       <b>说明：</b>家庭码用于加密，所有数据端到端加密后上传，外人即使获取数据库也无法解密。家人输入同一家庭码即可共享。请牢记家庭码，<b>丢失后数据无法恢复</b>。
@@ -1239,16 +1323,21 @@ function getTodayKey() {
   return `records_${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 function getDateKey(ds) { return `records_${ds}`; }
-function checkDateReset() {
+function checkDateReset(opts) {
   const t = effectiveNow();
-  localStorage.setItem('lastActiveDate', `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`);
+  const today = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  const last = localStorage.getItem('lastActiveDate');
+  localStorage.setItem('lastActiveDate', today);
+  // 跨日（last 存在且与今天不同）才清推送集合；仅是 init 启动记录 today 不清
+  if (opts && opts.force) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); return; }
+  if (last && last !== today) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); }
 }
 function setupMidnightReset() {
   // 定时到下一个凌晨 1:00 触发日切重置（当日重置时间为 1:00）
   const now = new Date();
   let next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 1, 0, 0);
   if (next <= now) next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 1, 0, 0);
-  setTimeout(() => { checkDateReset(); renderCards(); updateAgeInfo(); updateOverview(); setupMidnightReset(); }, next - now);
+  setTimeout(() => { checkDateReset({force:true}); renderCards(); updateAgeInfo(); updateOverview(); setupMidnightReset(); }, next - now);
 }
 
 function handlePhotoUpload(e) {
@@ -1340,7 +1429,42 @@ function savePushTopic() {
   if (!topic) { showToast('请填写群组编码'); return; }
   localStorage.setItem('pushplus_topic', topic);
   localStorage.removeItem('pushAchSig');
+  localStorage.removeItem('pushAchSet');
   showToast('群组编码已保存');
+}
+// ---------- 推送：创建者 token 加密显示与保存（样式同讯飞） ----------
+function savePushToken() {
+  const inp = document.getElementById('pushTokenInput');
+  if (!inp) return;
+  const val = inp.value.trim();
+  const untouched = (!val) || (val === XF_MASK);
+  if (untouched) { localStorage.removeItem('pushplus_token'); showToast('已恢复默认推送 token'); loadPushTokenUI(); return; }
+  if (val.length < 8) { showToast('token 长度过短，请检查'); return; }
+  localStorage.setItem('pushplus_token', val);
+  loadPushTokenUI();
+  showToast('推送 token 已保存');
+}
+function loadPushTokenUI() {
+  const el = document.getElementById('pushTokenInput');
+  const see = document.getElementById('pushTokenSee');
+  if (!el) return;
+  if (see) see.checked = false;
+  el.type = 'password';
+  const hasCustom = !!localStorage.getItem('pushplus_token');
+  const hasDefault = !!_DEFAULT_PUSHTOKEN;
+  el.value = (hasCustom || hasDefault) ? XF_MASK : '';
+  bindPushTokenMaskEvents();
+}
+function togglePushTokenSee() {
+  const show = document.getElementById('pushTokenSee').checked;
+  const el = document.getElementById('pushTokenInput');
+  el.type = show ? 'text' : 'password';
+}
+function bindPushTokenMaskEvents() {
+  const el = document.getElementById('pushTokenInput');
+  if (!el || el._maskBound) return; el._maskBound = true;
+  el.addEventListener('focus', function() { if (this.value === XF_MASK) this.value = ''; });
+  el.addEventListener('blur', function() { if (!this.value) loadPushTokenUI(); });
 }
 async function notifyPushplus(title, content) {
   // token 优先从 localStorage 读取（用户自定义），否则使用应用默认值
@@ -1364,20 +1488,39 @@ function checkAchievementPush(achArr, totalMilk) {
     if (!isSubscribeMode()) return;
     const token = localStorage.getItem('pushplus_token') || _DEFAULT_PUSHTOKEN;
     if (!token || !achArr || achArr.length === 0) return;
-    const sig = achArr.join('|');
-    if (sig === localStorage.getItem('pushAchSig')) return;
+
+    // ========== 推送去重：维护"已推送过的成就文本集合" ==========
+    // 旧策略：sig = achArr.join('|')，成就增删都让 sig 变化 → 任何编辑/删除都会触发重推
+    // 新策略：只把"本地从未推送过的成就"作为新增项推送；删除/编辑已推送过的成就不触发
+    // 集合存储在 localStorage.pushAchSet（JSON 数组），跨日清空避免今日删明日重推
+    let pushedSet;
+    try { pushedSet = JSON.parse(localStorage.getItem('pushAchSet') || '[]'); }
+    catch { pushedSet = []; }
+    if (!Array.isArray(pushedSet)) pushedSet = [];
+    // 兼容迁移：老用户只有 pushAchSig（pushAchSet 缺失）→ 用 sig 初始化一次
+    if (!localStorage.getItem('pushAchSet') && localStorage.getItem('pushAchSig')) {
+      const legacy = (localStorage.getItem('pushAchSig') || '').split('|').filter(Boolean);
+      pushedSet = [...new Set([...pushedSet, ...legacy])];
+    }
+    // 计算"本次相对推送集合的新增项"
+    const newAchievements = achArr.filter(a => !pushedSet.includes(a));
+    if (newAchievements.length === 0) {
+      // 没有新增的成就 → 什么都不做（即使 achArr 因删除/编辑变化也不重推）
+      // 但仍同步一次 sig 以兼容老代码路径
+      localStorage.setItem('pushAchSig', achArr.join('|'));
+      return;
+    }
     const now = Date.now();
     if (now - parseInt(localStorage.getItem('pushAchTs') || '0') < 10000) return; // 10秒防抖
-    // 计算本次新增的成就（相对上次推送）
-    const prevSig = localStorage.getItem('pushAchSig');
-    const prevArr = prevSig ? prevSig.split('|') : [];
-    const newAchievements = achArr.filter(a => !prevArr.includes(a));
-    localStorage.setItem('pushAchSig', sig);
+
+    // 通过：更新推送集合、记录时间戳、发送
+    pushedSet = [...new Set([...pushedSet, ...newAchievements])];
+    localStorage.setItem('pushAchSet', JSON.stringify(pushedSet));
+    localStorage.setItem('pushAchSig', achArr.join('|'));
     localStorage.setItem('pushAchTs', String(now));
     const ds = getTodayDateStr();
-    // 通知标题 = 本次更新的成就内容（首次推送/无新增时回退为全部成就）
-    const titleSrc = newAchievements.length > 0 ? newAchievements : achArr;
-    const fullTitle = titleSrc.join(' · ');
+    // 通知标题 = 本次新增的成就
+    const fullTitle = newAchievements.join(' · ');
     const displayTitle = fullTitle.length > 20 ? fullTitle.slice(0, 20) + '…' : fullTitle;
     // 详情内容 = 今日全部成就，本次新增项高亮
     const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -1953,7 +2096,8 @@ function cnNum(s) {
   if (parts[1]) { let dec = 0, sc = 0.1; for (const ch of parts[1]) { if (D[ch] === undefined) break; dec += D[ch] * sc; sc /= 10; } r += dec; }
   return r;
 }
-// 时长解析 → 分钟（"一小时二十分钟"→80 "半小时"→30 "两小时"→120 "90分钟"→90）
+// 时长解析 → 分钟（"一小时二十分钟"→80 "半小时"→30 "两小时"→120 "90分钟"→90
+//             "7小时3"→423 [口语省略"分"字，数字 <60 视为分钟，仅对时长型规则宽松匹配]）
 function parseDurationMin(seg) {
   const N = '(\\d+(?:\\.\\d+)?|[零一二两三四五六七八九十百千]+)';
   const re = new RegExp(N + '(个半)?(小时|钟头|分钟|分)(?![钟])|半小时', 'g');
@@ -1968,7 +2112,20 @@ function parseDurationMin(seg) {
       if (/^\s*半/.test(seg.slice(m.index + m[0].length))) total += 30;
     } else { total += n; }
   }
-  return found ? Math.round(total) : null;
+  // 回退：若 seg 含"X小时"且后面紧跟 < 60 的纯数字（口语省略"分"字），将该数字计入分钟
+  if (!found) return null;
+  const hbMatch = seg.match(new RegExp(N + '\\s*(?:小时|钟头)(?!分钟|钟头)'));
+  if (hbMatch) {
+    const after = seg.slice(hbMatch.index + hbMatch[0].length);
+    const minMatch = after.match(/^\s*(\d+|[零一二两三四五六七八九十]+)/);
+    if (minMatch) {
+      const minN = cnNum(minMatch[1]);
+      if (minN !== null && minN < 60 && minN >= 0) {
+        total += minN;
+      }
+    }
+  }
+  return Math.round(total);
 }
 // 体温解析（"38度5"/"三十八度五"/"38.5度" → 38.5）
 function parseTempNum(seg) {
@@ -2078,13 +2235,26 @@ const VOICE_RULES = [
       return amount === null ? { params: { milkAmount: 120 }, warn: true } : { params: { milkAmount: amount } };
     } },
   { id: 'sleep', re: /睡着了|睡觉了?|睡了|小睡|午睡|睡了一|睡眠|哄睡|补觉/,
-    parse: (zone) => {
-      const d = parseDurationMin(zone);
+    parse: (zone, ctx) => {
+      let d = parseDurationMin(zone);
+      // 跨段回填：本段没找到时长时，从未匹配段池子里找一段带时长的附加进来
+      if (d === null && ctx && Array.isArray(ctx.pool) && ctx.pool.length) {
+        for (let i = 0; i < ctx.pool.length; i++) {
+          const ex = parseDurationMin(ctx.pool[i]);
+          if (ex !== null) { const consumedSeg = ctx.pool.splice(i, 1)[0]; if (ctx.consumed) ctx.consumed.add(consumedSeg); d = ex; break; }
+        }
+      }
       return d === null ? { params: { duration: 0 }, warn: true } : { params: { duration: d } };
     } },
   { id: 'outdoor', re: /户外|出门|出去了?玩?|遛弯|散步|晒太阳|外面[耍玩]/,
-    parse: (zone) => {
-      const d = parseDurationMin(zone);
+    parse: (zone, ctx) => {
+      let d = parseDurationMin(zone);
+      if (d === null && ctx && Array.isArray(ctx.pool) && ctx.pool.length) {
+        for (let i = 0; i < ctx.pool.length; i++) {
+          const ex = parseDurationMin(ctx.pool[i]);
+          if (ex !== null) { const consumedSeg = ctx.pool.splice(i, 1)[0]; if (ctx.consumed) ctx.consumed.add(consumedSeg); d = ex; break; }
+        }
+      }
       return d === null ? { params: { duration: 0 }, warn: true } : { params: { duration: d } };
     } },
   { id: 'bath', re: /洗澡|沐浴|洗了?个澡/,
@@ -2100,8 +2270,14 @@ const VOICE_RULES = [
   { id: 'listenMusic', re: /听歌|听音乐|音乐|儿歌/, parse: () => ({ params: {} }) },
   { id: 'drinkWater', re: /喝水|喂水|喝了?点水/, parse: () => ({ params: {} }) },
   { id: 'airButt', re: /晾屁/,
-    parse: (zone) => {
-      const d = parseDurationMin(zone);
+    parse: (zone, ctx) => {
+      let d = parseDurationMin(zone);
+      if (d === null && ctx && Array.isArray(ctx.pool) && ctx.pool.length) {
+        for (let i = 0; i < ctx.pool.length; i++) {
+          const ex = parseDurationMin(ctx.pool[i]);
+          if (ex !== null) { const consumedSeg = ctx.pool.splice(i, 1)[0]; if (ctx.consumed) ctx.consumed.add(consumedSeg); d = ex; break; }
+        }
+      }
       let level = '正常';
       if (/发红/.test(zone)) level = '发红'; else if (/红疹|疹/.test(zone)) level = '红疹'; else if (/溃烂|破/.test(zone)) level = '溃烂';
       return { params: { duration: d === null ? 0 : d, level } };
@@ -2129,9 +2305,19 @@ const VOICE_RULES = [
 
 function parseVoiceText(text) {
   const items = []; const unmatched = [];
+  // 跨段回填池：把"无规则命中但有语义的段"（如"7小时3"）暂存，供 sleep/outdoor/airButt 等时长型规则在自身没找到时长时回填
+  const crossSegPool = [];
+  // 已消费的段：被跨段回填用掉的段不应再 unmatched（避免误报"未识别"）
+  const consumedSegs = new Set();
   const segs = [];
   String(text || '').split(/[\n，,。；;！!？?、]+/).forEach(s => {
     s.split(/然后|接着|再然后/).forEach(x => { x = x.trim(); if (x) segs.push(x); });
+  });
+  // 先预扫描：把所有 seg 中"无规则命中但有可解析时长"的段提前入池（这样 seg 1 处理时也能看到 seg 2+ 的候选项）
+  segs.forEach(seg => {
+    let hitCount = 0;
+    VOICE_RULES.forEach(r => { const re = new RegExp(r.re.source); if (re.test(seg)) hitCount++; });
+    if (hitCount === 0 && parseDurationMin(seg) !== null) crossSegPool.push(seg);
   });
   segs.forEach(seg => {
     const hits = [];
@@ -2141,13 +2327,16 @@ function parseVoiceText(text) {
     });
     const seen = new Set(); const uniq = [];
     hits.sort((a, b) => a.idx - b.idx).forEach(h => { if (!seen.has(h.rule.id)) { seen.add(h.rule.id); uniq.push(h); } });
-    if (uniq.length === 0) { unmatched.push(seg); return; }
+    // 只对"完全无规则命中且未被跨段回填消费"的段进 unmatched
+    if (uniq.length === 0) { if (!consumedSegs.has(seg)) unmatched.push(seg); return; }
     let segOk = false;
     uniq.forEach((h, i) => {
       const zone = seg.slice(h.idx, i + 1 < uniq.length ? uniq[i + 1].idx : seg.length);
       // 单活动时整段解析（关键词前的参数如"听英文故事"的"英文"不丢失）；多活动时仅本区间
       const parseZone = uniq.length === 1 ? seg : zone;
-      const parsed = h.rule.parse(parseZone);
+      // 时长型规则（sleep / outdoor / airButt）传入 ctx 用于跨段时长回填与消费追踪
+      const needsDuration = (h.rule.id === 'sleep' || h.rule.id === 'outdoor' || h.rule.id === 'airButt');
+      const parsed = h.rule.parse(parseZone, needsDuration ? { pool: crossSegPool, consumed: consumedSegs } : undefined);
       if (!parsed) return;
       segOk = true;
       const act = ACTIVITIES.find(a => a.id === h.rule.id);
@@ -2800,8 +2989,82 @@ function backToToday() {
   loadHistory();
 }
 
+// ---------- 自绘日期选择器（替代系统 picker：蓝色"确定"按钮 + 蓝色头部） ----------
+let _dpViewYear = 0, _dpViewMonth = 0, _dpSelected = '';
+function openHistoryDatePicker() {
+  const cur = document.getElementById('historyDate').value;
+  let d = cur ? new Date(cur + 'T00:00:00') : new Date();
+  _dpViewYear = d.getFullYear();
+  _dpViewMonth = d.getMonth();
+  _dpSelected = cur || `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  renderHistoryDatePicker();
+  showModal('historyDatePickerModal');
+}
+function renderHistoryDatePicker() {
+  const label = document.getElementById('dpMonthLabel');
+  if (label) label.textContent = `${_dpViewYear} 年 ${_dpViewMonth + 1} 月`;
+  const grid = document.getElementById('dpGrid');
+  if (!grid) return;
+  const first = new Date(_dpViewYear, _dpViewMonth, 1);
+  // 周一开头：(getDay()+6)%7
+  const startOffset = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(_dpViewYear, _dpViewMonth + 1, 0).getDate();
+  const prevMonthDays = new Date(_dpViewYear, _dpViewMonth, 0).getDate();
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  let html = '';
+  // 上月尾部
+  for (let i = startOffset - 1; i >= 0; i--) {
+    const d = prevMonthDays - i;
+    html += `<div class="dp-cell outside" data-d="${d}" data-prev="1">${d}</div>`;
+  }
+  // 本月
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = `${_dpViewYear}-${String(_dpViewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const cls = ['dp-cell'];
+    if (key === todayKey) cls.push('today');
+    if (key === _dpSelected) cls.push('selected');
+    html += `<div class="${cls.join(' ')}" data-d="${d}" onclick="dpSelectDay('${key}')">${d}</div>`;
+  }
+  // 下月头部补齐到 42 格（6 行 × 7）
+  const totalCells = startOffset + daysInMonth;
+  const fill = (7 - (totalCells % 7)) % 7;
+  for (let d = 1; d <= fill; d++) {
+    html += `<div class="dp-cell outside" data-d="${d}" data-next="1">${d}</div>`;
+  }
+  grid.innerHTML = html;
+}
+function dpSelectDay(key) {
+  _dpSelected = key;
+  renderHistoryDatePicker();
+}
+function dpNavMonth(delta) {
+  _dpViewMonth += delta;
+  if (_dpViewMonth < 0) { _dpViewMonth = 11; _dpViewYear--; }
+  if (_dpViewMonth > 11) { _dpViewMonth = 0; _dpViewYear++; }
+  renderHistoryDatePicker();
+}
+function dpPickQuick(deltaDays) {
+  const d = new Date();
+  d.setDate(d.getDate() - deltaDays);
+  const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  _dpSelected = key;
+  _dpViewYear = d.getFullYear();
+  _dpViewMonth = d.getMonth();
+  renderHistoryDatePicker();
+}
+function confirmHistoryDatePicker() {
+  if (!_dpSelected) { showToast('请先选择日期'); return; }
+  document.getElementById('historyDate').value = _dpSelected;
+  loadHistory();
+  hideModal('historyDatePickerModal');
+}
+
 /* ==================== 管理 ==================== */
 function openManage() {
+  // 每次打开都从 localStorage 重新加载，保证显示最新值（包括上次关闭时即时修改的内容）
+  loadHiddenActivities();
+  loadCustomOptions();
   const list = document.getElementById('manageList');
   let html = '';
   ACTIVITIES.forEach(act => {
@@ -2812,6 +3075,7 @@ function openManage() {
   renderCustomOptionsSection();
   document.getElementById('readOnlyToggle').checked = isReadOnlyMode();
   document.getElementById('pushTopicInput').value = localStorage.getItem('pushplus_topic') || _DEFAULT_PUSHTOPIC;
+  loadPushTokenUI();
   loadXfyunConfigUI();
   updateReadOnlySlider();
   showModal('manageModal');
@@ -2841,6 +3105,10 @@ function toggleManage(id) {
   if (idx >= 0) hiddenActivities.splice(idx, 1); else hiddenActivities.push(id);
   const el = document.querySelector(`.toggle-switch[data-id="${id}"]`);
   if (el) el.classList.toggle('on');
+  // 即时生效：保存到 localStorage + 重新渲染首页分类与卡片
+  saveHiddenActivities();
+  renderCategoryBar();
+  renderCards();
 }
 function renderCustomOptionsSection() {
   const section = document.getElementById('customOptionsSection');
@@ -3615,17 +3883,57 @@ function updateSyncUI() {
 
 // ---------- 家庭码 / 同步设置 UI ----------
 function showFamilySetup() { showModal('familySetupModal'); }
+// 同步设置：4 框（URL / key / 家庭码 / 设备名）的掩码逻辑（样式同讯飞，焦点清空/失焦回填）
+const SYNC_INPUT_IDS = ['sbUrlInput', 'sbKeyInput', 'familyCodeInput', 'deviceNameInput'];
 function openSyncSettings() {
-  document.getElementById('sbUrlInput').value = localStorage.getItem('sb_url') || '';
-  document.getElementById('sbKeyInput').value = localStorage.getItem('sb_key') || '';
-  document.getElementById('familyCodeInput').value = localStorage.getItem('family_code') || '';
-  document.getElementById('deviceNameInput').value = localStorage.getItem('device_name') || '';
+  // 全部以掩码形式回填；本地有值或默认配置存在时显示掩码，焦点清空
+  const hasUrl = !!(localStorage.getItem('sb_url') || (_APP.supabase && _APP.supabase.url));
+  const hasKey = !!(localStorage.getItem('sb_key') || (_APP.supabase && _APP.supabase.anonKey));
+  const hasFcode = !!(localStorage.getItem('family_code') || _APP.familyCode);
+  const dname = localStorage.getItem('device_name') || '';
+  document.getElementById('sbUrlInput').value = hasUrl ? XF_MASK : '';
+  document.getElementById('sbKeyInput').value = hasKey ? XF_MASK : '';
+  document.getElementById('familyCodeInput').value = hasFcode ? XF_MASK : '';
+  document.getElementById('deviceNameInput').value = dname; // 设备名非敏感，原样显示
+  // 同步设置框默认密码类型，点"显示明文"切换
+  const see = document.getElementById('syncSeeToggle'); if (see) see.checked = false;
+  ['sbUrlInput', 'sbKeyInput', 'familyCodeInput'].forEach(id => { const el = document.getElementById(id); if (el) el.type = 'password'; });
+  bindSyncMaskEvents();
   updateSyncUI(); showModal('syncModal');
 }
+function bindSyncMaskEvents() {
+  ['sbUrlInput', 'sbKeyInput', 'familyCodeInput'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el._maskBound) return; el._maskBound = true;
+    el.addEventListener('focus', function() { if (this.value === XF_MASK) this.value = ''; });
+    el.addEventListener('blur', function() {
+      // 留空 → 恢复掩码（未修改）
+      if (!this.value.trim()) {
+        const orig = id === 'sbUrlInput' ? (localStorage.getItem('sb_url') || (_APP.supabase && _APP.supabase.url))
+                    : id === 'sbKeyInput' ? (localStorage.getItem('sb_key') || (_APP.supabase && _APP.supabase.anonKey))
+                    : (localStorage.getItem('family_code') || _APP.familyCode);
+        this.value = orig ? XF_MASK : '';
+      }
+    });
+  });
+}
+function toggleSyncSee() {
+  const show = document.getElementById('syncSeeToggle').checked;
+  ['sbUrlInput', 'sbKeyInput', 'familyCodeInput'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.type = show ? 'text' : 'password';
+  });
+}
 async function saveSyncConfig() {
-  const url = document.getElementById('sbUrlInput').value.trim().replace(/\/+$/, '');
-  const skey = document.getElementById('sbKeyInput').value.trim();
-  const fcode = document.getElementById('familyCodeInput').value.trim();
+  // 掩码视为"未修改"——回退到 localStorage 或 app-config 默认值
+  const getRaw = (id, fallback) => {
+    const v = document.getElementById(id).value.trim();
+    if (!v || v === XF_MASK) return fallback;
+    return v;
+  };
+  const url = getRaw('sbUrlInput', localStorage.getItem('sb_url') || (_APP.supabase && _APP.supabase.url) || '').replace(/\/+$/, '');
+  const skey = getRaw('sbKeyInput', localStorage.getItem('sb_key') || (_APP.supabase && _APP.supabase.anonKey) || '');
+  const fcode = getRaw('familyCodeInput', localStorage.getItem('family_code') || _APP.familyCode || '');
   const dname = document.getElementById('deviceNameInput').value.trim() || '未知设备';
   if (!url || !skey || !fcode) { showToast('请填写 URL、key 和家庭码'); return; }
   if (fcode.length < 4) { showToast('家庭码至少4位'); return; }
