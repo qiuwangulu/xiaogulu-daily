@@ -1913,7 +1913,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.16 0825-2157'; // WHO标注再左移+同步设置flex容器+文字nowrap
+const APP_VERSION = 'v3.5.17 0825-2220'; // 折线图viewBox增宽(W360/PR42)给WHO标注留足右侧空间
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3373,7 +3373,7 @@ function makeLineChart(data, opts) {
     : '';
   const head = `<div class="chart-card"><div class="chart-title">${title}${zoomBtn}</div>`;
   if (valid.length === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
-  const W = 330, H = 168, PL = 40, PR = 12, PT = 22, PB = 24;
+  const W = 360, H = 168, PL = 40, PR = 42, PT = 22, PB = 24;
   const iw = W - PL - PR, ih = H - PT - PB;
   const n = data.length;
   // 横轴：数据点带时间戳 t 时按日期间隔线性等分（间隔1天的图上距离是间隔2天的一半），否则按索引等分
@@ -3516,7 +3516,7 @@ function makeLineChart(data, opts) {
       const pts = whoPts.map(p => `${xfT(p.t).toFixed(1)} ${yf(p.row[def.key]).toFixed(1)}`);
       whoLines += `<path d="M${pts.join(' L')}" fill="none" stroke="${def.color}" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.8"/>`;
       const lastRow = whoPts[whoPts.length - 1].row;
-      whoLines += `<text x="${(W - PR - 55).toFixed(1)}" y="${(yf(lastRow[def.key]) + def.dy).toFixed(1)}" fill="${def.color}" font-size="8.5" text-anchor="end" opacity="0.95">${def.label}</text>`;
+      whoLines += `<text x="${(W - PR - 30).toFixed(1)}" y="${(yf(lastRow[def.key]) + def.dy).toFixed(1)}" fill="${def.color}" font-size="8.5" text-anchor="end" opacity="0.95">${def.label}</text>`;
       // v3.5.12 WHO 参考值数据点：关键点（首末日+每月25号）渲染可见小圆点+透明命中区，点击显示该日标准值标注
       whoPts.forEach(p => {
         const x = xfT(p.t).toFixed(1), y = yf(p.row[def.key]).toFixed(1);
