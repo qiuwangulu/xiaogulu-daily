@@ -123,7 +123,7 @@
   .overview-item .ov-countdown { color: #55efc4; }
   .overview-achievement { color: #fff; font-size: 15px; text-align: justify; text-align-last: left; margin-top: 6px; display: flex; align-items: flex-start; gap: 5px; }
   .overview-achievement .ov-icon { font-size: 15px; flex-shrink: 0; }
-  .overview-achievement .ov-text { flex: 1; color: #fff; }
+  .overview-achievement .ov-text { flex: 1; color: #ffeaa7; }
 
   /* ===== 分类侧边栏 ===== */
   .category-bar {
@@ -788,7 +788,7 @@
   }
   .history-sum-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-size: 14px; }
   .history-sum-row .hs-label { color: #b2bec3; flex-shrink: 0; }
-  .history-sum-row .hs-value { color: #f0c060; text-align: right; word-break: break-all; }
+  .history-sum-row .hs-value { color: #ffeaa7; text-align: right; word-break: break-all; font-weight: 600; }
 
   .custom-options-section {
     margin-top: 18px; padding-top: 14px;
@@ -1875,7 +1875,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.6 0825-1620'; // 数据保护:云端拉取前自动备份+一键恢复
+const APP_VERSION = 'v3.5.7 0825-1640'; // 备份+历史/总览成就改月龄黄
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
