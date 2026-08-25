@@ -1876,7 +1876,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.8 0825-1645'; // 今日成就标签白色+内容黄色
+const APP_VERSION = 'v3.5.9 0825-1650'; // 修复体重/身高曲线当天点被去重丢失
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3281,10 +3281,12 @@ function seedBodyHistory() {
 }
 // 相同数值只保留最早日期（按日期升序遍历去重）
 function dedupeBodySeries(points) {
+  // v3.5.9 修复：按"日期"去重（同一天只保留一条），而不是按"数值"去重
+  // 旧逻辑按值去重会导致：当天体重/身高与历史某天相同时，当天的数据点从曲线上消失
   const seen = new Set(); const out = [];
   for (const p of points) {
     if (p.v == null) continue;
-    if (!seen.has(p.v)) { seen.add(p.v); out.push(p); }
+    if (!seen.has(p.d)) { seen.add(p.d); out.push(p); }
   }
   return out;
 }
