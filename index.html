@@ -1042,10 +1042,10 @@
       <div class="xf-config-row"><label>创建者 token:</label><input type="password" id="pushTokenInput" placeholder="pushplus token" autocomplete="off"></div>
       <div class="push-token-row" style="justify-content: flex-end;">
         <label class="xf-see-row"><input type="checkbox" id="pushTokenSee" onchange="togglePushTokenSee()"><span style="font-size:13px;color:#b2bec3;">显示明文</span></label>
-        <button class="btn btn-primary" onclick="savePushToken()">保存</button>
       </div>
-      <div class="xf-config-row"><label>群组编码:</label><input type="text" id="pushTopicInput" placeholder="群组编码"></div>
+      <div class="xf-config-row"><label>群组编码:</label><input type="password" id="pushTopicInput" placeholder="群组编码" autocomplete="off"></div>
       <div class="push-token-row" style="justify-content: flex-end;">
+        <label class="xf-see-row"><input type="checkbox" id="pushTopicSee" onchange="togglePushTopicSee()"><span style="font-size:13px;color:#b2bec3;">显示明文</span></label>
         <button class="btn btn-primary" onclick="savePushTopic()">保存</button>
       </div>
       <div class="push-token-hint">pushplus.plus → 发送消息 → 一对多消息 → 群组编码填到这里，家人扫码入群即可同步接收成就提醒</div>
@@ -1435,11 +1435,16 @@ function computeAchievements(records) {
 }
 function isSubscribeMode() { return true; } // 订阅推送始终开启（只要有配置就自动推送）
 function savePushTopic() {
-  const topic = document.getElementById('pushTopicInput') ? document.getElementById('pushTopicInput').value.trim() : '';
-  if (!topic) { showToast('请填写群组编码'); return; }
+  const inp = document.getElementById('pushTopicInput');
+  if (!inp) return;
+  const topic = inp.value.trim();
+  // 掩码/空值 → 恢复默认群组编码
+  const untouched = (!topic) || (topic === XF_MASK);
+  if (untouched) { localStorage.removeItem('pushplus_topic'); showToast('已恢复默认群组编码'); loadPushTopicUI(); return; }
   localStorage.setItem('pushplus_topic', topic);
   localStorage.removeItem('pushAchSig');
   localStorage.removeItem('pushAchSet');
+  loadPushTopicUI();
   showToast('群组编码已保存');
 }
 // ---------- 推送：创建者 token 加密显示与保存（样式同讯飞） ----------
@@ -1475,6 +1480,29 @@ function bindPushTokenMaskEvents() {
   if (!el || el._maskBound) return; el._maskBound = true;
   el.addEventListener('focus', function() { if (this.value === XF_MASK) this.value = ''; });
   el.addEventListener('blur', function() { if (!this.value) loadPushTokenUI(); });
+}
+// ---------- 推送：群组编码加密显示与保存（样式同 token） ----------
+function loadPushTopicUI() {
+  const el = document.getElementById('pushTopicInput');
+  const see = document.getElementById('pushTopicSee');
+  if (!el) return;
+  if (see) see.checked = false;
+  el.type = 'password';
+  const hasCustom = !!localStorage.getItem('pushplus_topic');
+  const hasDefault = !!_DEFAULT_PUSHTOPIC;
+  el.value = (hasCustom || hasDefault) ? XF_MASK : '';
+  bindPushTopicMaskEvents();
+}
+function togglePushTopicSee() {
+  const show = document.getElementById('pushTopicSee').checked;
+  const el = document.getElementById('pushTopicInput');
+  el.type = show ? 'text' : 'password';
+}
+function bindPushTopicMaskEvents() {
+  const el = document.getElementById('pushTopicInput');
+  if (!el || el._maskBound) return; el._maskBound = true;
+  el.addEventListener('focus', function() { if (this.value === XF_MASK) this.value = ''; });
+  el.addEventListener('blur', function() { if (!this.value) loadPushTopicUI(); });
 }
 async function notifyPushplus(title, content) {
   // token 优先从 localStorage 读取（用户自定义），否则使用应用默认值
@@ -1876,7 +1904,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.10 0825-1940'; // 启动自动双向同步：云端新则拉取(含备份)，本地新则反推云端
+const APP_VERSION = 'v3.5.11 0825-2035'; // 推送设置UI重组(token去保存钮/群组编码加密)+图表点空白取消标注
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3084,8 +3112,8 @@ function openManage() {
   list.innerHTML = html;
   renderCustomOptionsSection();
   document.getElementById('readOnlyToggle').checked = isReadOnlyMode();
-  document.getElementById('pushTopicInput').value = localStorage.getItem('pushplus_topic') || _DEFAULT_PUSHTOPIC;
   loadPushTokenUI();
+  loadPushTopicUI();
   loadXfyunConfigUI();
   updateReadOnlySlider();
   showModal('manageModal');
@@ -3490,6 +3518,19 @@ function chartTip(hitEl, tipId, label, valueText) {
   g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
   g.style.display = '';
 }
+// 点击图表/弹窗其他区域（非柱形/数据点）自动取消所有标注
+// 注意：modal-box 有 onclick=event.stopPropagation() 拦截冒泡，必须用 capture 阶段监听才能收到弹窗内点击
+let _chartTipDismissBound = false;
+function bindChartTipDismiss() {
+  if (_chartTipDismissBound) return; _chartTipDismissBound = true;
+  const modal = document.getElementById('analysisModal');
+  if (!modal) return;
+  modal.addEventListener('click', e => {
+    const t = e.target;
+    if (t.classList && (t.classList.contains('bar-hit') || t.classList.contains('chart-hit'))) return;
+    document.querySelectorAll('#analysisContent g[id^="ctip"]').forEach(g => { g.style.display = 'none'; });
+  }, true);
+}
 // 柱状图（内联SVG，无外部依赖；点击柱形显示横纵坐标）
 function makeBarChart(data, opts) {
   const title = opts.title, unit = opts.unit || '', color = opts.color || '#74b9ff';
@@ -3613,6 +3654,7 @@ function openAnalysis() {
   html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT } });
   html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT } });
   content.innerHTML = html;
+  bindChartTipDismiss();
   showModal('analysisModal');
 }
 
