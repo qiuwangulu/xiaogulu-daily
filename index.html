@@ -1871,7 +1871,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.4 0825-1555'; // 标题居中+4对齐小(非五角星)
+const APP_VERSION = 'v3.5.5 0825-1605'; // 紧急安全修复：启动不再自动覆盖本地数据
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -4061,7 +4061,9 @@ async function initSync() {
       } catch (e) { console.warn('salt同步失败:', e); }
     }
     updateSyncUI();
-    await syncPullAll();
+    // v3.5.5 安全修复：启动时不再自动 syncPullAll，避免云端"陈旧/测试残留"记录覆盖本地真实数据
+    // 如需拉取云端数据，必须由用户在「管理」→「立即同步」手动触发（syncPullAllAndRefresh）
+    // 这里只确保 salt 正确（首次加入家庭时必须），不下载任何记录
     return;
   }
   showFamilySetup();
