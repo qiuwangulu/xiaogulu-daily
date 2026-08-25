@@ -1069,6 +1069,10 @@
         <button class="btn btn-primary" onclick="hideModal('manageModal');openSyncSettings()">同步设置</button>
         <button class="btn" onclick="syncPullAllAndRefresh()">立即同步</button>
       </div>
+      <div class="sync-btn-row" style="margin-top:8px;">
+        <button class="btn" style="font-size:12px;padding:6px 10px;" onclick="restoreTodayFromBackup()">↩️ 从备份恢复今日数据</button>
+      </div>
+      <div style="font-size:11px;color:#b2bec3;margin-top:4px;">每次从云端拉取前会自动备份本地数据；若同步后数据异常，可点击上方按钮恢复</div>
     </div>
   </div>
 </div>
@@ -1871,7 +1875,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.5 0825-1605'; // 紧急安全修复：启动不再自动覆盖本地数据
+const APP_VERSION = 'v3.5.6 0825-1620'; // 数据保护:云端拉取前自动备份+一键恢复
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3811,7 +3815,12 @@ async function syncPullAll() {
             // 云端比本地新 → 拉取云端，覆盖本地（含旧数据无 _ts 的情况）
             const plaintext = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
             const records = JSON.parse(plaintext);
-            if (Array.isArray(records)) { localStorage.setItem(`records_${ds}`, JSON.stringify(records)); localStorage.setItem(`records_${ds}_ts`, String(cloudTs)); changed = true; }
+            if (Array.isArray(records)) {
+              // v3.5.6 数据保护：云端覆盖本地前，自动备份本地当前数据（每日期保留最近一份）
+              const oldLocal = localStorage.getItem(`records_${ds}`);
+              if (oldLocal) { localStorage.setItem(`records_${ds}_bak`, oldLocal); localStorage.setItem(`records_${ds}_bak_ts`, localStorage.getItem(`records_${ds}_ts`) || '0'); }
+              localStorage.setItem(`records_${ds}`, JSON.stringify(records)); localStorage.setItem(`records_${ds}_ts`, String(cloudTs)); changed = true;
+            }
           } else if (localTs > cloudTs && cloudTs > 0) {
             // 本地比云端新 → 反向推送本地到云端（防止本地新增/修改被云端旧数据覆盖）
             const localRecords = JSON.parse(localRaw);
@@ -3851,6 +3860,21 @@ async function syncPullAll() {
 async function syncPullAllAndRefresh() {
   if (!isSyncReady()) { showToast('请先配置同步'); openSyncSettings(); return; }
   showToast('同步中...'); await syncPullAll(); showToast('同步完成');
+}
+// v3.5.6 数据保护：从备份恢复今日数据（恢复最近一次云端拉取覆盖前的本地数据）
+async function restoreTodayFromBackup() {
+  const ds = getTodayDateStr();
+  const bak = localStorage.getItem(`records_${ds}_bak`);
+  if (!bak) { showToast('今日暂无备份（备份在每次云端拉取覆盖前自动创建）'); return; }
+  let bakRecords;
+  try { bakRecords = JSON.parse(bak); if (!Array.isArray(bakRecords)) throw 0; } catch { showToast('备份数据损坏'); return; }
+  if (!confirm(`将用备份恢复今日数据（共 ${bakRecords.length} 条）并上传云端覆盖？\n当前本地记录将被替换，请谨慎操作。`)) return;
+  localStorage.setItem(`records_${ds}`, bak);
+  localStorage.setItem(`records_${ds}_ts`, String(Date.now())); // 本地最新 → 下次同步会把备份数据推上云端
+  renderCards(); updateOverview();
+  hideModal('manageModal');
+  showToast(`已恢复 ${bakRecords.length} 条记录，正在上传云端...`);
+  try { await syncUpload('records', ds); showToast('云端已同步更新'); } catch (e) { showToast('云端上传失败，本地已恢复'); }
 }
 
 // ---------- 离线队列 ----------
