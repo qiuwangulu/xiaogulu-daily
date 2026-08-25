@@ -873,14 +873,16 @@
   .bar-hit { cursor: pointer; }
   .bar-rect { transition: opacity 0.15s; }
   .bar-rect:hover, .bar-hit:hover + .bar-rect { opacity: 0.75; }
-  /* v3.5.13 图表 Y 轴档位切换按钮（标题行右侧） */
+  /* v3.5.19 图表 Y 轴 +/− 缩放按钮行（WHO 图例下方、图上方、靠右） */
+  .chart-zoom-row { display: flex; justify-content: flex-end; gap: 6px; margin: 0 4px 6px 0; }
   .chart-zoom-btn {
-    float: right; font-size: 10px; line-height: 16px;
+    font-size: 13px; line-height: 18px; min-width: 24px; text-align: center;
     color: #74b9ff; background: rgba(116,185,255,0.12);
     border: 1px solid rgba(116,185,255,0.35);
-    border-radius: 8px; padding: 1px 8px; margin-right: 4px;
+    border-radius: 6px; padding: 0 6px;
     cursor: pointer; user-select: none;
   }
+  .chart-zoom-btn.active { background: rgba(116,185,255,0.35); color: #dfeaff; }
   .chart-zoom-btn:active { opacity: 0.8; }
 
   .toast {
@@ -1913,7 +1915,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.18 0825-2245'; // WHO图例移到标题行HTML(免SVG裁剪)，SVG内只留数据点+tooltip
+const APP_VERSION = 'v3.5.19 0826-0032'; // 档位按钮改为+/−(图例下方图上方靠右,当前档高亮)
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3360,18 +3362,13 @@ function dailyPoopInfo(ds) {
 let _chartTipSeq = 0;
 // v3.5.13 图表 Y 轴档位状态：compact/undefined=紧凑档（数据范围），full=全量档（含 WHO 参考线）
 let _chartZoomState = {};
-function toggleChartZoom(chartTitle) {
-  _chartZoomState[chartTitle] = (_chartZoomState[chartTitle] === 'full') ? 'compact' : 'full';
-  openAnalysis(); // 重新渲染分析弹窗
-}
+// v3.5.19 +/− 缩放：+ 放大到数据档（紧凑），− 缩小到全量档（含 WHO）
+function chartZoomIn(chartTitle) { if (_chartZoomState[chartTitle] !== 'compact') { _chartZoomState[chartTitle] = 'compact'; openAnalysis(); } }
+function chartZoomOut(chartTitle) { if (_chartZoomState[chartTitle] !== 'full') { _chartZoomState[chartTitle] = 'full'; openAnalysis(); } }
 function makeLineChart(data, opts) {
   const title = opts.title, unit = opts.unit || '', color = opts.color || '#74b9ff';
   const valid = data.filter(d => d.value != null);
-  // v3.5.13 档位切换按钮（仅配置 zoomTiers 的图表显示；显示当前档位，点击切换）
-  const zoomBtn = opts.zoomTiers
-    ? `<span class="chart-zoom-btn" onclick="event.stopPropagation();toggleChartZoom('${title.replace(/'/g, "\\'")}')">${_chartZoomState[title] === 'full' ? '全量' : '数据'}</span>`
-    : '';
-  const head = `<div class="chart-card"><div class="chart-title">${title}${zoomBtn}</div>`;
+  const head = `<div class="chart-card"><div class="chart-title">${title}</div>`;
   if (valid.length === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
   const W = 360, H = 168, PL = 40, PR = 42, PT = 22, PB = 24;
   const iw = W - PL - PR, ih = H - PT - PB;
@@ -3387,7 +3384,15 @@ function makeLineChart(data, opts) {
       `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#8a90a6;margin-right:2px;vertical-align:middle;"></span>50% ` +
       `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#d4a03a;margin-right:2px;vertical-align:middle;"></span>75%</span>`
     : '';
-  const head2 = `<div class="chart-card"><div class="chart-title">${title}${whoLegend}${zoomBtn}</div>`;
+  // v3.5.19 +/− 缩放按钮行：WHO 图例下方、图上方、靠最右侧（当前档高亮）
+  const titleSafe = title.replace(/'/g, "\\'");
+  const zoomRow = opts.zoomTiers
+    ? `<div class="chart-zoom-row">` +
+      `<span class="chart-zoom-btn ${_chartZoomState[title] === 'full' ? 'active' : ''}" onclick="event.stopPropagation();chartZoomOut('${titleSafe}')">−</span>` +
+      `<span class="chart-zoom-btn ${_chartZoomState[title] !== 'full' ? 'active' : ''}" onclick="event.stopPropagation();chartZoomIn('${titleSafe}')">+</span>` +
+      `</div>`
+    : '';
+  const head2 = `<div class="chart-card"><div class="chart-title">${title}${whoLegend}</div>${zoomRow}`;
   // WHO 参考曲线关键点：两端日期 + 范围内每月25号（月龄切换日），每点按该日期月龄取 p3/p50/p75
   let whoPts = null;
   if (opts.who && hasT) {
