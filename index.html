@@ -1154,7 +1154,7 @@
 
 <div class="bottom-bar">
   <div class="fab-wrap">
-    <button class="fab-btn" id="fabBtn" onclick="openAddModal()" ontouchstart="openAddModal()">
+    <button class="fab-btn" id="fabBtn" onclick="openAddModal()">
       <span class="fab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></span>
       添加
     </button>
@@ -2180,7 +2180,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.22 0826-0915'; // 白天记录行:普通无底色+新增行方案A底色(rgba蓝9%+细边框)+tagFlashDay动画
+const APP_VERSION = 'v3.5.23 0826-1111'; // 修复添加按钮移动端首点不响应(合成click落在遮罩触发closeModal),改用enableFastTap
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -4523,13 +4523,16 @@ window.addEventListener('unhandledrejection', (e) => {
   try { showToast('异步异常: ' + String(e.reason && e.reason.message || e.reason || '').slice(0, 60)); } catch (_) {}
 });
 
-// ===== fabBtn 三重事件兜底：click 内联 + touchstart 内联之外，再加 JS 绑定 click =====
-// （部分国产浏览器内联事件可能失效，addEventListener 绑定独立于内联属性）
+// ===== fabBtn 事件绑定：复用 enableFastTap（与底部导航一致）=====
+// 触摸端：touchstart/end 触发，touchend 时 preventDefault 抑制合成 click，只开一次
+// 桌面端：仍走 onclick（mouse 无合成 click 落在遮罩上的问题）
+// 注意：移除原 ontouchstart 内联 —— 它在按下即开弹窗，松手时合成 click 会落在刚弹出的
+//       遮罩上触发 closeModal，导致"点一次点不开"（弹窗开即被关）。
 setTimeout(() => {
   const fab = document.getElementById('fabBtn');
-  if (fab && !fab.dataset.jsClickBound) {
-    fab.dataset.jsClickBound = '1';
-    fab.addEventListener('click', () => openAddModal());
+  if (fab && !fab.dataset.fastTapBound) {
+    fab.dataset.fastTapBound = '1';
+    enableFastTap(fab, openAddModal);
   }
   // 版本号显示：管理弹窗最上方（标题下方小字）
   const verTag = document.getElementById('appVersionTag');
