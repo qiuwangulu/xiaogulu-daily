@@ -958,7 +958,7 @@
   body.theme-day .card { background: #ffffff; border-color: rgba(9,132,227,0.12); }
   body.theme-day .card-name { color: #3d4852; }
   body.theme-day .card-count { background: rgba(9,132,227,0.08); color: #636e72; }
-  body.theme-day .record-tag { background: rgba(9,132,227,0.06); color: #3d4852; }
+  body.theme-day .record-tag { background: rgba(9,132,227,0.09); border: 1px solid rgba(9,132,227,0.08); color: #3d4852; }
   body.theme-day .record-tag .rec-time { color: #0984e3; }
   body.theme-day .record-tag .rec-delete svg { stroke: #3d4852; }
   body.theme-day .record-tag .rec-edit svg { stroke: #3d4852; }
@@ -1000,7 +1000,7 @@
   body.theme-day .add-cat-tag.active { background: rgba(9,132,227,0.15); border-color: rgba(9,132,227,0.5); color: #0984e3; }
   body.theme-day .add-item { border-bottom-color: rgba(9,132,227,0.1); }
   body.theme-day .add-check { border-color: rgba(9,132,227,0.4); color: #0984e3; }
-  body.theme-day .add-check.checked { background: #0984e3; border-color: #0984e3; }
+  body.theme-day .add-check.checked { background: #0984e3; border-color: #0984e3; color: #fff; }
   body.theme-day .add-name { color: #3d4852; }
   body.theme-day .add-inputs input[type="number"], body.theme-day .add-inputs input[type="text"] { background: #ffffff; border-color: rgba(9,132,227,0.25); color: #3d4852; }
   body.theme-day .add-inputs input::placeholder { color: rgba(61,72,82,0.4); }
@@ -2175,7 +2175,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.21 0826-0830'; // 语音体温数值回填(标点切分后纯数字段自动补入前项params)
+const APP_VERSION = 'v3.5.22 0826-0905'; // 白天记录行底色改清晰(方案A浅蓝底+细边框)+添加弹窗勾选对勾修复
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
