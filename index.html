@@ -1522,6 +1522,14 @@ function applyTheme() {
   if (_themeLastAutoDay !== null && _themeLastAutoDay !== autoDay) {
     localStorage.removeItem('theme_manual');
   }
+  // 首次加载时：若当前时段与残留的手动偏好矛盾，说明偏好已过期，立即清除
+  // （例如 18:00 后刷新页面，_themeLastAutoDay 尚未记录，但 theme_manual 残留 'day'）
+  if (_themeLastAutoDay === null) {
+    const m = localStorage.getItem('theme_manual');
+    if ((m === 'day' && !autoDay) || (m === 'night' && autoDay)) {
+      localStorage.removeItem('theme_manual');
+    }
+  }
   _themeLastAutoDay = autoDay;
   const manual = localStorage.getItem('theme_manual');
   const day = manual ? manual === 'day' : autoDay;
@@ -2186,7 +2194,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.25 0826-1231'; // 修复添加按钮移动端首点不响应(合成click落在遮罩触发closeModal),改用enableFastTap
+const APP_VERSION = 'v3.5.26 0826-1838'; // 修复添加按钮移动端首点不响应(合成click落在遮罩触发closeModal),改用enableFastTap
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
