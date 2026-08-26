@@ -958,7 +958,12 @@
   body.theme-day .card { background: #ffffff; border-color: rgba(9,132,227,0.12); }
   body.theme-day .card-name { color: #3d4852; }
   body.theme-day .card-count { background: rgba(9,132,227,0.08); color: #636e72; }
-  body.theme-day .record-tag { background: rgba(9,132,227,0.09); border: 1px solid rgba(9,132,227,0.08); color: #3d4852; }
+  body.theme-day .record-tag { background: transparent; border: none; color: #3d4852; }
+  @keyframes tagFlashDay {
+    0% { background: rgba(9,132,227,0.20); }
+    100% { background: rgba(9,132,227,0.09); }
+  }
+  body.theme-day .record-tag.newest { background: rgba(9,132,227,0.09); border: 1px solid rgba(9,132,227,0.08); color: #3d4852; animation: tagFlashDay 3s ease; }
   body.theme-day .record-tag .rec-time { color: #0984e3; }
   body.theme-day .record-tag .rec-delete svg { stroke: #3d4852; }
   body.theme-day .record-tag .rec-edit svg { stroke: #3d4852; }
@@ -2175,7 +2180,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.22 0826-0905'; // 白天记录行底色改清晰(方案A浅蓝底+细边框)+添加弹窗勾选对勾修复
+const APP_VERSION = 'v3.5.22 0826-0915'; // 白天记录行:普通无底色+新增行方案A底色(rgba蓝9%+细边框)+tagFlashDay动画
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
