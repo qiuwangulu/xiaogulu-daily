@@ -71,6 +71,8 @@
     display: inline-block; vertical-align: middle;
   }
   .title-star { font-size: 26px; color: #f1c40f; display: inline-block; vertical-align: middle; margin-right: 4px; }
+  .title-sun { display: none; width: 26px; height: 26px; vertical-align: middle; margin-right: 4px; }
+  .title-sun svg { width: 26px; height: 26px; display: block; }
   .title-row { text-align: center; white-space: nowrap; }
   .age-row { text-align: center; white-space: nowrap; }
   .age-info {
@@ -931,7 +933,8 @@
 
   /* ===== 头部 ===== */
   body.theme-day .title { color: #3d4852; text-shadow: none; }
-  body.theme-day .title-star { color: #e67e22; }
+  body.theme-day .title-star { display: none; }
+  body.theme-day .title-sun { display: inline-block; }
   body.theme-day .age-info { color: #3d4852; }
   body.theme-day .age-info .highlight { color: #d68910; }
   body.theme-day .body-measure label { color: #3d4852; }
@@ -1127,7 +1130,7 @@
   </div>
   <div class="header">
     <div class="header-left">
-      <div class="title-row"><span class="title-star">&#9733;</span><div class="title">小咕噜的日常</div></div>
+      <div class="title-row"><span class="title-star">&#9733;</span><span class="title-sun" aria-hidden="true"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" width="26" height="26"><polygon points="32,2 36,18 28,18" fill="#F5A623"/><polygon points="32,62 28,46 36,46" fill="#F5A623"/><polygon points="2,32 18,28 18,36" fill="#F5A623"/><polygon points="62,32 46,36 46,28" fill="#F5A623"/><polygon points="10.1,10.1 22.4,19.6 17.6,24.4" fill="#F5A623"/><polygon points="53.9,53.9 44.4,41.6 46.4,39.6" fill="#F5A623"/><polygon points="53.9,10.1 46.4,17.6 41.6,22.4" fill="#F5A623"/><polygon points="10.1,53.9 22.4,44.4 17.6,39.6" fill="#F5A623"/><circle cx="32" cy="32" r="13" fill="#F5A623"/></svg></span><div class="title">小咕噜的日常</div></div>
       <div class="age-row"><div class="age-info" id="ageInfo">计算中...</div></div>
       <div class="body-measure">
         <label>高:</label>
@@ -1534,9 +1537,7 @@ function applyTheme() {
   const manual = localStorage.getItem('theme_manual');
   const day = manual ? manual === 'day' : autoDay;
   document.body.classList.toggle('theme-day', day);
-  // 唯一的图标变化：标题 ★（夜间）→ ☀（白天）
-  const star = document.querySelector('.title-star');
-  if (star) star.textContent = day ? '☀' : '★';
+  // 标题图标：夜间显示 ★、白天显示户外活动太阳（由 CSS body.theme-day 控制显隐，无需 JS 切换）
   // 浏览器状态栏 / PWA 标题栏颜色跟随主题
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', day ? '#f5f8fd' : '#0a0f1e');
@@ -2194,7 +2195,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.27 0826-2005'; // 修复添加按钮移动端首点不响应(合成click落在遮罩触发closeModal),改用enableFastTap
+const APP_VERSION = 'v3.5.28 0826-2025'; // 修复添加按钮移动端首点不响应(合成click落在遮罩触发closeModal),改用enableFastTap
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
