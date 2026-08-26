@@ -1130,7 +1130,7 @@
   </div>
   <div class="header">
     <div class="header-left">
-      <div class="title-row"><span class="title-star">&#9733;</span><span class="title-sun" aria-hidden="true"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" width="26" height="26"><polygon points="32,2 36,18 28,18" fill="#F5A623"/><polygon points="32,62 28,46 36,46" fill="#F5A623"/><polygon points="2,32 18,28 18,36" fill="#F5A623"/><polygon points="62,32 46,36 46,28" fill="#F5A623"/><polygon points="10.1,10.1 22.4,19.6 17.6,24.4" fill="#F5A623"/><polygon points="53.9,53.9 44.4,41.6 46.4,39.6" fill="#F5A623"/><polygon points="53.9,10.1 46.4,17.6 41.6,22.4" fill="#F5A623"/><polygon points="10.1,53.9 22.4,44.4 17.6,39.6" fill="#F5A623"/><circle cx="32" cy="32" r="13" fill="#F5A623"/></svg></span><div class="title">小咕噜的日常</div></div>
+      <div class="title-row"><span class="title-star">&#9733;</span><span class="title-sun" aria-hidden="true"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" width="26" height="26"><polygon points="32,2 36,18 28,18" fill="#F5A623"/><polygon points="32,62 28,46 36,46" fill="#F5A623"/><polygon points="2,32 18,28 18,36" fill="#F5A623"/><polygon points="62,32 46,36 46,28" fill="#F5A623"/><polygon points="11,11 22,19 17,25" fill="#F5A623"/><polygon points="53,53 42,45 47,39" fill="#F5A623"/><polygon points="53,11 47,17 42,23" fill="#F5A623"/><polygon points="11,53 17,47 22,43" fill="#F5A623"/><circle cx="32" cy="32" r="13" fill="#F5A623"/></svg></span><div class="title">小咕噜的日常</div></div>
       <div class="age-row"><div class="age-info" id="ageInfo">计算中...</div></div>
       <div class="body-measure">
         <label>高:</label>
@@ -1627,8 +1627,8 @@ function checkDateReset(opts) {
   const last = localStorage.getItem('lastActiveDate');
   localStorage.setItem('lastActiveDate', today);
   // 跨日（last 存在且与今天不同）才清推送集合；仅是 init 启动记录 today 不清
-  if (opts && opts.force) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); return; }
-  if (last && last !== today) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); }
+  if (opts && opts.force) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); localStorage.removeItem('pushLastSig'); return; }
+  if (last && last !== today) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); localStorage.removeItem('pushLastSig'); }
 }
 function setupMidnightReset() {
   // 定时到下一个凌晨 1:00 触发日切重置（当日重置时间为 1:00）
@@ -1735,6 +1735,7 @@ function savePushTopic() {
   localStorage.setItem('pushplus_topic', topic);
   localStorage.removeItem('pushAchSig');
   localStorage.removeItem('pushAchSet');
+  localStorage.removeItem('pushLastSig');
   loadPushTopicUI();
   showToast('群组编码已保存');
 }
@@ -1818,10 +1819,14 @@ function checkAchievementPush(achArr, totalMilk) {
     const token = localStorage.getItem('pushplus_token') || _DEFAULT_PUSHTOKEN;
     if (!token || !achArr || achArr.length === 0) return;
 
+    // ========== 幂等保护：整体签名去重 ==========
+    // 计算当前成就集合的规范签名（排序后 join），与上次推送的签名比较
+    // 只有签名变化时才考虑推送，彻底杜绝重复
+    const currentSig = [...achArr].sort().join('|');
+    const lastPushedSig = localStorage.getItem('pushLastSig') || '';
+    if (currentSig === lastPushedSig) return; // 成就内容完全没变 → 直接返回
+
     // ========== 推送去重：维护"已推送过的成就文本集合" ==========
-    // 旧策略：sig = achArr.join('|')，成就增删都让 sig 变化 → 任何编辑/删除都会触发重推
-    // 新策略：只把"本地从未推送过的成就"作为新增项推送；删除/编辑已推送过的成就不触发
-    // 集合存储在 localStorage.pushAchSet（JSON 数组），跨日清空避免今日删明日重推
     let pushedSet;
     try { pushedSet = JSON.parse(localStorage.getItem('pushAchSet') || '[]'); }
     catch { pushedSet = []; }
@@ -1834,9 +1839,9 @@ function checkAchievementPush(achArr, totalMilk) {
     // 计算"本次相对推送集合的新增项"
     const newAchievements = achArr.filter(a => !pushedSet.includes(a));
     if (newAchievements.length === 0) {
-      // 没有新增的成就 → 什么都不做（即使 achArr 因删除/编辑变化也不重推）
-      // 但仍同步一次 sig 以兼容老代码路径
-      localStorage.setItem('pushAchSig', achArr.join('|'));
+      // 签名变了但单项都在已推集合里（如删除了某项后又加回）→ 更新签名防后续误判
+      localStorage.setItem('pushLastSig', currentSig);
+      localStorage.setItem('pushAchSig', currentSig);
       return;
     }
     const now = Date.now();
@@ -1845,7 +1850,8 @@ function checkAchievementPush(achArr, totalMilk) {
     // 通过：更新推送集合、记录时间戳、发送
     pushedSet = [...new Set([...pushedSet, ...newAchievements])];
     localStorage.setItem('pushAchSet', JSON.stringify(pushedSet));
-    localStorage.setItem('pushAchSig', achArr.join('|'));
+    localStorage.setItem('pushAchSig', currentSig);
+    localStorage.setItem('pushLastSig', currentSig); // 记录本次推送的整体签名
     localStorage.setItem('pushAchTs', String(now));
     const ds = getTodayDateStr();
     // 通知标题 = 本次新增的成就
@@ -2195,7 +2201,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.28 0826-2025'; // 修复添加按钮移动端首点不响应(合成click落在遮罩触发closeModal),改用enableFastTap
+const APP_VERSION = 'v3.5.29 0826-2145'; // 修复添加按钮移动端首点不响应(合成click落在遮罩触发closeModal),改用enableFastTap
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
