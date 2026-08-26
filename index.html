@@ -2194,7 +2194,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.26 0826-1838'; // 修复添加按钮移动端首点不响应(合成click落在遮罩触发closeModal),改用enableFastTap
+const APP_VERSION = 'v3.5.27 0826-2005'; // 修复添加按钮移动端首点不响应(合成click落在遮罩触发closeModal),改用enableFastTap
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3698,7 +3698,7 @@ function makeLineChart(data, opts) {
   const valid = data.filter(d => d.value != null);
   const head = `<div class="chart-card"><div class="chart-title">${title}</div>`;
   if (valid.length === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
-  const W = 360, H = 168, PL = 40, PR = 42, PT = 22, PB = 24;
+  const W = 360, H = 168, PL = 40, PR = 54, PT = 22, PB = 24;
   const iw = W - PL - PR, ih = H - PT - PB;
   const n = data.length;
   // 横轴：数据点带时间戳 t 时按日期间隔线性等分（间隔1天的图上距离是间隔2天的一半），否则按索引等分
@@ -3874,8 +3874,8 @@ function makeLineChart(data, opts) {
     `<defs><clipPath id="${clipId}"><rect x="${PL}" y="${PT}" width="${iw}" height="${ih}"/></clipPath></defs>` +
     grid + ylabels + xlabels +
     `<g clip-path="url(#${clipId})">` + whoBand + whoLines +
-    `<path class="dataline" d="${path.trim()}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` +
-    dots + `</g>` + tip + `</svg></div>`;
+    `<path class="dataline" d="${path.trim()}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g>` +
+    dots + tip + `</svg></div>`;
 }
 // 点击数据点显示/隐藏横纵坐标浮层（同一点再点隐藏）
 function chartTip(hitEl, tipId, label, valueText) {
