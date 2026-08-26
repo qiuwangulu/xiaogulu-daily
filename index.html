@@ -2201,7 +2201,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.30 0826-2202'; // 修复添加按钮移动端首点不响应(合成click落在遮罩触发closeModal),改用enableFastTap
+const APP_VERSION = 'v3.5.31 0826-2226'; // 修复添加按钮移动端首点不响应(合成click落在遮罩触发closeModal),改用enableFastTap
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3847,7 +3847,7 @@ function makeLineChart(data, opts) {
     });
   }
   // WHO 参考曲线渲染：p3~p75 半透明填充带（最底层）+ 3条虚线 + 右端标注
-  let whoBand = '', whoLines = '';
+  let whoBand = '', whoPaths = '', whoDots = '';
   if (whoPts && whoPts.length > 1) {
     const xfT = ts => PL + (iw * (ts - tMin)) / (tMax - tMin);
     // 填充带：p3 正序 + p75 逆序闭合
@@ -3862,7 +3862,7 @@ function makeLineChart(data, opts) {
     ];
     lineDefs.forEach(def => {
       const pts = whoPts.map(p => `${xfT(p.t).toFixed(1)} ${yf(p.row[def.key]).toFixed(1)}`);
-      whoLines += `<path d="M${pts.join(' L')}" fill="none" stroke="${def.color}" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.8"/>`;
+      whoPaths += `<path d="M${pts.join(' L')}" fill="none" stroke="${def.color}" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.8"/>`;
       // v3.5.18：右端文字标注已移到标题行图例，SVG 内只保留 WHO 数据点+tooltip
       // v3.5.12 WHO 参考值数据点：关键点（首末日+每月25号）渲染可见小圆点+透明命中区，点击显示该日标准值标注
       whoPts.forEach(p => {
@@ -3870,19 +3870,20 @@ function makeLineChart(data, opts) {
         const dt = new Date(p.t);
         const labelText = `${dt.getUTCMonth() + 1}/${dt.getUTCDate()}`;
         const valText = `WHO ${def.label}: ${fmtV(p.row[def.key])}${unit}`;
-        whoLines += `<circle cx="${x}" cy="${y}" r="2.5" fill="${def.color}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
+        whoDots += `<circle cx="${x}" cy="${y}" r="2.5" fill="${def.color}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
           `<circle class="chart-hit" cx="${x}" cy="${y}" r="9" fill="transparent" data-cx="${x}" data-cy="${y}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
       });
     });
   }
   // v3.5.13 clipPath：绘图区裁剪（紧凑档下 WHO 参考线超出 Y 轴范围的部分不溢出图表）
+  // v3.5.27/v3.5.31：dots(用户数据点)和whoDots(WHO数据点)移到clipPath外，避免最右侧被裁剪
   const clipId = 'cclip' + (++_chartTipSeq);
   return head2 + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
     `<defs><clipPath id="${clipId}"><rect x="${PL}" y="${PT}" width="${iw}" height="${ih}"/></clipPath></defs>` +
     grid + ylabels + xlabels +
-    `<g clip-path="url(#${clipId})">` + whoBand + whoLines +
+    `<g clip-path="url(#${clipId})">` + whoBand + whoPaths +
     `<path class="dataline" d="${path.trim()}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g>` +
-    dots + tip + `</svg></div>`;
+    dots + whoDots + tip + `</svg></div>`;
 }
 // 点击数据点显示/隐藏横纵坐标浮层（同一点再点隐藏）
 function chartTip(hitEl, tipId, label, valueText) {
