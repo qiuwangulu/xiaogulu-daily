@@ -2175,7 +2175,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.21 0826-0715'; // 白天开关蓝/白底色+右上角☀浅色/★深色手动切换(跨时段自动恢复)
+const APP_VERSION = 'v3.5.21 0826-0830'; // 语音体温数值回填(标点切分后纯数字段自动补入前项params)
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -2662,6 +2662,55 @@ function parseVoiceText(text) {
     });
     if (!segOk) unmatched.push(seg);
   });
+
+  // ===== v3.5.21 数值参数回填：语音被标点切分后，纯数值段(如"36.5""130")无法被任何规则命中 =====
+  // 但它很可能是前一个活动的参数（体温值/奶量/时长），尝试回填到前一个 item 的 params 里
+  if (unmatched.length > 0 && items.length > 0) {
+    const backfillIdx = [];
+    unmatched.forEach((seg, ui) => {
+      const trimmed = seg.trim();
+      if (!trimmed) return;
+      const last = items[items.length - 1];
+      let filled = false;
+
+      // 体温回填：parseTempNum 能识别 "36.5" / "38度5" / "38点5" 等
+      if (last.actId === 'temperature' && last.params.temperature === undefined) {
+        const tv = parseTempNum(trimmed);
+        if (tv !== null) {
+          last.params.temperature = tv;
+          last.params.tempStatus = tv <= 37.5 ? 'normal' : 'high';
+          if (last.warn) last.warn = false; // 原本 warn=true(缺体温)，现已补全
+          filled = true;
+        }
+      }
+
+      // 奶量回填：纯数字 20-400
+      if (!filled && last.actId === 'milk' && last.params.milkAmount === undefined) {
+        const mn = cnNum(trimmed);
+        if (mn !== null && mn >= 20 && mn <= 400) {
+          last.params.milkAmount = Math.round(mn);
+          if (last.warn) last.warn = false;
+          filled = true;
+        }
+      }
+
+      // 时长回填：sleep / outdoor / airButt 缺 duration 时
+      if (!filled && (last.actId === 'sleep' || last.actId === 'outdoor' || last.actId === 'airButt')
+          && last.params.duration !== undefined && last.params.duration === 0) {
+        const dv = parseDurationMin(trimmed);
+        if (dv !== null && dv > 0) {
+          last.params.duration = dv;
+          if (last.warn) last.warn = false;
+          filled = true;
+        }
+      }
+
+      if (filled) backfillIdx.push(ui);
+    });
+    // 从 unmatched 中移除已成功回填的段（倒序删除避免索引偏移）
+    backfillIdx.sort((a, b) => b - a).forEach(ui => unmatched.splice(ui, 1));
+  }
+
   return { items, unmatched: unmatched.join('；') };
 }
 
