@@ -1855,6 +1855,15 @@ function checkAchievementPush(achArr, totalMilk) {
     const sentDate = localStorage.getItem('pushSentTodayDate') || '';
     if (sentDate === today) return; // 今天已经成功推送过，不再推送
 
+    // ===== 升级兼容：旧版(v3.5.33及之前)没有 pushSentTodayDate =====
+    // 检测到旧版残留的推送记录 → 自动补设今日锁，防止升级后重推
+    if (!localStorage.getItem('pushSentTodayDate') &&
+        (localStorage.getItem('pushLastSig') || localStorage.getItem('pushAchTs'))) {
+      localStorage.setItem('pushSentTodayDate', today);
+      console.log('[推送] 升级兼容: 检测到旧版推送记录, 补设今日锁');
+      return;
+    }
+
     // ===== 软防护: 签名去重（快速路径）=====
     const currentSig = [...achArr].sort().join('|');
     const lastPushedSig = localStorage.getItem('pushLastSig') || '';
@@ -2228,7 +2237,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.34 0827-1612'; // 彻底修复pushplus重复推送：①发送中锁(_pushInFlight) ②今日已推送硬锁(pushSentTodayDate) ③成功确认后才记录去重状态
+const APP_VERSION = 'v3.5.35 0827-1623'; // 修复升级兼容:旧版无pushSentTodayDate导致升级后重推,自动补设今日锁
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
