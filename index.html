@@ -1121,6 +1121,26 @@
 </style>
 </head>
 <body>
+<script>
+// v3.5.33 首屏防闪烁：在 body 解析开头同步确定主题（与 applyTheme 首屏逻辑一致），
+// 避免默认夜间皮肤先渲染再切白天的 FOUC 闪屏。完整时段边界/手动偏好处理仍由 applyTheme 负责。
+(function(){
+  try {
+    var h = new Date().getHours();
+    var autoDay = h >= 6 && h < 18;
+    var manual = localStorage.getItem('theme_manual');
+    // 首屏：残留手动偏好与当前时段矛盾则视为过期并清除（与 applyTheme 首次加载分支一致）
+    if ((manual === 'day' && !autoDay) || (manual === 'night' && autoDay)) {
+      manual = null;
+      try { localStorage.removeItem('theme_manual'); } catch(e) {}
+    }
+    var day = manual ? manual === 'day' : autoDay;
+    document.body.classList.toggle('theme-day', day);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', day ? '#f5f8fd' : '#0a0f1e');
+  } catch(e) {}
+})();
+</script>
 <div class="stars"></div>
 
 <div class="app">
@@ -2201,7 +2221,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.32 0827-0800'; // 修复pushplus重复推送：①定时器updateOverview跳过推送检查(skipPush) ②冷却期10秒→5分钟
+const APP_VERSION = 'v3.5.33 0827-1134'; // 修复首屏夜间模式闪屏(FOUC)：body开头内联脚本按时间/偏好同步设置theme-day
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
