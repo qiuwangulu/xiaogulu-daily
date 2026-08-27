@@ -1647,8 +1647,8 @@ function checkDateReset(opts) {
   const last = localStorage.getItem('lastActiveDate');
   localStorage.setItem('lastActiveDate', today);
   // 跨日（last 存在且与今天不同）才清推送集合；仅是 init 启动记录 today 不清
-  if (opts && opts.force) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); localStorage.removeItem('pushLastSig'); localStorage.removeItem('pushSentTodayDate'); localStorage.removeItem('pushAchTs'); return; }
-  if (last && last !== today) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); localStorage.removeItem('pushLastSig'); localStorage.removeItem('pushSentTodayDate'); localStorage.removeItem('pushAchTs'); }
+  if (opts && opts.force) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); localStorage.removeItem('pushLastSig'); localStorage.removeItem('pushAchTs'); return; }
+  if (last && last !== today) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); localStorage.removeItem('pushLastSig'); localStorage.removeItem('pushAchTs'); }
 }
 function setupMidnightReset() {
   // 定时到下一个凌晨 1:00 触发日切重置（当日重置时间为 1:00）
@@ -1756,7 +1756,6 @@ function savePushTopic() {
   localStorage.removeItem('pushAchSig');
   localStorage.removeItem('pushAchSet');
   localStorage.removeItem('pushLastSig');
-  localStorage.removeItem('pushSentTodayDate');
   localStorage.removeItem('pushAchTs');
   loadPushTopicUI();
   showToast('群组编码已保存');
@@ -1770,7 +1769,6 @@ function savePushToken() {
   if (untouched) { localStorage.removeItem('pushplus_token'); showToast('已恢复默认推送 token'); loadPushTokenUI(); return; }
   if (val.length < 8) { showToast('token 长度过短，请检查'); return; }
   localStorage.setItem('pushplus_token', val);
-  localStorage.removeItem('pushSentTodayDate');
   localStorage.removeItem('pushAchTs');
   loadPushTokenUI();
   showToast('推送 token 已保存');
@@ -1837,9 +1835,10 @@ async function notifyPushplus(title, content) {
     return !!(data && data.code === 200);
   } catch (e) { console.warn('PushPlus推送失败:', e); return false; }
 }
-// ========== 推送防重复：三层硬锁 ==========
+// ========== 推送防重复：基于内容变化的智能推送 ==========
+// 核心原则：成就内容变了才推，内容一样不推（防重复）
 // _pushInFlight: 发送中锁（防止并发重复）
-// pushSentTodayDate: 今日已推送锁（同一天只推一次，跨日自动清除）
+// pushLastSig: 上次推送的成就签名（内容去重）
 let _pushInFlight = false; // 发送中锁
 function checkAchievementPush(achArr, totalMilk) {
   try {
@@ -1847,31 +1846,17 @@ function checkAchievementPush(achArr, totalMilk) {
     const token = localStorage.getItem('pushplus_token') || _DEFAULT_PUSHTOKEN;
     if (!token || !achArr || achArr.length === 0) return;
 
-    // ===== 硬锁1: 发送中锁（并发防护）=====
+    // ===== 硬锁: 发送中锁（并发防护）=====
     if (_pushInFlight) return; // 上一次推送尚未完成（fetch 异步中），直接跳过
 
-    // ===== 硬锁2: 今日已推送（每天最多一次）=====
-    const today = getTodayDateStr();
-    const sentDate = localStorage.getItem('pushSentTodayDate') || '';
-    if (sentDate === today) return; // 今天已经成功推送过，不再推送
-
-    // ===== 升级兼容：旧版(v3.5.33及之前)没有 pushSentTodayDate =====
-    // 检测到旧版残留的推送记录 → 自动补设今日锁，防止升级后重推
-    if (!localStorage.getItem('pushSentTodayDate') &&
-        (localStorage.getItem('pushLastSig') || localStorage.getItem('pushAchTs'))) {
-      localStorage.setItem('pushSentTodayDate', today);
-      console.log('[推送] 升级兼容: 检测到旧版推送记录, 补设今日锁');
-      return;
-    }
-
-    // ===== 软防护: 签名去重（快速路径）=====
+    // ===== 核心防线: 签名去重（成就内容没变 → 不推）=====
     const currentSig = [...achArr].sort().join('|');
     const lastPushedSig = localStorage.getItem('pushLastSig') || '';
-    if (currentSig === lastPushedSig) return;
+    if (currentSig === lastPushedSig) return; // 成就内容完全相同 → 跳过
 
-    // ===== 软防护: 冷却期（兜底）=====
+    // ===== 安全兜底: 冷却期（防止极短时间内连续触发）=====
     const now = Date.now();
-    if (now - parseInt(localStorage.getItem('pushAchTs') || '0') < 300000) return;
+    if (now - parseInt(localStorage.getItem('pushAchTs') || '0') < 60000) return; // 1分钟冷却
 
     // ===== 通过所有检查 → 发送 =====
     _pushInFlight = true; // 加锁
@@ -1905,12 +1890,11 @@ function checkAchievementPush(achArr, totalMilk) {
 
         // ===== 只在推送成功后才记录状态（失败不污染去重数据）=====
         if (ok) {
-          localStorage.setItem('pushSentTodayDate', today); // 硬锁2: 标记今天已推
-          localStorage.setItem('pushLastSig', currentSig);
-          localStorage.setItem('pushAchTs', String(Date.now()));
-          console.log('[推送] 成功发送，已锁定今日不再推送');
+          localStorage.setItem('pushLastSig', currentSig); // 记录本次成就签名
+          localStorage.setItem('pushAchTs', String(Date.now())); // 记录时间戳
+          console.log('[推送] 成功发送，已记录签名');
         } else {
-          console.warn('[推送] 失败，未锁定，下次可重试');
+          console.warn('[推送] 失败，未记录签名，下次可重试');
         }
       } catch (e) {
         console.warn('[推送] 异常:', e);
@@ -2237,7 +2221,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.35 0827-1623'; // 修复升级兼容:旧版无pushSentTodayDate导致升级后重推,自动补设今日锁
+const APP_VERSION = 'v3.5.36 0827-1659'; // 修复推送策略:去掉"每天只推一次"硬锁,改为签名去重(内容变了才推,一样不推)
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
