@@ -1571,7 +1571,7 @@ function init() {
   updateAddButtonVisibility();
   try { updateOverview(); } catch(e) { console.error('updateOverview error:', e); }
   setupMidnightReset();
-  setInterval(() => { try { updateOverview(); } catch(e) { console.error(e); } }, 60000);
+  setInterval(() => { try { updateOverview(/*skipPush=*/true); } catch(e) { console.error(e); } }, 60000);
   setupPWA();
   initSync();
   bindVoiceTouch();
@@ -1845,7 +1845,7 @@ function checkAchievementPush(achArr, totalMilk) {
       return;
     }
     const now = Date.now();
-    if (now - parseInt(localStorage.getItem('pushAchTs') || '0') < 10000) return; // 10秒防抖
+    if (now - parseInt(localStorage.getItem('pushAchTs') || '0') < 300000) return; // 5分钟冷却期，防止任何原因导致的短时间重复推送
 
     // 通过：更新推送集合、记录时间戳、发送
     pushedSet = [...new Set([...pushedSet, ...newAchievements])];
@@ -1909,7 +1909,7 @@ function getLastMilkRecord() {
   return null;
 }
 
-function updateOverview() {
+function updateOverview(skipPush) {
   const records = getTodayRecords();
   const bar = document.getElementById('overviewBar');
 
@@ -1940,7 +1940,7 @@ function updateOverview() {
   }
 
   bar.innerHTML = html;
-  checkAchievementPush(achArr, totalMilk);
+  if (!skipPush) checkAchievementPush(achArr, totalMilk);
 }
 
 let milkRemindShown = false; // 页面级变量：本次页面生命周期内只弹一次，刷新后自然重置
@@ -2201,7 +2201,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.31 0826-2226'; // 修复添加按钮移动端首点不响应(合成click落在遮罩触发closeModal),改用enableFastTap
+const APP_VERSION = 'v3.5.32 0827-0800'; // 修复pushplus重复推送：①定时器updateOverview跳过推送检查(skipPush) ②冷却期10秒→5分钟
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
