@@ -1835,74 +1835,77 @@ async function notifyPushplus(title, content) {
     return !!(data && data.code === 200);
   } catch (e) { console.warn('PushPlus推送失败:', e); return false; }
 }
-// ========== 推送防重复：基于内容变化的智能推送 ==========
-// 核心原则：成就内容变了才推，内容一样不推（防重复）
-// _pushInFlight: 发送中锁（防止并发重复）
-// pushLastSig: 上次推送的成就签名（内容去重）
-let _pushInFlight = false; // 发送中锁
+// ========== 推送：基于成就内容变化的智能推送 ==========
+// 核心原则：成就集合变了才推，内容相同不推（签名去重天然防重复）
+// 定时器(updateOverview(/*skipPush*/true)) 不触发推送
+// 防重复只看签名，不再用冷却期/硬锁，避免漏推
+let _pushBusy = false;   // 发送中（防止并发重复 fetch）
+let _pending = null;     // 发送期间若出现更新的成就，发送后补推 {achArr,totalMilk}
+let _pushTimer = null;   // 安全定时器：防止 fetch 卡死导致永久失推
 function checkAchievementPush(achArr, totalMilk) {
   try {
     if (!isSubscribeMode()) return;
     const token = localStorage.getItem('pushplus_token') || _DEFAULT_PUSHTOKEN;
     if (!token || !achArr || achArr.length === 0) return;
-
-    // ===== 硬锁: 发送中锁（并发防护）=====
-    if (_pushInFlight) return; // 上一次推送尚未完成（fetch 异步中），直接跳过
-
-    // ===== 核心防线: 签名去重（成就内容没变 → 不推）=====
     const currentSig = [...achArr].sort().join('|');
-    const lastPushedSig = localStorage.getItem('pushLastSig') || '';
-    if (currentSig === lastPushedSig) return; // 成就内容完全相同 → 跳过
-
-    // ===== 安全兜底: 冷却期（防止极短时间内连续触发）=====
-    const now = Date.now();
-    if (now - parseInt(localStorage.getItem('pushAchTs') || '0') < 60000) return; // 1分钟冷却
-
-    // ===== 通过所有检查 → 发送 =====
-    _pushInFlight = true; // 加锁
-    (async () => {
-      try {
-        const ds = getTodayDateStr();
-        // 通知标题 = 本次新增的成就（取前3个避免过长）
-        const displayTitle = achArr.slice(0, 3).join(' · ');
-        const fullTitle = achArr.length > 3 ? displayTitle + '…' : displayTitle;
-        // 详情内容 = 今日全部成就
-        const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const items = achArr.map(a => `<li>${esc(a)}</li>`).join('');
-        // 当天统计
-        let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
-        if (!Array.isArray(recs)) recs = [];
-        let poopCount = 0, outdoorMin = 0, sleepMin = 0;
-        recs.forEach(r => {
-          if (r.type === 'poop') poopCount++;
-          else if (r.type === 'outdoor' && r.duration) outdoorMin += r.duration;
-          else if (r.type === 'sleep' && r.duration) sleepMin += r.duration;
-        });
-        const fmtDur = min => { min = Math.round(min); const h = Math.floor(min / 60), m = min % 60; if (h > 0 && m > 0) return `${h}小时${m}分钟`; return h > 0 ? `${h}小时` : `${m}分钟`; };
-        const content = `<h3>小咕噜的今日成就 ${ds}</h3>` +
-          `<p><b>🏆 今日成就:</b></p><ul>${items}</ul>` +
-          `<p><b>🍼 水+奶量:</b> ${Math.round(totalMilk * 1.12)} ml</p>` +
-          `<p><b>💩 大便次数:</b> ${poopCount} 次</p>` +
-          `<p><b>☀️ 户外活动:</b> ${fmtDur(outdoorMin)}</p>` +
-          `<p><b>😴 睡眠时长:</b> ${fmtDur(sleepMin)}</p>`;
-
-        const ok = await notifyPushplus(displayTitle, content);
-
-        // ===== 只在推送成功后才记录状态（失败不污染去重数据）=====
-        if (ok) {
-          localStorage.setItem('pushLastSig', currentSig); // 记录本次成就签名
-          localStorage.setItem('pushAchTs', String(Date.now())); // 记录时间戳
-          console.log('[推送] 成功发送，已记录签名');
-        } else {
-          console.warn('[推送] 失败，未记录签名，下次可重试');
-        }
-      } catch (e) {
-        console.warn('[推送] 异常:', e);
-      } finally {
-        _pushInFlight = false; // 解锁
-      }
-    })();
+    // 与"已推送签名"相同 → 内容未变，跳过（防重复）
+    if (currentSig === (localStorage.getItem('pushLastSig') || '')) return;
+    // 正在发送 → 记下最新成就，发送结束后补推，绝不丢弃
+    if (_pushBusy) { _pending = { achArr, totalMilk }; return; }
+    doPush(achArr, totalMilk);
   } catch (e) { console.warn('推送检查失败:', e); }
+}
+function doPush(achArr, totalMilk) {
+  const currentSig = [...achArr].sort().join('|');
+  _pushBusy = true;
+  // 安全计时：最多等待 15 秒，超时强制解锁，避免 fetch 卡死导致永久失推
+  clearTimeout(_pushTimer);
+  _pushTimer = setTimeout(() => { _pushBusy = false; _pending = null; }, 15000);
+  (async () => {
+    try {
+      const ds = getTodayDateStr();
+      // 通知标题 = 成就（取前3个避免过长）
+      const displayTitle = achArr.slice(0, 3).join(' · ');
+      // 详情内容 = 今日全部成就
+      const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const items = achArr.map(a => `<li>${esc(a)}</li>`).join('');
+      // 当天统计
+      let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
+      if (!Array.isArray(recs)) recs = [];
+      let poopCount = 0, outdoorMin = 0, sleepMin = 0;
+      recs.forEach(r => {
+        if (r.type === 'poop') poopCount++;
+        else if (r.type === 'outdoor' && r.duration) outdoorMin += r.duration;
+        else if (r.type === 'sleep' && r.duration) sleepMin += r.duration;
+      });
+      const fmtDur = min => { min = Math.round(min); const h = Math.floor(min / 60), m = min % 60; if (h > 0 && m > 0) return `${h}小时${m}分钟`; return h > 0 ? `${h}小时` : `${m}分钟`; };
+      const content = `<h3>小咕噜的今日成就 ${ds}</h3>` +
+        `<p><b>🏆 今日成就:</b></p><ul>${items}</ul>` +
+        `<p><b>🍼 水+奶量:</b> ${Math.round(totalMilk * 1.12)} ml</p>` +
+        `<p><b>💩 大便次数:</b> ${poopCount} 次</p>` +
+        `<p><b>☀️ 户外活动:</b> ${fmtDur(outdoorMin)}</p>` +
+        `<p><b>😴 睡眠时长:</b> ${fmtDur(sleepMin)}</p>`;
+
+      const ok = await notifyPushplus(displayTitle, content);
+      // 只在推送成功后才记录签名（失败不记录，下次可重试）
+      if (ok) {
+        localStorage.setItem('pushLastSig', currentSig);
+        console.log('[推送] 成功发送, sig=', currentSig);
+      } else {
+        console.warn('[推送] 失败，未记录签名，稍后重试');
+      }
+    } catch (e) {
+      console.warn('[推送] 异常:', e);
+    } finally {
+      clearTimeout(_pushTimer);
+      _pushBusy = false;
+      // 发送期间若成就又有变化，补推一次最新内容
+      if (_pending) {
+        const p = _pending; _pending = null;
+        checkAchievementPush(p.achArr, p.totalMilk);
+      }
+    }
+  })();
 }
 
 /* ==================== 信息总览 ==================== */
@@ -2221,7 +2224,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.36 0827-1659'; // 修复推送策略:去掉"每天只推一次"硬锁,改为签名去重(内容变了才推,一样不推)
+const APP_VERSION = 'v3.5.37 0828-0102'; // 修复更新成就不推送:去掉1分钟冷却期与发送中硬锁(会漏推),改为签名去重+发送中排队补推+15s超时自愈
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
