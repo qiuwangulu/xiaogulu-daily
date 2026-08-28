@@ -1755,7 +1755,7 @@ function savePushTopic() {
   localStorage.setItem('pushplus_topic', topic);
   localStorage.removeItem('pushAchSig');
   localStorage.removeItem('pushAchSet');
-  localStorage.removeItem('pushLastSig');   // 注意：不清除 pushSuccessHistory（历史兜底防线）
+  localStorage.removeItem('pushLastSig');   // 注意：不清除 pushSuccessHistory / pushLastAchievements（历史兜底防线）
   localStorage.removeItem('pushAchTs');
   loadPushTopicUI();
   showToast('群组编码已保存');
@@ -1848,6 +1848,7 @@ async function notifyPushplus(title, content) {
 const PUSH_HIST_KEY = 'pushSuccessHistory'; // 历史记录key（不被设置变更清除）
 const PUSH_SENDING_KEY = 'pushSending';     // 发送中标记
 const PUSH_SIG_KEY = 'pushLastSig';         // 上次推送签名
+const PUSH_ACH_KEY = 'pushLastAchievements'; // 上次推送的完整成就列表（用于计算新增项）
 const PUSH_MAX_HIST = 50;                   // 历史最多保留条数
 const PUSH_SENDING_TIMEOUT = 60000;         // 发送中锁超时 60s
 
@@ -1914,11 +1915,26 @@ function doPush(achArr, totalMilk) {
   (async () => {
     try {
       const ds = getTodayDateStr();
-      // 通知标题 = 成就（取前3个避免过长）
-      const displayTitle = achArr.slice(0, 3).join(' · ');
-      // 详情内容 = 今日全部成就
+
+      // ===== 计算本次新增的成就（相对于上次推送）=====
+      let lastAch = [];
+      try { lastAch = JSON.parse(localStorage.getItem(PUSH_ACH_KEY) || '[]'); } catch {}
+      if (!Array.isArray(lastAch)) lastAch = [];
+      const newAchievements = achArr.filter(a => !lastAch.includes(a));
+
+      // 通知标题 = 只显示新增的成就（这才是用户关心的变化）
+      const titleSrc = newAchievements.length > 0 ? newAchievements : achArr;
+      const displayTitle = titleSrc.slice(0, 3).join(' · ');
+      const fullTitle = titleSrc.length > 3 ? displayTitle + '…' : displayTitle;
+
+      // 详情内容 = 今日全部成就，新增项【新】高亮
       const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const items = achArr.map(a => `<li>${esc(a)}</li>`).join('');
+      const items = achArr.map(a => {
+        if (newAchievements.includes(a)) {
+          return `<li><span style="background:#ffecb3;color:#c0392b;font-weight:bold;padding:1px 4px;border-radius:3px;">【新】${esc(a)}</span></li>`;
+        }
+        return `<li>${esc(a)}</li>`;
+      }).join('');
       // 当天统计
       let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
       if (!Array.isArray(recs)) recs = [];
@@ -1942,10 +1958,11 @@ function doPush(achArr, totalMilk) {
       localStorage.removeItem(PUSH_SENDING_KEY);
 
       if (ok) {
-        // 双重记录：签名（快速路径）+ 历史（兜底防线）
+        // 三重记录：签名（快速路径）+ 历史（兜底防线）+ 成就列表（下次计算新增项）
         localStorage.setItem(PUSH_SIG_KEY, currentSig);
         _recordPushHistory(currentSig);
-        console.log('[推送] 成功发送, sig=', currentSig);
+        localStorage.setItem(PUSH_ACH_KEY, JSON.stringify(achArr));
+        console.log('[推送] 成功发送, 新增=', newAchievements.join(','));
       } else {
         console.warn('[推送] 失败，未记录，稍后可重试');
       }
@@ -2273,7 +2290,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.38 0828-0842'; // 彻底修复重复推送:三层localStorage防护(签名去重+发送中锁+推送历史兜底),历史记录不被设置变更清除
+const APP_VERSION = 'v3.5.39 0828-1206'; // 推送内容优化:通知标题只显示新增成就,详情内【新】高亮新增项,保留pushLastAchievements计算增量
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
