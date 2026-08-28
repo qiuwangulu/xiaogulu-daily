@@ -1647,8 +1647,8 @@ function checkDateReset(opts) {
   const last = localStorage.getItem('lastActiveDate');
   localStorage.setItem('lastActiveDate', today);
   // 跨日（last 存在且与今天不同）才清推送集合；仅是 init 启动记录 today 不清
-  if (opts && opts.force) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); localStorage.removeItem('pushLastSig'); localStorage.removeItem('pushAchTs'); return; }
-  if (last && last !== today) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); localStorage.removeItem('pushLastSig'); localStorage.removeItem('pushAchTs'); }
+  if (opts && opts.force) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); localStorage.removeItem('pushLastSig'); localStorage.removeItem('pushAchTs'); /* pushSuccessHistory保留(24h窗口自动过期) */ return; }
+  if (last && last !== today) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); localStorage.removeItem('pushLastSig'); localStorage.removeItem('pushAchTs'); /* pushSuccessHistory保留(24h窗口自动过期) */ }
 }
 function setupMidnightReset() {
   // 定时到下一个凌晨 1:00 触发日切重置（当日重置时间为 1:00）
@@ -1755,7 +1755,7 @@ function savePushTopic() {
   localStorage.setItem('pushplus_topic', topic);
   localStorage.removeItem('pushAchSig');
   localStorage.removeItem('pushAchSet');
-  localStorage.removeItem('pushLastSig');
+  localStorage.removeItem('pushLastSig');   // 注意：不清除 pushSuccessHistory（历史兜底防线）
   localStorage.removeItem('pushAchTs');
   loadPushTopicUI();
   showToast('群组编码已保存');
@@ -1836,31 +1836,81 @@ async function notifyPushplus(title, content) {
   } catch (e) { console.warn('PushPlus推送失败:', e); return false; }
 }
 // ========== 推送：基于成就内容变化的智能推送 ==========
-// 核心原则：成就集合变了才推，内容相同不推（签名去重天然防重复）
+// 核心原则：成就集合变了才推，内容相同不推
 // 定时器(updateOverview(/*skipPush*/true)) 不触发推送
-// 防重复只看签名，不再用冷却期/硬锁，避免漏推
-let _pushBusy = false;   // 发送中（防止并发重复 fetch）
-let _pending = null;     // 发送期间若出现更新的成就，发送后补推 {achArr,totalMilk}
-let _pushTimer = null;   // 安全定时器：防止 fetch 卡死导致永久失推
+//
+// 三层防护（全部基于 localStorage，跨 PWA 实例/后台恢复/设置变更安全）：
+//   Layer1: pushLastSig       — 签名去重（快速路径，内容完全相同→不推）
+//   Layer2: pushSending       — 发送中锁（localStorage，60s超时自愈，防并发）
+//   Layer3: pushSuccessHistory[] — 推送历史（最近50条{ts,sig}，永不被动清除，
+//                                  即使Layer1的签名被savePushTopic等意外清除，
+//                                  Layer3仍能识别"今天已推过此内容"）
+const PUSH_HIST_KEY = 'pushSuccessHistory'; // 历史记录key（不被设置变更清除）
+const PUSH_SENDING_KEY = 'pushSending';     // 发送中标记
+const PUSH_SIG_KEY = 'pushLastSig';         // 上次推送签名
+const PUSH_MAX_HIST = 50;                   // 历史最多保留条数
+const PUSH_SENDING_TIMEOUT = 60000;         // 发送中锁超时 60s
+
+function _isRecentlyPushed(sig) {
+  // Layer3: 检查历史记录中是否有相同签名（24小时内）
+  try {
+    const hist = JSON.parse(localStorage.getItem(PUSH_HIST_KEY) || '[]');
+    if (!Array.isArray(hist)) return false;
+    const oneDayAgo = Date.now() - 86400000;
+    return hist.some(h => h.sig === sig && h.ts > oneDayAgo);
+  } catch { return false; }
+}
+function _recordPushHistory(sig) {
+  try {
+    let hist = JSON.parse(localStorage.getItem(PUSH_HIST_KEY) || '[]');
+    if (!Array.isArray(hist)) hist = [];
+    hist.unshift({ ts: Date.now(), sig: sig });
+    if (hist.length > PUSH_MAX_HIST) hist.length = PUSH_MAX_HIST;
+    localStorage.setItem(PUSH_HIST_KEY, JSON.stringify(hist));
+  } catch {}
+}
+
 function checkAchievementPush(achArr, totalMilk) {
   try {
     if (!isSubscribeMode()) return;
     const token = localStorage.getItem('pushplus_token') || _DEFAULT_PUSHTOKEN;
     if (!token || !achArr || achArr.length === 0) return;
+
     const currentSig = [...achArr].sort().join('|');
-    // 与"已推送签名"相同 → 内容未变，跳过（防重复）
-    if (currentSig === (localStorage.getItem('pushLastSig') || '')) return;
-    // 正在发送 → 记下最新成就，发送结束后补推，绝不丢弃
-    if (_pushBusy) { _pending = { achArr, totalMilk }; return; }
+
+    // Layer1: 签名去重（快速路径）
+    if (currentSig === (localStorage.getItem(PUSH_SIG_KEY) || '')) return;
+
+    // Layer3: 历史记录兜底（防止 pushLastSig 被设置变更等意外清除后的重复）
+    if (_isRecentlyPushed(currentSig)) {
+      // 历史中有同签名 → 恢复 pushLastSig（自我修复），然后跳过
+      localStorage.setItem(PUSH_SIG_KEY, currentSig);
+      console.log('[推送] 历史去重命中, sig=', currentSig);
+      return;
+    }
+
+    // Layer2: 发送中锁（localStorage，跨实例安全）
+    const sending = localStorage.getItem(PUSH_SENDING_KEY);
+    if (sending) {
+      const sendingTs = parseInt(sending, 10);
+      if (!isNaN(sendingTs) && (Date.now() - sendingTs < PUSH_SENDING_TIMEOUT)) {
+        console.log('[推送] 发送中,跳过(剩余', Math.ceil((PUSH_SENDING_TIMEOUT - (Date.now() - sendingTs))/1000), 's)');
+        return;
+      }
+      // 发送中锁已超时（上次可能异常中断），清除后继续
+      localStorage.removeItem(PUSH_SENDING_KEY);
+    }
+
     doPush(achArr, totalMilk);
   } catch (e) { console.warn('推送检查失败:', e); }
 }
+
 function doPush(achArr, totalMilk) {
   const currentSig = [...achArr].sort().join('|');
-  _pushBusy = true;
-  // 安全计时：最多等待 15 秒，超时强制解锁，避免 fetch 卡死导致永久失推
-  clearTimeout(_pushTimer);
-  _pushTimer = setTimeout(() => { _pushBusy = false; _pending = null; }, 15000);
+
+  // 标记发送中（持久化到 localStorage）
+  localStorage.setItem(PUSH_SENDING_KEY, String(Date.now()));
+
   (async () => {
     try {
       const ds = getTodayDateStr();
@@ -1887,23 +1937,22 @@ function doPush(achArr, totalMilk) {
         `<p><b>😴 睡眠时长:</b> ${fmtDur(sleepMin)}</p>`;
 
       const ok = await notifyPushplus(displayTitle, content);
-      // 只在推送成功后才记录签名（失败不记录，下次可重试）
+
+      // 清除发送中锁
+      localStorage.removeItem(PUSH_SENDING_KEY);
+
       if (ok) {
-        localStorage.setItem('pushLastSig', currentSig);
+        // 双重记录：签名（快速路径）+ 历史（兜底防线）
+        localStorage.setItem(PUSH_SIG_KEY, currentSig);
+        _recordPushHistory(currentSig);
         console.log('[推送] 成功发送, sig=', currentSig);
       } else {
-        console.warn('[推送] 失败，未记录签名，稍后重试');
+        console.warn('[推送] 失败，未记录，稍后可重试');
       }
     } catch (e) {
       console.warn('[推送] 异常:', e);
-    } finally {
-      clearTimeout(_pushTimer);
-      _pushBusy = false;
-      // 发送期间若成就又有变化，补推一次最新内容
-      if (_pending) {
-        const p = _pending; _pending = null;
-        checkAchievementPush(p.achArr, p.totalMilk);
-      }
+      // 异常也要清除发送中锁，避免永久卡死
+      localStorage.removeItem(PUSH_SENDING_KEY);
     }
   })();
 }
@@ -2224,7 +2273,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.37 0828-0102'; // 修复更新成就不推送:去掉1分钟冷却期与发送中硬锁(会漏推),改为签名去重+发送中排队补推+15s超时自愈
+const APP_VERSION = 'v3.5.38 0828-0842'; // 彻底修复重复推送:三层localStorage防护(签名去重+发送中锁+推送历史兜底),历史记录不被设置变更清除
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
