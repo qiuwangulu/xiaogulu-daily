@@ -1837,6 +1837,10 @@ async function notifyPushplus(title, content) {
     const payload = { token: token, title: title, content: content, template: 'html' };
     const topic = localStorage.getItem('pushplus_topic') || _DEFAULT_PUSHTOPIC;
     payload.topic = topic; // 默认按群组编码一对多推送
+    // 幂等键：基于内容签名生成，同一内容在服务端只发送一次
+    // 即使客户端被多次调用（PWA双实例/后台恢复/页面重载），服务端不会重复投递
+    const idempotentKey = btoa(encodeURIComponent(title + '|' + content)).slice(0, 64);
+    payload.idempotencyKey = idempotentKey;
     const res = await fetch('https://www.pushplus.plus/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1864,7 +1868,7 @@ const PUSH_MAX_HIST = 100;                  // 历史最多保留条数
 const PUSH_SENDING_TIMEOUT = 60000;         // 发送中锁超时 60s
 const PUSH_NEW_SIG_KEY = 'pushLastNewSig';  // 上次推送的"新增成就"签名（同内容拦截用，不被设置变更清除）
 const PUSH_TS_KEY = 'pushLastPushTs';       // 上次推送时间戳
-const PUSH_SAME_WINDOW = 30 * 60 * 1000;    // 同一批新增成就 30 分钟内绝不重复推
+const PUSH_SAME_WINDOW = 2 * 60 * 1000;     // 同一批新增成就 2分钟内不重复推(辅助层,主防线为服务端幂等键)
 
 function _isRecentlyPushed(sig) {
   // Layer3: 检查历史记录中是否有相同签名（24小时内）
@@ -2334,7 +2338,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.43 0830-0730'; // 新增Layer4同内容拦截:记录上次推送的"新增成就"签名pushLastNewSig+时间戳,30分钟内同一批新增成就绝不重复推送(彻底解决间隔1min重复),新增内容变化仍正常推送不漏推
+const APP_VERSION = 'v3.5.44 0830-0730'; // 核心修复:notifyPushplus请求增加idempotencyKey幂等键(基于title+content签名),服务端自动去重同一内容(彻底解决PWA双实例/后台恢复/页面重载导致的重复推送);保留客户端Layer1-4辅助去重作为快速路径
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
