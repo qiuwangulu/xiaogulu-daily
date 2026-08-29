@@ -1582,6 +1582,17 @@ function init() {
   setupTheme();
   loadCustomOptions();
   loadHiddenActivities();
+  // ===== 升级兼容：旧版(v3.5.39及之前)没在 pushSuccessHistory 记录失败推送 =====
+  // 加载 v3.5.40 时若 pushSuccessHistory 为空但有 pushLastSig → 补一条到历史,
+  // 防止旧版失败推送的签名被新版本当作"未推送过"再次推送
+  try {
+    const histRaw = localStorage.getItem('pushSuccessHistory');
+    const hist = histRaw ? JSON.parse(histRaw) : [];
+    if ((!Array.isArray(hist) || hist.length === 0) && localStorage.getItem('pushLastSig')) {
+      localStorage.setItem('pushSuccessHistory', JSON.stringify([{ ts: Date.now(), sig: localStorage.getItem('pushLastSig') }]));
+      console.log('[推送] 升级兼容: 用旧版 pushLastSig 初始化历史');
+    }
+  } catch {}
   checkDateReset();
   renderCategoryBar();
   renderCards();
@@ -1886,6 +1897,8 @@ function checkAchievementPush(achArr, totalMilk) {
     if (_isRecentlyPushed(currentSig)) {
       // 历史中有同签名 → 恢复 pushLastSig（自我修复），然后跳过
       localStorage.setItem(PUSH_SIG_KEY, currentSig);
+      // 同步成就列表，避免下次 newAchievements 计算错误
+      try { localStorage.setItem(PUSH_ACH_KEY, JSON.stringify(achArr)); } catch {}
       console.log('[推送] 历史去重命中, sig=', currentSig);
       return;
     }
@@ -1902,12 +1915,34 @@ function checkAchievementPush(achArr, totalMilk) {
       localStorage.removeItem(PUSH_SENDING_KEY);
     }
 
-    doPush(achArr, totalMilk);
+    // ===== 计算本次新增的成就（在锁定状态前完成）=====
+    let lastAch = [];
+    try { lastAch = JSON.parse(localStorage.getItem(PUSH_ACH_KEY) || '[]'); } catch {}
+    if (!Array.isArray(lastAch)) lastAch = [];
+    const newAchievements = achArr.filter(a => !lastAch.includes(a));
+    if (newAchievements.length === 0) {
+      // 签名变了但没有真正的"新"成就（极少见，如成就被删又加回同样的）
+      // 也记录签名防下次误判，但不推送
+      localStorage.setItem(PUSH_SIG_KEY, currentSig);
+      _recordPushHistory(currentSig);
+      try { localStorage.setItem(PUSH_ACH_KEY, JSON.stringify(achArr)); } catch {}
+      console.log('[推送] 签名变化但无新增成就，不推送');
+      return;
+    }
+
+    // 同步锁定状态：在调用 doPush 之前立即写入签名+成就列表，
+    // 防止 17:25 推送期间 17:27 又触发时把同一条成就当"新增"重复推。
+    localStorage.setItem(PUSH_SIG_KEY, currentSig);
+    _recordPushHistory(currentSig);
+    try { localStorage.setItem(PUSH_ACH_KEY, JSON.stringify(achArr)); } catch {}
+
+    doPush(achArr, totalMilk, newAchievements);
   } catch (e) { console.warn('推送检查失败:', e); }
 }
 
-function doPush(achArr, totalMilk) {
-  const currentSig = [...achArr].sort().join('|');
+function doPush(achArr, totalMilk, newAchievements) {
+  // newAchievements 已由 checkAchievementPush 计算并锁定，无需 doPush 内部再算
+  // 保留为参数传入以保证一致性
 
   // 标记发送中（持久化到 localStorage）
   localStorage.setItem(PUSH_SENDING_KEY, String(Date.now()));
@@ -1915,12 +1950,6 @@ function doPush(achArr, totalMilk) {
   (async () => {
     try {
       const ds = getTodayDateStr();
-
-      // ===== 计算本次新增的成就（相对于上次推送）=====
-      let lastAch = [];
-      try { lastAch = JSON.parse(localStorage.getItem(PUSH_ACH_KEY) || '[]'); } catch {}
-      if (!Array.isArray(lastAch)) lastAch = [];
-      const newAchievements = achArr.filter(a => !lastAch.includes(a));
 
       // 通知标题 = 只显示新增的成就（这才是用户关心的变化）
       const titleSrc = newAchievements.length > 0 ? newAchievements : achArr;
@@ -1957,16 +1986,9 @@ function doPush(achArr, totalMilk) {
       // 清除发送中锁
       localStorage.removeItem(PUSH_SENDING_KEY);
 
-      // 乐观去重：只要请求已发到 pushplus 服务器就记录（不论成功失败）
-      // 原因：pushplus 可能返回非200但消息实际已入队推送，
-      //       若此时不记录，下次触发会重复推送（比偶尔漏推更糟糕）
-      if (ok || true) {
-        // 三重记录：签名（快速路径）+ 历史（兜底防线）+ 成就列表（下次计算新增项）
-        localStorage.setItem(PUSH_SIG_KEY, currentSig);
-        _recordPushHistory(currentSig);
-        localStorage.setItem(PUSH_ACH_KEY, JSON.stringify(achArr));
-        console.log('[推送] 已记录去重状态, sig=', currentSig, ok ? '(确认成功)' : '(已发送待确认)');
-      }
+      // 注意：签名/历史/成就列表已在 checkAchievementPush 同步锁定，
+      // doPush 只需释放发送中锁即可。无须再次写入（幂等）。
+      console.log('[推送] 完成, ok=', ok, ' newAch=', newAchievements.length, '条');
     } catch (e) {
       console.warn('[推送] 异常:', e);
       // 异常也要清除发送中锁，避免永久卡死
@@ -2291,7 +2313,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.40 0829-1257'; // 彻底修复重复推送:乐观去重(请求发出即记录签名+历史,不依赖API返回码),解决pushplus返回非200但消息已送达导致的重复
+const APP_VERSION = 'v3.5.42 0829-1734'; // 修复并发重复推送:checkAchievementPush在调用doPush前同步锁定pushLastSig+pushLastAchievements,防止fetch期间新成就触发导致newAchievements计算错误(同一条成就重复推2次)
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
