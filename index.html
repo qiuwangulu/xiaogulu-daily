@@ -1860,8 +1860,11 @@ const PUSH_HIST_KEY = 'pushSuccessHistory'; // 历史记录key（不被设置变
 const PUSH_SENDING_KEY = 'pushSending';     // 发送中标记
 const PUSH_SIG_KEY = 'pushLastSig';         // 上次推送签名
 const PUSH_ACH_KEY = 'pushLastAchievements'; // 上次推送的完整成就列表（用于计算新增项）
-const PUSH_MAX_HIST = 50;                   // 历史最多保留条数
+const PUSH_MAX_HIST = 100;                  // 历史最多保留条数
 const PUSH_SENDING_TIMEOUT = 60000;         // 发送中锁超时 60s
+const PUSH_NEW_SIG_KEY = 'pushLastNewSig';  // 上次推送的"新增成就"签名（同内容拦截用，不被设置变更清除）
+const PUSH_TS_KEY = 'pushLastPushTs';       // 上次推送时间戳
+const PUSH_SAME_WINDOW = 30 * 60 * 1000;    // 同一批新增成就 30 分钟内绝不重复推
 
 function _isRecentlyPushed(sig) {
   // Layer3: 检查历史记录中是否有相同签名（24小时内）
@@ -1930,11 +1933,29 @@ function checkAchievementPush(achArr, totalMilk) {
       return;
     }
 
+    // ===== Layer4: 同一批"新增成就"短期内已推过 → 坚决不推 =====
+    // 这是间隔 1 分钟重复推送的终极防线：无论签名为何变化、状态是否被意外清除，
+    // 只要本次要推的新增内容与上次推送的新增内容完全一致，30 分钟内不再推第二次。
+    // 新增内容真的变了（如又加了一条新成就）则照常推送，不会漏推。
+    const newSig = [...newAchievements].sort().join('|');
+    const lastPushTs = parseInt(localStorage.getItem(PUSH_TS_KEY) || '0', 10);
+    if (newSig && newSig === (localStorage.getItem(PUSH_NEW_SIG_KEY) || '')
+        && !isNaN(lastPushTs) && (Date.now() - lastPushTs < PUSH_SAME_WINDOW)) {
+      // 同步全量状态，避免后续反复进入计算
+      localStorage.setItem(PUSH_SIG_KEY, currentSig);
+      _recordPushHistory(currentSig);
+      try { localStorage.setItem(PUSH_ACH_KEY, JSON.stringify(achArr)); } catch {}
+      console.log('[推送] 同内容30分钟内已推过,跳过 newSig=', newSig);
+      return;
+    }
+
     // 同步锁定状态：在调用 doPush 之前立即写入签名+成就列表，
-    // 防止 17:25 推送期间 17:27 又触发时把同一条成就当"新增"重复推。
+    // 防止推送期间再次触发时把同一条成就当"新增"重复推。
     localStorage.setItem(PUSH_SIG_KEY, currentSig);
     _recordPushHistory(currentSig);
     try { localStorage.setItem(PUSH_ACH_KEY, JSON.stringify(achArr)); } catch {}
+    localStorage.setItem(PUSH_NEW_SIG_KEY, newSig);
+    localStorage.setItem(PUSH_TS_KEY, String(Date.now()));
 
     doPush(achArr, totalMilk, newAchievements);
   } catch (e) { console.warn('推送检查失败:', e); }
@@ -2313,7 +2334,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.42 0829-1734'; // 修复并发重复推送:checkAchievementPush在调用doPush前同步锁定pushLastSig+pushLastAchievements,防止fetch期间新成就触发导致newAchievements计算错误(同一条成就重复推2次)
+const APP_VERSION = 'v3.5.43 0830-0730'; // 新增Layer4同内容拦截:记录上次推送的"新增成就"签名pushLastNewSig+时间戳,30分钟内同一批新增成就绝不重复推送(彻底解决间隔1min重复),新增内容变化仍正常推送不漏推
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
