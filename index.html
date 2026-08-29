@@ -1957,14 +1957,15 @@ function doPush(achArr, totalMilk) {
       // 清除发送中锁
       localStorage.removeItem(PUSH_SENDING_KEY);
 
-      if (ok) {
+      // 乐观去重：只要请求已发到 pushplus 服务器就记录（不论成功失败）
+      // 原因：pushplus 可能返回非200但消息实际已入队推送，
+      //       若此时不记录，下次触发会重复推送（比偶尔漏推更糟糕）
+      if (ok || true) {
         // 三重记录：签名（快速路径）+ 历史（兜底防线）+ 成就列表（下次计算新增项）
         localStorage.setItem(PUSH_SIG_KEY, currentSig);
         _recordPushHistory(currentSig);
         localStorage.setItem(PUSH_ACH_KEY, JSON.stringify(achArr));
-        console.log('[推送] 成功发送, 新增=', newAchievements.join(','));
-      } else {
-        console.warn('[推送] 失败，未记录，稍后可重试');
+        console.log('[推送] 已记录去重状态, sig=', currentSig, ok ? '(确认成功)' : '(已发送待确认)');
       }
     } catch (e) {
       console.warn('[推送] 异常:', e);
@@ -2290,7 +2291,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.39 0828-1206'; // 推送内容优化:通知标题只显示新增成就,详情内【新】高亮新增项,保留pushLastAchievements计算增量
+const APP_VERSION = 'v3.5.40 0829-1257'; // 彻底修复重复推送:乐观去重(请求发出即记录签名+历史,不依赖API返回码),解决pushplus返回非200但消息已送达导致的重复
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
