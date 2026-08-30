@@ -1879,6 +1879,50 @@ const PUSH_LEADER_KEY = 'pushLeader';       // 同浏览器多标签页:推送�
 const PUSH_LEADER_TTL = 15000;              // 领导者心跳有效期 15s（超时其他标签页可抢占）
 const PUSH_LEADER_HEARTBEAT = 5000;         // 心跳间隔 5s
 const PUSH_LEADER_MAX_RETRY = 12;           // 非领导者最多重试 12 次(约 60s)后再放弃，避免漏推
+const PUSH_DEDUP_KEY = '_pushdedup';        // family_config 中的跨设备推送去重键(云端共享)
+const PUSH_DEDUP_MAX_AGE = 12 * 60 * 60 * 1000; // 同日同内容去重有效期 12h
+
+// ---- 跨设备云端去重（走已配置的 Supabase 家庭同步通道）----
+// 多台设备共用同一群组编码时，每台设备都会各推一遍同样内容。
+// 利用 family_config 这张各设备共享的 KV 表记录"今天已经推过的内容指纹"，
+// 实现跨设备自动去重 —— 用户无需手动关闭任何设备的推送开关。
+// 注意：只存内容指纹(哈希)与时间戳，不存明文，不泄露宝宝记录内容。
+function _pushHash(s) {                     // djb2 稳定哈希
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+function _pushContentSig(achArr) {
+  return getTodayDateStr() + '#' + _pushHash([...achArr].sort().join('|'));
+}
+// 返回 true = 其他设备已推送过相同内容，本设备应跳过
+async function _cloudPushDup(sig) {
+  try {
+    if (typeof isSyncReady !== 'function' || !isSyncReady()) return false;
+    const fid = getFamilyId();
+    if (!fid) return false;
+    const rows = await supabaseGet(`family_config?family_id=eq.${fid}&config_key=eq.${PUSH_DEDUP_KEY}&select=encrypted_data,last_modified`);
+    if (!Array.isArray(rows) || rows.length === 0) return false;
+    let rec = null;
+    try { rec = JSON.parse(rows[0].encrypted_data || 'null'); } catch (e) { return false; }
+    if (!rec || rec.sig !== sig) return false;
+    if (Date.now() - (rec.ts || 0) > PUSH_DEDUP_MAX_AGE) return false;
+    return true;
+  } catch (e) { return false; }             // 云端不可用 → 不拦截，宁可重推也不漏推
+}
+// 推送成功后写入云端指纹，供其他设备去重
+async function _cloudPushMark(sig) {
+  try {
+    if (typeof isSyncReady !== 'function' || !isSyncReady()) return;
+    const fid = getFamilyId();
+    if (!fid) return;
+    await supabaseUpsert('family_config', {
+      family_id: fid, config_key: PUSH_DEDUP_KEY,
+      encrypted_data: JSON.stringify({ sig: sig, ts: Date.now(), dev: getDeviceName() }),
+      iv: '', last_modified: Date.now()
+    });
+  } catch (e) { console.warn('[推送] 云端去重标记失败:', e); }
+}
 
 // ---- 设备级推送开关（跨设备去重）----
 // 多台设备共用同一群组编码时，每台都会各自推送一遍 → 重复消息。
@@ -1933,7 +1977,7 @@ let _pushRetry = 0;                         // 因"非领导者"而重试的次�
 function _markPushDirty() {
   _pushDirty = true;
   if (_pushTimer) return;                   // 已有调度器在等待
-  _pushTimer = setTimeout(() => {
+  _pushTimer = setTimeout(async () => {
     _pushTimer = null;
     if (!_pushDirty) return;
     // 层0：本设备被用户关闭推送 → 直接丢弃，不再重试
@@ -1949,6 +1993,12 @@ function _markPushDirty() {
       let totalMilk = 0;
       records.forEach(r => { if (r.type === 'milk' && r.milkAmount) totalMilk += r.milkAmount; });
       const achArr = computeAchievements(records);
+      if (achArr.length === 0) return;
+      // 层2：跨设备云端去重 —— 同一天同一组成就，任一设备已推过则其他设备跳过
+      if (await _cloudPushDup(_pushContentSig(achArr))) {
+        console.log('[推送] 云端去重命中:其他设备已推送过相同内容,本设备跳过');
+        return;
+      }
       checkAchievementPush(achArr, totalMilk);
     } catch (e) { console.warn('[推送] 调度器异常:', e); }
   }, PUSH_SCHED_DELAY);
@@ -2091,6 +2141,9 @@ function doPush(achArr, totalMilk, newAchievements) {
         `<p><b>😴 睡眠时长:</b> ${fmtDur(sleepMin)}</p>`;
 
       const ok = await notifyPushplus(displayTitle, content);
+
+      // 推送成功后写入云端内容指纹，供家庭内其他设备去重（跨设备重复推送的核心防线）
+      if (ok) _cloudPushMark(_pushContentSig(achArr));
 
       // 清除发送中锁
       localStorage.removeItem(PUSH_SENDING_KEY);
@@ -2424,7 +2477,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.46 0830-0920'; // 多设备/多标签页重复推送根因修复:①同浏览器多标签页用localStorage心跳领导者选举(_pushHeartbeat)选出唯一推送者;②新增「由本设备负责推送」开关(pushSenderDisabled)解决跨设备各推一遍;保留脏位合并调度器+Layer1-4客户端去重作为兜底
+const APP_VERSION = 'v3.5.47 0830-0940'; // 跨设备重复推送自动化修复:①利用已配置的Supabase家庭同步通道(family_config._pushdedup)记录内容指纹,实现跨设备自动去重,无需手动关闭任何设备开关;②同步拉取不再触发推送(updateOverview(true)),切断"对方记录→本设备同步→本设备再推"路径;保留脏位调度器+标签页领导者选举+设备开关+Layer1-4兜底
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -4506,7 +4559,9 @@ async function syncPullAll() {
       }
     } catch {}
 
-    if (changed) { loadCustomOptions(); loadHiddenActivities(); loadHeight(); loadWeight(); renderCategoryBar(); renderCards(); updateOverview();
+    // updateOverview(true):同步拉取的数据由对方设备产生，推送责任在产生方，
+    // 本设备不应再推送一次（否则"对方记录→本设备同步→本设备再推"造成跨设备重复）
+    if (changed) { loadCustomOptions(); loadHiddenActivities(); loadHeight(); loadWeight(); renderCategoryBar(); renderCards(); updateOverview(true);
       // 如果分析弹窗正打开，刷新身高体重曲线
       if (document.getElementById('analysisModal') && document.getElementById('analysisModal').classList.contains('show')) { openAnalysis(); }
     }
