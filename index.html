@@ -1305,7 +1305,10 @@
         <label class="xf-see-row"><input type="checkbox" id="pushTopicSee" onchange="togglePushTopicSee()"><span style="font-size:13px;color:#b2bec3;">显示明文</span></label>
         <button class="btn btn-primary" onclick="savePushTopic()">保存</button>
       </div>
-      <div class="push-token-hint">pushplus.plus → 发送消息 → 一对多消息 → 群组编码填到这里，家人扫码入群即可同步接收成就提醒</div>
+      <div class="push-token-row" style="justify-content: space-between;">
+        <label class="xf-see-row"><input type="checkbox" id="pushSenderToggle" onchange="togglePushSender()"><span style="font-size:13px;color:#b2bec3;">由本设备负责推送</span></label>
+      </div>
+      <div class="push-token-hint">pushplus.plus → 发送消息 → 一对多消息 → 群组编码填到这里，家人扫码入群即可同步接收成就提醒<br><b>重要：</b>多台设备都开着本应用时会各自推送一遍造成重复。<b>请只在一台设备（如妈妈的手机）勾选「由本设备负责推送」</b>，其他设备取消勾选即可。取消勾选的设备仍可正常记录与查看，只是不再发推送。</div>
     </div>
     <div class="sync-section">
       <div class="cos-title">🎤 语音识别</div>
@@ -1837,10 +1840,6 @@ async function notifyPushplus(title, content) {
     const payload = { token: token, title: title, content: content, template: 'html' };
     const topic = localStorage.getItem('pushplus_topic') || _DEFAULT_PUSHTOPIC;
     payload.topic = topic; // 默认按群组编码一对多推送
-    // 幂等键：基于内容签名生成，同一内容在服务端只发送一次
-    // 即使客户端被多次调用（PWA双实例/后台恢复/页面重载），服务端不会重复投递
-    const idempotentKey = btoa(encodeURIComponent(title + '|' + content)).slice(0, 64);
-    payload.idempotencyKey = idempotentKey;
     const res = await fetch('https://www.pushplus.plus/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1854,7 +1853,12 @@ async function notifyPushplus(title, content) {
 // 核心原则：成就集合变了才推，内容相同不推
 // 定时器(updateOverview(/*skipPush*/true)) 不触发推送
 //
-// 三层防护（全部基于 localStorage，跨 PWA 实例/后台恢复/设置变更安全）：
+// 架构：脏位标记 + 延迟合并调度
+//   多个 updateOverview() 调用（添加/编辑/删除/设置变更等）只设置 _pushDirty 标记，
+//   由 3 秒后的统一调度器执行一次 checkAchievementPush。
+//   这从根本上消除"一次用户操作触发 N 次推送检查"的并发窗口。
+//
+// 五层防护（全部基于 localStorage，跨 PWA 实例/后台恢复/设置变更安全）：
 //   Layer1: pushLastSig       — 签名去重（快速路径，内容完全相同→不推）
 //   Layer2: pushSending       — 发送中锁（localStorage，60s超时自愈，防并发）
 //   Layer3: pushSuccessHistory[] — 推送历史（最近50条{ts,sig}，永不被动清除，
@@ -1868,7 +1872,87 @@ const PUSH_MAX_HIST = 100;                  // 历史最多保留条数
 const PUSH_SENDING_TIMEOUT = 60000;         // 发送中锁超时 60s
 const PUSH_NEW_SIG_KEY = 'pushLastNewSig';  // 上次推送的"新增成就"签名（同内容拦截用，不被设置变更清除）
 const PUSH_TS_KEY = 'pushLastPushTs';       // 上次推送时间戳
-const PUSH_SAME_WINDOW = 2 * 60 * 1000;     // 同一批新增成就 2分钟内不重复推(辅助层,主防线为服务端幂等键)
+const PUSH_SAME_WINDOW = 2 * 60 * 1000;     // 同一批新增成就 2分钟内不重复推(辅助层)
+const PUSH_SCHED_DELAY = 3000;              // 脏位调度延迟:用户操作后等3秒再统一检查推送(合并多次调用)
+const PUSH_SENDER_OFF_KEY = 'pushSenderDisabled'; // '1' = 本设备不负责推送（多设备去重开关）
+const PUSH_LEADER_KEY = 'pushLeader';       // 同浏览器多标签页:推送领导者 {id,ts}
+const PUSH_LEADER_TTL = 15000;              // 领导者心跳有效期 15s（超时其他标签页可抢占）
+const PUSH_LEADER_HEARTBEAT = 5000;         // 心跳间隔 5s
+const PUSH_LEADER_MAX_RETRY = 12;           // 非领导者最多重试 12 次(约 60s)后再放弃，避免漏推
+
+// ---- 设备级推送开关（跨设备去重）----
+// 多台设备共用同一群组编码时，每台都会各自推送一遍 → 重复消息。
+// 由用户指定唯一一台"负责推送"的设备；其他设备只记录、不推送。
+function isPushSender() { return localStorage.getItem(PUSH_SENDER_OFF_KEY) !== '1'; }
+function togglePushSender() {
+  const el = document.getElementById('pushSenderToggle');
+  if (!el) return;
+  if (el.checked) { localStorage.removeItem(PUSH_SENDER_OFF_KEY); showToast('✅ 本设备将负责推送'); }
+  else { localStorage.setItem(PUSH_SENDER_OFF_KEY, '1'); showToast('已关闭本设备推送，由其他设备负责'); }
+}
+function loadPushSenderUI() {
+  const el = document.getElementById('pushSenderToggle');
+  if (el) el.checked = isPushSender();
+}
+
+// ---- 标签页级领导者选举（同浏览器多标签页去重）----
+// localStorage 在同一浏览器的多个标签页间共享，用「心跳 + TTL 抢占」选出唯一推送者。
+const _PAGE_ID = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+function _pushHeartbeat() {
+  try {
+    let leader = null;
+    try { leader = JSON.parse(localStorage.getItem(PUSH_LEADER_KEY) || 'null'); } catch {}
+    const now = Date.now();
+    // 无领导者 / 领导者已过期 / 自己就是领导者 → 续期
+    if (!leader || !leader.id || (now - leader.ts > PUSH_LEADER_TTL) || leader.id === _PAGE_ID) {
+      localStorage.setItem(PUSH_LEADER_KEY, JSON.stringify({ id: _PAGE_ID, ts: now }));
+    }
+  } catch (e) {}
+}
+function _isPushLeader() {
+  try {
+    const raw = localStorage.getItem(PUSH_LEADER_KEY);
+    if (!raw) return true;                  // 无记录：默认自己是领导者，避免漏推
+    let leader = null;
+    try { leader = JSON.parse(raw); } catch { return true; }
+    if (!leader || !leader.id) return true;
+    if (Date.now() - leader.ts > PUSH_LEADER_TTL) return true; // 领导者已失效 → 可抢占
+    return leader.id === _PAGE_ID;
+  } catch (e) { return true; }
+}
+_pushHeartbeat();
+setInterval(_pushHeartbeat, PUSH_LEADER_HEARTBEAT);
+
+// ---- 脏位标记 + 延迟合并调度器 ----
+// 解决根因：一次用户操作（如添加成就）会触发 updateOverview() 多次（添加后+渲染后+关弹窗后...），
+// 每次都独立走推送检查，产生并发窗口。改为：只标记脏，由单一调度器统一执行。
+let _pushDirty = false;                     // 脏位：有未处理的推送检查
+let _pushTimer = null;                      // 调度器 timer ID
+let _pushRetry = 0;                         // 因"非领导者"而重试的次数
+
+function _markPushDirty() {
+  _pushDirty = true;
+  if (_pushTimer) return;                   // 已有调度器在等待
+  _pushTimer = setTimeout(() => {
+    _pushTimer = null;
+    if (!_pushDirty) return;
+    // 层0：本设备被用户关闭推送 → 直接丢弃，不再重试
+    if (!isPushSender()) { _pushDirty = false; _pushRetry = 0; return; }
+    // 层1：同浏览器其他标签页是推送领导者 → 稍后重试，避免漏推
+    if (!_isPushLeader()) {
+      if (_pushRetry < PUSH_LEADER_MAX_RETRY) { _pushRetry++; _markPushDirty(); return; }
+      _pushDirty = false; _pushRetry = 0; return;   // 重试上限，放弃本次
+    }
+    _pushDirty = false; _pushRetry = 0;
+    try {
+      const records = getTodayRecords();
+      let totalMilk = 0;
+      records.forEach(r => { if (r.type === 'milk' && r.milkAmount) totalMilk += r.milkAmount; });
+      const achArr = computeAchievements(records);
+      checkAchievementPush(achArr, totalMilk);
+    } catch (e) { console.warn('[推送] 调度器异常:', e); }
+  }, PUSH_SCHED_DELAY);
+}
 
 function _isRecentlyPushed(sig) {
   // Layer3: 检查历史记录中是否有相同签名（24小时内）
@@ -2077,7 +2161,9 @@ function updateOverview(skipPush) {
   }
 
   bar.innerHTML = html;
-  if (!skipPush) checkAchievementPush(achArr, totalMilk);
+  // 推送检查改为脏位标记，由统一调度器延迟合并执行
+  // 这消除了"一次操作触发多次 updateOverview → 多次独立推送检查"的并发根因
+  if (!skipPush && achArr.length > 0) _markPushDirty();
 }
 
 let milkRemindShown = false; // 页面级变量：本次页面生命周期内只弹一次，刷新后自然重置
@@ -2338,7 +2424,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.44 0830-0730'; // 核心修复:notifyPushplus请求增加idempotencyKey幂等键(基于title+content签名),服务端自动去重同一内容(彻底解决PWA双实例/后台恢复/页面重载导致的重复推送);保留客户端Layer1-4辅助去重作为快速路径
+const APP_VERSION = 'v3.5.46 0830-0920'; // 多设备/多标签页重复推送根因修复:①同浏览器多标签页用localStorage心跳领导者选举(_pushHeartbeat)选出唯一推送者;②新增「由本设备负责推送」开关(pushSenderDisabled)解决跨设备各推一遍;保留脏位合并调度器+Layer1-4客户端去重作为兜底
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -3597,6 +3683,7 @@ function openManage() {
   document.getElementById('readOnlyToggle').checked = isReadOnlyMode();
   loadPushTokenUI();
   loadPushTopicUI();
+  loadPushSenderUI();
   loadXfyunConfigUI();
   updateReadOnlySlider();
   showModal('manageModal');
