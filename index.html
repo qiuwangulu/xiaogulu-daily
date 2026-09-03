@@ -2475,7 +2475,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.47 0830-0940'; // 跨设备重复推送自动化修复:①利用已配置的Supabase家庭同步通道(family_config._pushdedup)记录内容指纹,实现跨设备自动去重,无需手动关闭任何设备开关;②同步拉取不再触发推送(updateOverview(true)),切断"对方记录→本设备同步→本设备再推"路径;保留脏位调度器+标签页领导者选举+设备开关+Layer1-4兜底
+const APP_VERSION = 'v3.5.48 0903-1640'; // 语音解析修复:时长型活动(sleep/outdoor/airButt)支持裸数字时长(如"户外活动40"省略"分钟"),先剔除时刻表达(15:30/下午3点半)再取数字,避免误判;milk规则支持"喝了奶"/"吃了奶"中间带"了"的口语;unmatched回填同步使用宽松时长解析
 let _addModalOpening = false;
 function openAddModal() {
   if (_addModalOpening) return;
@@ -2736,6 +2736,25 @@ function parseDurationMin(seg) {
   }
   return Math.round(total);
 }
+// 时长型活动(sleep/outdoor/airButt)的"裸数字时长"解析：口语常省略单位（"户外活动40"→40分钟）
+// 必须先剔除时刻表达（15:30 / 下午3点半 / 三点十五），避免把开始时刻误当时长
+function parseBareDurationMin(zone) {
+  let s = String(zone || '');
+  s = s.replace(/(凌晨|早上|上午|中午|下午|傍晚|晚上)?\s*\d{1,2}\s*[:：]\s*\d{1,2}/g, ' ');                       // 15:30
+  s = s.replace(/(凌晨|早上|上午|中午|下午|傍晚|晚上)\s*\d{1,2}\s*(?:[点时]\s*(?:半|一刻|\d{1,2}|[零一二三四五六七八九十]+)?)?/g, ' '); // 下午3点半
+  s = s.replace(/\d{1,2}\s*[点时]\s*(?:半|一刻|\d{1,2}|[零一二三四五六七八九十]+)?/g, ' ');                        // 3点半/3点15/3点
+  s = s.replace(/[零一二两三四五六七八九十]+\s*[点时]\s*(?:半|一刻|[零一二三四五六七八九十]+)?/g, ' ');            // 三点半/三点十五
+  const N = '(\\d+(?:\\.\\d+)?|[零一二两三四五六七八九十百千]+)';
+  const m = s.match(new RegExp(N));
+  if (!m) return null;
+  const n = cnNum(m[1]);
+  if (n === null || n <= 0 || n > 720) return null;   // 裸数字合理性：1~720分钟(12h)
+  return n;
+}
+function parseDurationLoose(zone) {                      // 带单位优先，裸数字兜底
+  const d = parseDurationMin(zone);
+  return d !== null ? d : parseBareDurationMin(zone);
+}
 // 体温解析（"38度5"/"三十八度五"/"38.5度" → 38.5）
 function parseTempNum(seg) {
   const N = '(\\d+(?:\\.\\d+)?|[零一二两三四五六七八九十百]+)';
@@ -2828,7 +2847,7 @@ const VOICE_RULES = [
       else if (/血/.test(zone)) st = '便血';
       return { params: { poopStatus: st } };
     } },
-  { id: 'milk', re: /喂奶|喝奶|吃奶|毫升奶|奶粉|喝完奶|奶喝完|亲喂/,
+  { id: 'milk', re: /喂奶|喝[了完]?奶|吃[了完]?奶|毫升奶|奶粉|奶喝完|亲喂/,
     parse: (zone) => {
       let amount = null;
       const re = /(\d+(?:\.\d+)?|[零一二两三四五六七八九十百千]+)/g; let m;
@@ -2845,7 +2864,7 @@ const VOICE_RULES = [
     } },
   { id: 'sleep', re: /睡着了|睡觉了?|睡了|小睡|午睡|睡了一|睡眠|哄睡|补觉/,
     parse: (zone, ctx) => {
-      let d = parseDurationMin(zone);
+      let d = parseDurationLoose(zone);
       // 跨段回填：本段没找到时长时，从未匹配段池子里找一段带时长的附加进来
       if (d === null && ctx && Array.isArray(ctx.pool) && ctx.pool.length) {
         for (let i = 0; i < ctx.pool.length; i++) {
@@ -2857,7 +2876,7 @@ const VOICE_RULES = [
     } },
   { id: 'outdoor', re: /户外|出门|出去了?玩?|遛弯|散步|晒太阳|外面[耍玩]/,
     parse: (zone, ctx) => {
-      let d = parseDurationMin(zone);
+      let d = parseDurationLoose(zone);
       if (d === null && ctx && Array.isArray(ctx.pool) && ctx.pool.length) {
         for (let i = 0; i < ctx.pool.length; i++) {
           const ex = parseDurationMin(ctx.pool[i]);
@@ -2880,7 +2899,7 @@ const VOICE_RULES = [
   { id: 'drinkWater', re: /喝水|喂水|喝了?点水/, parse: () => ({ params: {} }) },
   { id: 'airButt', re: /晾屁/,
     parse: (zone, ctx) => {
-      let d = parseDurationMin(zone);
+      let d = parseDurationLoose(zone);
       if (d === null && ctx && Array.isArray(ctx.pool) && ctx.pool.length) {
         for (let i = 0; i < ctx.pool.length; i++) {
           const ex = parseDurationMin(ctx.pool[i]);
@@ -2997,7 +3016,7 @@ function parseVoiceText(text) {
       // 时长回填：sleep / outdoor / airButt 缺 duration 时
       if (!filled && (last.actId === 'sleep' || last.actId === 'outdoor' || last.actId === 'airButt')
           && last.params.duration !== undefined && last.params.duration === 0) {
-        const dv = parseDurationMin(trimmed);
+        const dv = parseDurationLoose(trimmed);
         if (dv !== null && dv > 0) {
           last.params.duration = dv;
           if (last.warn) last.warn = false;
