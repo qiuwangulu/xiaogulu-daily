@@ -692,6 +692,9 @@
   .dp-cell.selected { background: #74b9ff; color: #fff; font-weight: 700; }
   .dp-cell:active { background: rgba(116,185,255,0.4); }
   .dp-cell.selected:active { background: #5fa8e0; }
+  .dp-cell.disabled { color: rgba(255,255,255,0.18); background: transparent; cursor: not-allowed; }
+  .dp-cell.disabled:active { background: transparent; }
+  .dp-quick-btn:disabled { opacity: 0.3; cursor: not-allowed; }
   .dp-quick { display: flex; gap: 6px; margin-bottom: 14px; justify-content: center; flex-wrap: wrap; }
   .dp-quick-btn {
     padding: 6px 12px; font-size: 13px; color: #b2bec3;
@@ -1059,6 +1062,8 @@
   body.theme-day .dp-cell.today { border-color: #0984e3; }
   body.theme-day .dp-cell.selected { background: #0984e3; color: #fff; }
   body.theme-day .dp-cell:active { background: rgba(9,132,227,0.3); }
+  body.theme-day .dp-cell.disabled { color: rgba(61,72,82,0.25); background: transparent; cursor: not-allowed; }
+  body.theme-day .dp-cell.disabled:active { background: transparent; }
   body.theme-day .dp-cell.selected:active { background: #0770b8; }
   body.theme-day .dp-quick-btn { color: #636e72; background: rgba(9,132,227,0.06); border-color: rgba(9,132,227,0.2); }
   body.theme-day .dp-quick-btn:active { background: rgba(9,132,227,0.25); color: #0984e3; }
@@ -1261,7 +1266,7 @@
     </div>
     <div class="dp-grid" id="dpGrid"></div>
     <div class="dp-quick">
-      <button class="dp-quick-btn" onclick="dpPickQuick(0)">今天</button>
+      <button class="dp-quick-btn" disabled>今天</button>
       <button class="dp-quick-btn" onclick="dpPickQuick(1)">昨天</button>
       <button class="dp-quick-btn" onclick="dpPickQuick(2)">前天</button>
       <button class="dp-quick-btn" onclick="dpPickQuick(7)">上周</button>
@@ -2514,7 +2519,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.52 0904-1745'; // 历史弹窗顶部布局调整:日期显示上移到「历史记录」标题下方并居中放大到14px(夜间白/白天黑);「选择日期」按钮改用与「添加」相同的fab-btn样式并更名「选日」
+const APP_VERSION = 'v3.5.53 0904-1810'; // 选日日历禁止选择当天及以后日期:本月当前日及未来日置为disabled不可点击(无onclick),dpSelectDay/dpPickQuick加日期守卫拦截今天及未来,快捷按钮中"今天"置灰禁用;夜间/白天皮肤均适配
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3761,9 +3766,16 @@ function renderHistoryDatePicker() {
   for (let d = 1; d <= daysInMonth; d++) {
     const key = `${_dpViewYear}-${String(_dpViewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const cls = ['dp-cell'];
+    // 历史记录只能看过去，禁止选当天及以后的日期
+    const isFuture = key >= todayKey;
     if (key === todayKey) cls.push('today');
-    if (key === _dpSelected) cls.push('selected');
-    html += `<div class="${cls.join(' ')}" data-d="${d}" onclick="dpSelectDay('${key}')">${d}</div>`;
+    if (key === _dpSelected && !isFuture) cls.push('selected');
+    if (isFuture) cls.push('disabled');
+    if (isFuture) {
+      html += `<div class="${cls.join(' ')}" data-d="${d}">${d}</div>`;
+    } else {
+      html += `<div class="${cls.join(' ')}" data-d="${d}" onclick="dpSelectDay('${key}')">${d}</div>`;
+    }
   }
   // 下月头部补齐到 42 格（6 行 × 7）
   const totalCells = startOffset + daysInMonth;
@@ -3774,6 +3786,10 @@ function renderHistoryDatePicker() {
   grid.innerHTML = html;
 }
 function dpSelectDay(key) {
+  // 禁止选择当天及以后
+  const t = new Date();
+  const todayKey = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  if (key >= todayKey) return;
   _dpSelected = key;
   renderHistoryDatePicker();
 }
@@ -3784,6 +3800,7 @@ function dpNavMonth(delta) {
   renderHistoryDatePicker();
 }
 function dpPickQuick(deltaDays) {
+  if (deltaDays <= 0) return; // 禁止选今天及以后
   const d = new Date();
   d.setDate(d.getDate() - deltaDays);
   const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
