@@ -711,7 +711,19 @@
     background: rgba(255,255,255,0.04);
     border-radius: 10px; padding: 12px 14px;
     margin-bottom: 10px; font-size: 15px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
   }
+  .history-rec-main { flex: 1; min-width: 0; }
+  .history-rec-ops { display: flex; gap: 6px; flex-shrink: 0; }
+  .hist-op-btn {
+    width: 32px; height: 32px; border: none; border-radius: 8px;
+    background: rgba(255,255,255,0.08); font-size: 15px; line-height: 1;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .hist-op-btn:active { transform: scale(0.92); }
+  .hist-op-btn.edit { background: rgba(116,185,255,0.18); }
+  .hist-op-btn.del { background: rgba(255,118,117,0.18); }
   .history-record .rec-time { color: #74b9ff; font-size: 13px; margin-bottom: 5px; }
   .history-record .rec-detail { color: #dfe6e9; }
 
@@ -1059,6 +1071,7 @@
   body.theme-day .history-record { background: rgba(9,132,227,0.05); }
   body.theme-day .history-record .rec-time { color: #0984e3; }
   body.theme-day .history-record .rec-detail { color: #3d4852; }
+  body.theme-day .hist-op-btn { background: rgba(9,132,227,0.10); }
   body.theme-day .history-summary { background: rgba(9,132,227,0.05); border-color: rgba(9,132,227,0.12); }
   body.theme-day .history-sum-row .hs-label { color: #636e72; }
   body.theme-day .history-sum-row .hs-value { color: #d68910; }
@@ -1231,6 +1244,7 @@
       <button class="btn btn-primary" onclick="openHistoryDatePicker()" id="historyDatePickerBtn">📅 选择日期</button>
       <input type="hidden" id="historyDate">
       <button class="btn btn-primary" onclick="backToToday()">返回今天</button>
+      <button class="btn btn-success" onclick="addHistoryRecord()">➕ 添加记录</button>
     </div>
     <div class="history-summary" id="historySummary" style="display:none;"></div>
     <div class="history-list" id="historyList"></div>
@@ -1349,7 +1363,7 @@
 <div class="modal-overlay" id="addModal" onclick="closeModal(event,'addModal')">
   <div class="modal-box" onclick="event.stopPropagation()">
     <button class="modal-close" onclick="hideModal('addModal')">&times;</button>
-    <div class="modal-title">添加记录</div>
+    <div class="modal-title" id="addModalTitle">添加记录</div>
     <div class="add-search-wrap"><input type="text" id="addSearchInput" placeholder="&#128269; 搜索活动..." oninput="filterAddList()"></div>
     <div class="add-cat-bar" id="addCatBar"></div>
     <div class="add-list" id="addList"></div>
@@ -1415,7 +1429,7 @@
 <div class="modal-overlay" id="editModal" onclick="closeModal(event,'editModal')">
   <div class="modal-box" onclick="event.stopPropagation()">
     <button class="modal-close" onclick="hideModal('editModal')">&times;</button>
-    <div class="modal-title">✏️ 编辑记录</div>
+    <div class="modal-title" id="editFormTitle">✏️ 编辑记录</div>
     <div id="editFormContent" class="add-inputs show"></div>
     <div class="modal-actions">
       <button class="btn btn-success" onclick="saveEditRecord()">确认</button>
@@ -1699,11 +1713,31 @@ function saveHiddenActivities() { localStorage.setItem('hiddenActivities', JSON.
 function getTodayRecords() {
   try { return JSON.parse(localStorage.getItem(getTodayKey()) || '[]'); } catch { return []; }
 }
+// 读取任意日期的记录（历史页编辑/添加/删除用）
+function getRecordsByDate(ds) {
+  try {
+    const arr = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+// 统一的数据落地后处理：刷新历史列表 / 今日卡片 / 分析图表，并同步云端
+function afterRecordChange(ds) {
+  const isToday = (ds === getTodayDateStr());
+  try { syncUpload('records', ds); } catch (e) { console.warn('[同步] 上传失败:', e); }
+  // 历史弹窗若打开 → 刷新列表（编辑的正是该日期）
+  const histModal = document.getElementById('historyModal');
+  if (histModal && histModal.classList.contains('show')) loadHistory();
+  if (isToday) { try { renderCards(); } catch (e) {} try { updateOverview(); } catch (e) {} }
+  // 分析弹窗若打开 → 重绘图表（历史数据变化会影响近15天柱状图）
+  const anaModal = document.getElementById('analysisModal');
+  if (anaModal && anaModal.classList.contains('show')) { try { openAnalysis(); } catch (e) {} }
+}
 // 统一持久化今日记录：时间戳单独存 records_<日期>_ts，供云端同步做"本地 vs 云端"冲突判断
 // 注意：时间戳不能塞进 records 数组（JSON.stringify 不会序列化数组的非索引属性）
-function persistRecords(records) {
+// ds 省略时写入今天；传入日期则写入该历史日期（用于历史页编辑/添加）
+function persistRecords(records, ds) {
   const ts = Date.now();
-  const key = getTodayKey();
+  const key = ds ? getDateKey(ds) : getTodayKey();
   const json = JSON.stringify(records);
   localStorage.setItem(key, json);
   localStorage.setItem(key + '_ts', String(ts));
@@ -2325,26 +2359,34 @@ function formatRecordBrief(r) {
   return base || '已记录';
 }
 
-function deleteRecord(type, timestamp) {
-  if (!confirm('删除这条记录？')) return;
-  let records = getTodayRecords();
+function deleteRecord(type, timestamp, ds) {
+  const target = ds || getTodayDateStr();
+  const label = target === getTodayDateStr() ? '这条记录' : `${target} 的这条记录`;
+  if (!confirm(`删除${label}？`)) return;
+  let records = getRecordsByDate(target);
   records = records.filter(r => !(r.type === type && r.timestamp === timestamp));
-  persistRecords(records);
-  syncUpload('records', getTodayDateStr());
-  renderCards(); updateOverview(); showToast('已删除');
+  persistRecords(records, target);
+  afterRecordChange(target);
+  showToast('已删除');
 }
 
 /* ==================== 编辑记录 ==================== */
-let _editingType = null, _editingTimestamp = null;
+let _editingType = null, _editingTimestamp = null, _editingDateStr = null;
 
-function openEditRecord(type, timestamp) {
-  const records = getTodayRecords();
+// ds 省略为今天；历史页传入所选日期，编辑后写回该日期
+function openEditRecord(type, timestamp, ds) {
+  const target = ds || getTodayDateStr();
+  const records = getRecordsByDate(target);
   const rec = records.find(r => r.type === type && r.timestamp === timestamp);
   if (!rec) { showToast('记录不存在'); return; }
-  _editingType = type; _editingTimestamp = timestamp;
+  _editingType = type; _editingTimestamp = timestamp; _editingDateStr = target;
   const act = ACTIVITIES.find(a => a.id === type);
   const container = document.getElementById('editFormContent');
 
+  const titleEl = document.getElementById('editFormTitle');
+  if (titleEl) titleEl.textContent = target === getTodayDateStr()
+    ? '✏️ 编辑记录'
+    : `✏️ 编辑记录 · ${target}`;
   let html = `<div style="margin-bottom:12px;font-size:15px;color:#dfe6e9;">${act.icon} ${act.name}</div>`;
   html += `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group">`;
   const [hh, mm] = (rec.recTime || rec.time || '00:00').split(':').map(Number);
@@ -2400,7 +2442,8 @@ function openEditRecord(type, timestamp) {
 }
 
 function saveEditRecord() {
-  const records = getTodayRecords();
+  const target = _editingDateStr || getTodayDateStr();
+  const records = getRecordsByDate(target);
   const idx = records.findIndex(r => r.type === _editingType && r.timestamp === _editingTimestamp);
   if (idx === -1) { showToast('记录不存在'); return; }
   const rec = records[idx];
@@ -2468,22 +2511,26 @@ function saveEditRecord() {
   const noteEl = document.getElementById('edt_note');
   if (noteEl) rec.note = noteEl.value.trim();
 
-  persistRecords(records);
-  syncUpload('records', getTodayDateStr());
-  hideModal('editModal'); renderCards(); updateOverview();
+  persistRecords(records, target);
+  hideModal('editModal');
+  afterRecordChange(target);
   showToast('已更新');
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.48 0903-1640'; // 语音解析修复:时长型活动(sleep/outdoor/airButt)支持裸数字时长(如"户外活动40"省略"分钟"),先剔除时刻表达(15:30/下午3点半)再取数字,避免误判;milk规则支持"喝了奶"/"吃了奶"中间带"了"的口语;unmatched回填同步使用宽松时长解析
+const APP_VERSION = 'v3.5.49 0904-1640'; // 历史记录支持编辑/删除/添加:历史页每条记录右侧加编辑与删除按钮,顶部加「添加记录」按钮(默认写入所选日期);编辑/删除/添加统一走日期感知的读写(getRecordsByDate/persistRecords(ds)),保存后刷新历史列表与今日卡片并重绘分析图表,且同步到云端该日期
 let _addModalOpening = false;
-function openAddModal() {
+let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
+function openAddModal(ds) {
   if (_addModalOpening) return;
   _addModalOpening = true;
   setTimeout(() => { _addModalOpening = false; }, 400);
+  _addTargetDate = ds || null;
   addModalCategory = 'all';
   addSelectedSet = new Set();
   document.getElementById('addSearchInput').value = '';
+  const addTitleEl = document.getElementById('addModalTitle');
+  if (addTitleEl) addTitleEl.textContent = ds ? `添加记录 · ${ds}` : '添加记录';
   showModal('addModal'); // 先弹窗再渲染：即使渲染出错，弹窗也必定打开
   try {
     renderAddModal();
@@ -2605,7 +2652,8 @@ function addTempIndicator(id) {
 /* ==================== 确定添加 ==================== */
 function confirmAdd() {
   if (addSelectedSet.size === 0) { showToast('请至少选择一项活动'); return; }
-  const records = getTodayRecords();
+  const target = _addTargetDate || getTodayDateStr();
+  const records = getRecordsByDate(target);
   const now = new Date(), timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), ts = Date.now();
   const newestIds = [];
 
@@ -2671,11 +2719,13 @@ function confirmAdd() {
     records.push(record); newestIds.push(id);
   });
 
-  persistRecords(records);
-  syncUpload('records', getTodayDateStr());
+  persistRecords(records, target);
   addSelectedSet = new Set();
-  hideModal('addModal'); renderCards(newestIds); updateOverview();
-  showToast(`已添加 ${newestIds.length} 条记录`);
+  hideModal('addModal');
+  // 只有添加到今天时才渲染今日卡片（否则历史日期的记录不该出现在今日列表）
+  if (target === getTodayDateStr()) { try { renderCards(newestIds); } catch (e) {} }
+  afterRecordChange(target);
+  showToast(`已添加 ${newestIds.length} 条记录到 ${target}`);
 }
 
 /* ==================== 语音速记 ==================== */
@@ -3657,8 +3707,28 @@ function loadHistory() {
     return ta.localeCompare(tb);
   });
   let html = '';
-  sorted.forEach(r => { html += `<div class="history-record"><div class="rec-time">${r.recTime || r.time}</div><div class="rec-detail">${r.name}: ${formatRecordBrief(r)}</div></div>`; });
+  sorted.forEach(r => {
+    // 记录定位键：type + timestamp（编辑/删除据此找到记录；日期从当前历史日期取）
+    const t = String(r.type || '').replace(/'/g, "\\'");
+    const ts = Number(r.timestamp) || 0;
+    html += `<div class="history-record">` +
+      `<div class="history-rec-main">` +
+        `<div class="rec-time">${r.recTime || r.time}</div>` +
+        `<div class="rec-detail">${r.name}: ${formatRecordBrief(r)}</div>` +
+      `</div>` +
+      `<div class="history-rec-ops">` +
+        `<button class="hist-op-btn edit" onclick="openEditRecord('${t}', ${ts}, '${ds}')" title="编辑">✏️</button>` +
+        `<button class="hist-op-btn del" onclick="deleteRecord('${t}', ${ts}, '${ds}')" title="删除">🗑️</button>` +
+      `</div>` +
+    `</div>`;
+  });
   list.innerHTML = html;
+}
+// 历史页：向所选日期添加记录
+function addHistoryRecord() {
+  const ds = document.getElementById('historyDate').value;
+  if (!ds) { showToast('请先选择日期'); return; }
+  openAddModal(ds);
 }
 function backToToday() {
   const t = new Date();
