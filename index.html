@@ -220,35 +220,35 @@
   .record-tag .rec-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
   .record-tag .rec-time { font-size: 13px; color: #74b9ff; white-space: nowrap; font-weight: 600; }
   .record-tag .rec-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .record-tag .rec-delete {
+  .record-tag .rec-delete, .history-record .rec-delete {
     width: 27px; height: 27px;
     cursor: pointer; padding: 2px; flex-shrink: 0;
     display: inline-flex; align-items: center; justify-content: center;
     opacity: 0.8; transition: opacity 0.2s;
     background: transparent; border: none; margin-left: 8px;
   }
-  .record-tag .rec-delete svg {
+  .record-tag .rec-delete svg, .history-record .rec-delete svg {
     width: 100%; height: 100%; display: block;
     stroke: #fff; stroke-width: 1.6; fill: none;
     stroke-linecap: round; stroke-linejoin: round;
   }
-  .record-tag .rec-delete:active { opacity: 1; }
-  .record-tag .rec-delete:active svg { stroke: #e74c3c; }
+  .record-tag .rec-delete:active, .history-record .rec-delete:active { opacity: 1; }
+  .record-tag .rec-delete:active svg, .history-record .rec-delete:active svg { stroke: #e74c3c; }
 
-  .record-tag .rec-edit {
+  .record-tag .rec-edit, .history-record .rec-edit {
     width: 24px; height: 24px;
     cursor: pointer; padding: 2px; flex-shrink: 0;
     display: inline-flex; align-items: center; justify-content: center;
     opacity: 0.7; transition: opacity 0.2s;
     background: transparent; border: none; margin-left: 8px;
   }
-  .record-tag .rec-edit svg {
+  .record-tag .rec-edit svg, .history-record .rec-edit svg {
     width: 100%; height: 100%; display: block;
     stroke: #fff; stroke-width: 1.6; fill: none;
     stroke-linecap: round; stroke-linejoin: round;
   }
-  .record-tag .rec-edit:active { opacity: 1; }
-  .record-tag .rec-edit:active svg { stroke: #74b9ff; }
+  .record-tag .rec-edit:active, .history-record .rec-edit:active { opacity: 1; }
+  .record-tag .rec-edit:active svg, .history-record .rec-edit:active svg { stroke: #74b9ff; }
 
   .card-empty {
     font-size: 14px; color: rgba(255,255,255,0.25);
@@ -714,16 +714,7 @@
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
   }
   .history-rec-main { flex: 1; min-width: 0; }
-  .history-rec-ops { display: flex; gap: 6px; flex-shrink: 0; }
-  .hist-op-btn {
-    width: 32px; height: 32px; border: none; border-radius: 8px;
-    background: rgba(255,255,255,0.08); font-size: 15px; line-height: 1;
-    cursor: pointer; -webkit-tap-highlight-color: transparent;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .hist-op-btn:active { transform: scale(0.92); }
-  .hist-op-btn.edit { background: rgba(116,185,255,0.18); }
-  .hist-op-btn.del { background: rgba(255,118,117,0.18); }
+  .history-rec-ops { display: flex; align-items: center; flex-shrink: 0; }
   .history-record .rec-time { color: #74b9ff; font-size: 13px; margin-bottom: 5px; }
   .history-record .rec-detail { color: #dfe6e9; }
 
@@ -980,8 +971,8 @@
   }
   body.theme-day .record-tag.newest { background: rgba(9,132,227,0.09); border: 1px solid rgba(9,132,227,0.08); color: #3d4852; animation: tagFlashDay 3s ease; }
   body.theme-day .record-tag .rec-time { color: #0984e3; }
-  body.theme-day .record-tag .rec-delete svg { stroke: #3d4852; }
-  body.theme-day .record-tag .rec-edit svg { stroke: #3d4852; }
+  body.theme-day .record-tag .rec-delete svg, body.theme-day .history-record .rec-delete svg { stroke: #3d4852; }
+  body.theme-day .record-tag .rec-edit svg, body.theme-day .history-record .rec-edit svg { stroke: #3d4852; }
   body.theme-day .card-empty { color: rgba(61,72,82,0.35); }
 
   /* ===== 底部栏（按钮位置不变：添加在左、语音在右；白天蓝底白字） ===== */
@@ -1071,7 +1062,6 @@
   body.theme-day .history-record { background: rgba(9,132,227,0.05); }
   body.theme-day .history-record .rec-time { color: #0984e3; }
   body.theme-day .history-record .rec-detail { color: #3d4852; }
-  body.theme-day .hist-op-btn { background: rgba(9,132,227,0.10); }
   body.theme-day .history-summary { background: rgba(9,132,227,0.05); border-color: rgba(9,132,227,0.12); }
   body.theme-day .history-sum-row .hs-label { color: #636e72; }
   body.theme-day .history-sum-row .hs-value { color: #d68910; }
@@ -1244,7 +1234,7 @@
       <button class="btn btn-primary" onclick="openHistoryDatePicker()" id="historyDatePickerBtn">📅 选择日期</button>
       <input type="hidden" id="historyDate">
       <button class="btn btn-primary" onclick="backToToday()">返回今天</button>
-      <button class="btn btn-success" onclick="addHistoryRecord()">➕ 添加记录</button>
+      <button class="fab-btn" onclick="addHistoryRecord()"><span class="fab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></span>添加记录</button>
     </div>
     <div class="history-summary" id="historySummary" style="display:none;"></div>
     <div class="history-list" id="historyList"></div>
@@ -2518,7 +2508,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.49 0904-1640'; // 历史记录支持编辑/删除/添加:历史页每条记录右侧加编辑与删除按钮,顶部加「添加记录」按钮(默认写入所选日期);编辑/删除/添加统一走日期感知的读写(getRecordsByDate/persistRecords(ds)),保存后刷新历史列表与今日卡片并重绘分析图表,且同步到云端该日期
+const APP_VERSION = 'v3.5.50 0904-1650'; // 历史弹窗按钮UI与首页统一:行内编辑/删除改用首页同款线性SVG图标(rec-edit/rec-delete样式扩展到历史行,夜间白描边/白天深灰描边,按压变色一致),移除emoji块状按钮;顶部「添加记录」改用首页FAB同款按钮(圆圈加号SVG+渐变底/白天蓝底)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3717,8 +3707,8 @@ function loadHistory() {
         `<div class="rec-detail">${r.name}: ${formatRecordBrief(r)}</div>` +
       `</div>` +
       `<div class="history-rec-ops">` +
-        `<button class="hist-op-btn edit" onclick="openEditRecord('${t}', ${ts}, '${ds}')" title="编辑">✏️</button>` +
-        `<button class="hist-op-btn del" onclick="deleteRecord('${t}', ${ts}, '${ds}')" title="删除">🗑️</button>` +
+        `<span class="rec-edit" onclick="openEditRecord('${t}', ${ts}, '${ds}')" title="编辑"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>` +
+        `<span class="rec-delete" onclick="deleteRecord('${t}', ${ts}, '${ds}')" title="删除"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6"/><path d="M14 10v6"/></svg></span>` +
       `</div>` +
     `</div>`;
   });
