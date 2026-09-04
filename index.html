@@ -718,9 +718,10 @@
   .history-record .rec-time { color: #74b9ff; font-size: 13px; margin-bottom: 5px; }
   .history-record .rec-detail { color: #dfe6e9; }
   .history-date-label {
-    text-align: center; font-size: 12px; color: rgba(255,255,255,0.45);
-    margin-top: 10px; letter-spacing: 1px;
+    text-align: center; font-size: 14px; color: #fff;
+    margin: 4px 0 10px; letter-spacing: 1px;
   }
+  .fab-btn .fab-icon.fab-emoji { font-size: 17px; line-height: 1; }
 
   /* ===== 管理 ===== */
   .manage-list { max-height: 55vh; overflow-y: auto; }
@@ -1066,7 +1067,7 @@
   body.theme-day .history-record { background: rgba(9,132,227,0.05); }
   body.theme-day .history-record .rec-time { color: #0984e3; }
   body.theme-day .history-record .rec-detail { color: #3d4852; }
-  body.theme-day .history-date-label { color: rgba(61,72,82,0.45); }
+  body.theme-day .history-date-label { color: #000; }
   body.theme-day .history-summary { background: rgba(9,132,227,0.05); border-color: rgba(9,132,227,0.12); }
   body.theme-day .history-sum-row .hs-label { color: #636e72; }
   body.theme-day .history-sum-row .hs-value { color: #d68910; }
@@ -1235,14 +1236,14 @@
   <div class="modal-box" onclick="event.stopPropagation()">
     <button class="modal-close" onclick="hideModal('historyModal')">&times;</button>
     <div class="modal-title">&#128197; 历史记录</div>
+    <div class="history-date-label" id="historyDateLabel"></div>
     <div class="history-date-row">
-      <button class="btn btn-primary" onclick="openHistoryDatePicker()" id="historyDatePickerBtn">📅 选择日期</button>
+      <button class="fab-btn" onclick="openHistoryDatePicker()" id="historyDatePickerBtn"><span class="fab-icon fab-emoji">📅</span>选日</button>
       <input type="hidden" id="historyDate">
       <button class="fab-btn" onclick="addHistoryRecord()"><span class="fab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></span>添加</button>
     </div>
     <div class="history-summary" id="historySummary" style="display:none;"></div>
     <div class="history-list" id="historyList"></div>
-    <div class="history-date-label" id="historyDateLabel"></div>
   </div>
 </div>
 <!-- 自绘日期选择器（替代系统 picker，蓝色头部 + 蓝色"确定"按钮） -->
@@ -2513,7 +2514,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.51 0904-1735'; // 历史弹窗交互精简:移除「返回今天」按钮;「添加记录」文案改为「添加」;历史列表下方新增当前查看日期显示(YYYY-MM-DD,随选择日期更新)
+const APP_VERSION = 'v3.5.52 0904-1745'; // 历史弹窗顶部布局调整:日期显示上移到「历史记录」标题下方并居中放大到14px(夜间白/白天黑);「选择日期」按钮改用与「添加」相同的fab-btn样式并更名「选日」
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
