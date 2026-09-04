@@ -1266,7 +1266,6 @@
     </div>
     <div class="dp-grid" id="dpGrid"></div>
     <div class="dp-quick">
-      <button class="dp-quick-btn" disabled>今天</button>
       <button class="dp-quick-btn" onclick="dpPickQuick(1)">昨天</button>
       <button class="dp-quick-btn" onclick="dpPickQuick(2)">前天</button>
       <button class="dp-quick-btn" onclick="dpPickQuick(7)">上周</button>
@@ -2519,7 +2518,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.53 0904-1810'; // 选日日历禁止选择当天及以后日期:本月当前日及未来日置为disabled不可点击(无onclick),dpSelectDay/dpPickQuick加日期守卫拦截今天及未来,快捷按钮中"今天"置灰禁用;夜间/白天皮肤均适配
+const APP_VERSION = 'v3.5.54 0904-1845'; // 历史弹窗与选日全面禁止今天及以后:历史弹窗默认打开昨天;选日打开默认预选昨天;去掉「今天」快捷按钮;日历当天及未来置灰不可点;dpSelectDay/dpPickQuick/confirm三层守卫
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3679,7 +3678,8 @@ function openReport() {
 
 /* ==================== 历史 ==================== */
 function openHistory() {
-  const t = new Date();
+  // 历史默认打开昨天（今天及以后禁止查看）
+  const t = new Date(); t.setDate(t.getDate() - 1);
   document.getElementById('historyDate').value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
   loadHistory(); showModal('historyModal');
 }
@@ -3737,10 +3737,14 @@ function addHistoryRecord() {
 let _dpViewYear = 0, _dpViewMonth = 0, _dpSelected = '';
 function openHistoryDatePicker() {
   const cur = document.getElementById('historyDate').value;
-  let d = cur ? new Date(cur + 'T00:00:00') : new Date();
+  // 若当前值是今天或未来（异常状态），回退到昨天
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  const validCur = (cur && cur < todayKey) ? cur : '';
+  let d = validCur ? new Date(validCur + 'T00:00:00') : new Date(now.getTime() - 86400000);
   _dpViewYear = d.getFullYear();
   _dpViewMonth = d.getMonth();
-  _dpSelected = cur || `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  _dpSelected = validCur || `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   renderHistoryDatePicker();
   showModal('historyDatePickerModal');
 }
@@ -3811,6 +3815,10 @@ function dpPickQuick(deltaDays) {
 }
 function confirmHistoryDatePicker() {
   if (!_dpSelected) { showToast('请先选择日期'); return; }
+  // 最终守卫：禁止确定今天及以后的日期
+  const t = new Date();
+  const todayKey = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  if (_dpSelected >= todayKey) { showToast('历史记录只能查看过去的日期'); return; }
   document.getElementById('historyDate').value = _dpSelected;
   loadHistory();
   hideModal('historyDatePickerModal');
