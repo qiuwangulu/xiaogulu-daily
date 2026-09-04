@@ -717,6 +717,10 @@
   .history-rec-ops { display: flex; align-items: center; flex-shrink: 0; }
   .history-record .rec-time { color: #74b9ff; font-size: 13px; margin-bottom: 5px; }
   .history-record .rec-detail { color: #dfe6e9; }
+  .history-date-label {
+    text-align: center; font-size: 12px; color: rgba(255,255,255,0.45);
+    margin-top: 10px; letter-spacing: 1px;
+  }
 
   /* ===== 管理 ===== */
   .manage-list { max-height: 55vh; overflow-y: auto; }
@@ -1062,6 +1066,7 @@
   body.theme-day .history-record { background: rgba(9,132,227,0.05); }
   body.theme-day .history-record .rec-time { color: #0984e3; }
   body.theme-day .history-record .rec-detail { color: #3d4852; }
+  body.theme-day .history-date-label { color: rgba(61,72,82,0.45); }
   body.theme-day .history-summary { background: rgba(9,132,227,0.05); border-color: rgba(9,132,227,0.12); }
   body.theme-day .history-sum-row .hs-label { color: #636e72; }
   body.theme-day .history-sum-row .hs-value { color: #d68910; }
@@ -1233,11 +1238,11 @@
     <div class="history-date-row">
       <button class="btn btn-primary" onclick="openHistoryDatePicker()" id="historyDatePickerBtn">📅 选择日期</button>
       <input type="hidden" id="historyDate">
-      <button class="btn btn-primary" onclick="backToToday()">返回今天</button>
-      <button class="fab-btn" onclick="addHistoryRecord()"><span class="fab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></span>添加记录</button>
+      <button class="fab-btn" onclick="addHistoryRecord()"><span class="fab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></span>添加</button>
     </div>
     <div class="history-summary" id="historySummary" style="display:none;"></div>
     <div class="history-list" id="historyList"></div>
+    <div class="history-date-label" id="historyDateLabel"></div>
   </div>
 </div>
 <!-- 自绘日期选择器（替代系统 picker，蓝色头部 + 蓝色"确定"按钮） -->
@@ -2508,7 +2513,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.50 0904-1650'; // 历史弹窗按钮UI与首页统一:行内编辑/删除改用首页同款线性SVG图标(rec-edit/rec-delete样式扩展到历史行,夜间白描边/白天深灰描边,按压变色一致),移除emoji块状按钮;顶部「添加记录」改用首页FAB同款按钮(圆圈加号SVG+渐变底/白天蓝底)
+const APP_VERSION = 'v3.5.51 0904-1735'; // 历史弹窗交互精简:移除「返回今天」按钮;「添加记录」文案改为「添加」;历史列表下方新增当前查看日期显示(YYYY-MM-DD,随选择日期更新)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3678,6 +3683,8 @@ function loadHistory() {
   if (!Array.isArray(records)) records = [];
   const list = document.getElementById('historyList');
   const summary = document.getElementById('historySummary');
+  const dateLabel = document.getElementById('historyDateLabel');
+  if (dateLabel) dateLabel.textContent = ds;   // 列表下方显示当前查看的日期
   if (records.length === 0) {
     if (summary) { summary.innerHTML = ''; summary.style.display = 'none'; }
     list.innerHTML = '<div class="report-empty">该日期暂无记录</div>';
@@ -3720,12 +3727,6 @@ function addHistoryRecord() {
   if (!ds) { showToast('请先选择日期'); return; }
   openAddModal(ds);
 }
-function backToToday() {
-  const t = new Date();
-  document.getElementById('historyDate').value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
-  loadHistory();
-}
-
 // ---------- 自绘日期选择器（替代系统 picker：蓝色"确定"按钮 + 蓝色头部） ----------
 let _dpViewYear = 0, _dpViewMonth = 0, _dpSelected = '';
 function openHistoryDatePicker() {
