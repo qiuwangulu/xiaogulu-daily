@@ -1759,6 +1759,52 @@ function getLocalRecordTs(ds) {
   return v ? parseInt(v) || 0 : 0;
 }
 
+/* ==================== 合并式同步（v3.5.55） ====================
+ * 旧逻辑是「谁的时间戳新谁赢」的单向覆盖，导致：
+ *   ① 家人设备本地时间戳更晚时 → 不拉取 → 看不到别人的新记录
+ *   ② 更糟的是会把自己旧数据反向推上云端 → 覆盖丢失别人的新记录
+ * 新逻辑：记录级合并 = 并集 + 删除墓碑 + 同键取 updatedAt 较新者，双向收敛。
+ * 只会保留更多数据，不会丢数据。
+ * ============================================================ */
+// 记录唯一键：type|timestamp
+function recKey(r) {
+  if (!r || typeof r !== 'object') return '';
+  return String(r.type || '') + '|' + String(r.timestamp || '');
+}
+// 墓碑（已删除记录的 key 集合）—— 防止合并时被"复活"
+function getTombstones(ds) {
+  try {
+    const a = JSON.parse(localStorage.getItem('records_' + ds + '_del') || '[]');
+    return Array.isArray(a) ? new Set(a) : new Set();
+  } catch { return new Set(); }
+}
+function addTombstones(ds, keys) {
+  const s = getTombstones(ds);
+  (keys || []).forEach(k => { if (k && k !== '|') s.add(k); });
+  const arr = [...s].slice(-300); // 上限保护，避免无限增长
+  try { localStorage.setItem('records_' + ds + '_del', JSON.stringify(arr)); } catch {}
+  return new Set(arr);
+}
+function tombstoneKey(ds) { return 'records_' + ds + '_del'; }
+// 合并两条记录列表：并集，剔除墓碑，同键取 updatedAt 较新者
+function mergeRecordLists(cloudArr, localArr, tombs) {
+  const map = new Map();
+  const put = (r) => {
+    if (!r || typeof r !== 'object') return;
+    const k = recKey(r);
+    if (!k || k === '|') return;
+    if (tombs && tombs.has(k)) return;              // 已删除 → 不复活
+    const prev = map.get(k);
+    if (!prev) { map.set(k, r); return; }
+    const a = Number(prev.updatedAt) || 0;
+    const b = Number(r.updatedAt) || 0;
+    if (b >= a) map.set(k, r);                      // 取较新版本
+  };
+  (Array.isArray(cloudArr) ? cloudArr : []).forEach(put);
+  (Array.isArray(localArr) ? localArr : []).forEach(put);
+  return [...map.values()];
+}
+
 function getMilkInterval() {
   const h = new Date().getHours();
   return (h >= 5 && h < 19) ? 3 : 5;
@@ -2364,6 +2410,9 @@ function deleteRecord(type, timestamp, ds) {
   const label = target === getTodayDateStr() ? '这条记录' : `${target} 的这条记录`;
   if (!confirm(`删除${label}？`)) return;
   let records = getRecordsByDate(target);
+  // 先登记墓碑，再删除：否则合并同步时这条记录会从家人设备"复活"
+  const doomed = records.filter(r => r.type === type && r.timestamp === timestamp);
+  if (doomed.length) addTombstones(target, doomed.map(recKey));
   records = records.filter(r => !(r.type === type && r.timestamp === timestamp));
   persistRecords(records, target);
   afterRecordChange(target);
@@ -2511,6 +2560,9 @@ function saveEditRecord() {
   const noteEl = document.getElementById('edt_note');
   if (noteEl) rec.note = noteEl.value.trim();
 
+  // 标记修改时间：跨设备合并时，同一条记录取 updatedAt 较新的版本
+  rec.updatedAt = Date.now();
+
   persistRecords(records, target);
   hideModal('editModal');
   afterRecordChange(target);
@@ -2518,7 +2570,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.54 0904-1845'; // 历史弹窗与选日全面禁止今天及以后:历史弹窗默认打开昨天;选日打开默认预选昨天;去掉「今天」快捷按钮;日历当天及未来置灰不可点;dpSelectDay/dpPickQuick/confirm三层守卫
+const APP_VERSION = 'v3.5.55 0909-1530'; // 修复家人看不到更新记录:①拉取由「谁时间戳新谁赢」的单向覆盖改为记录级合并(并集+删除墓碑+同键取updatedAt较新者),双向收敛,不再互相覆盖丢失;②重新启用切回前台/网络恢复/轮询同步(PWA从后台恢复不再只同步一次),增量同步仅最近3天控制请求量;③立即同步改为双向(先推后拉);④增删改记录带updatedAt,删除写墓碑
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2670,7 +2722,7 @@ function confirmAdd() {
       recTime = hh + ':' + mm;
     }
 
-    const record = { type: id, name: act.name, time: timeStr, recTime: recTime, timestamp: ts };
+    const record = { type: id, name: act.name, time: timeStr, recTime: recTime, timestamp: ts, updatedAt: Date.now() };
 
     if (act.type === 'milk') {
       record.milkTime = recTime;
@@ -3580,7 +3632,7 @@ function confirmVoiceAdd() {
   voiceItems.forEach(it => {
     const act = ACTIVITIES.find(a => a.id === it.actId); if (!act) return;
     const p = it.params;
-    const record = { type: it.actId, name: act.name, time: timeStr, recTime: it.recTime, timestamp: ts, note: p.note || '' };
+    const record = { type: it.actId, name: act.name, time: timeStr, recTime: it.recTime, timestamp: ts, note: p.note || '', updatedAt: Date.now() };
     if (act.type === 'milk') { record.milkTime = it.recTime; record.milkAmount = Math.max(1, Math.round(p.milkAmount || 120)); }
     else if (act.type === 'sleep') { record.sleepStartTime = it.recTime; record.duration = Math.max(0, Math.round(p.duration || 0)); }
     else if (act.type === 'drinkWater') { record.drinkTime = it.recTime; }
@@ -4594,6 +4646,12 @@ async function syncUpload(category, dateStr) {
       await supabaseUpsert('family_records', { family_id: fid, record_date: dateStr, encrypted_data: data, iv, last_modified: modTime, modified_by: getDeviceName() });
       // 上传后把本地时间戳对齐到云端时间，避免下次拉取误判
       if (localTs === 0) localStorage.setItem(`records_${dateStr}_ts`, String(modTime));
+      // 同步删除墓碑：让家人设备知道这些记录已删除，避免合并时复活
+      try {
+        const tombs = [...getTombstones(dateStr)];
+        const { data: tdata, iv: tiv } = await encrypt(key, JSON.stringify(tombs));
+        await supabaseUpsert('family_config', { family_id: fid, config_key: '_del_' + dateStr, encrypted_data: tdata, iv: tiv, last_modified: Date.now() });
+      } catch (e) {}
     } else if (category === 'config') {
       const configKeys = ['hiddenActivities','grossMotorOptions','fineMotorOptions','babyHeight','babyWeight','bodyHistory'];
       for (const ck of configKeys) {
@@ -4607,41 +4665,56 @@ async function syncUpload(category, dateStr) {
 }
 
 // ---------- 同步：拉取 ----------
-async function syncPullAll() {
+async function syncPullAll(opts) {
   if (!isSyncReady() || !navigator.onLine || _isSyncing) return;
   _isSyncing = true; setSyncStatus('syncing');
   try {
     const key = await getCryptoKey(); if (!key) { _isSyncing = false; return; }
     const fid = getFamilyId(); let changed = false;
+    // 同步天数：启动/手动为全量(historyDays)，前台恢复/轮询只同步最近几天以控制请求量
+    const days = (opts && opts.days) || SYNC_CONFIG.historyDays;
 
     // 1. 拉取近期记录
     const today = new Date();
-    for (let i = 0; i < SYNC_CONFIG.historyDays; i++) {
+    for (let i = 0; i < days; i++) {
       const d = new Date(today); d.setDate(d.getDate() - i);
       const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       try {
         const rows = await supabaseGet(`family_records?family_id=eq.${fid}&record_date=eq.${ds}&select=encrypted_data,iv,last_modified`);
+        // 合并式同步：不再比较时间戳决定覆盖方向，而是按记录级并集合并
+        let cloudRecs = null;                 // null = 云端无/解密失败（一律不据此删本地数据）
+        let cloudTs = 0;
         if (rows.length > 0) {
-          const localRaw = localStorage.getItem(`records_${ds}`);
-          const localTs = getLocalRecordTs(ds);
-          const cloudTs = rows[0].last_modified || 0;
-          if (cloudTs > localTs) {
-            // 云端比本地新 → 拉取云端，覆盖本地（含旧数据无 _ts 的情况）
+          cloudTs = rows[0].last_modified || 0;
+          try {
             const plaintext = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
-            const records = JSON.parse(plaintext);
-            if (Array.isArray(records)) {
-              // v3.5.6 数据保护：云端覆盖本地前，自动备份本地当前数据（每日期保留最近一份）
-              const oldLocal = localStorage.getItem(`records_${ds}`);
-              if (oldLocal) { localStorage.setItem(`records_${ds}_bak`, oldLocal); localStorage.setItem(`records_${ds}_bak_ts`, localStorage.getItem(`records_${ds}_ts`) || '0'); }
-              localStorage.setItem(`records_${ds}`, JSON.stringify(records)); localStorage.setItem(`records_${ds}_ts`, String(cloudTs)); changed = true;
-            }
-          } else if (localTs > cloudTs && cloudTs > 0) {
-            // 本地比云端新 → 反向推送本地到云端（防止本地新增/修改被云端旧数据覆盖）
-            const localRecords = JSON.parse(localRaw);
-            const { data, iv } = await encrypt(key, JSON.stringify(localRecords));
-            await supabaseUpsert('family_records', { family_id: fid, record_date: ds, encrypted_data: data, iv, last_modified: localTs, modified_by: getDeviceName() });
-            changed = true;
-          }
+            const parsed = JSON.parse(plaintext);
+            if (Array.isArray(parsed)) cloudRecs = parsed;
+          } catch (e) { cloudRecs = null; }    // 解密失败：保护本地数据，不覆盖
+        }
+        let localRecs = [];
+        try { const p = JSON.parse(localStorage.getItem(`records_${ds}`) || '[]'); if (Array.isArray(p)) localRecs = p; } catch {}
+        const tombs = getTombstones(ds);
+        const merged = mergeRecordLists(cloudRecs || [], localRecs, tombs);
+        const mergedJson = JSON.stringify(merged);
+        const localJson = JSON.stringify(localRecs);
+        const cloudJson = cloudRecs === null ? null : JSON.stringify(cloudRecs);
+
+        // 1) 合并结果比本地多/不同 → 写入本地（覆盖前自动备份）
+        if (mergedJson !== localJson) {
+          const oldLocal = localStorage.getItem(`records_${ds}`);
+          if (oldLocal) { localStorage.setItem(`records_${ds}_bak`, oldLocal); localStorage.setItem(`records_${ds}_bak_ts`, localStorage.getItem(`records_${ds}_ts`) || '0'); }
+          localStorage.setItem(`records_${ds}`, mergedJson);
+          changed = true;
+        }
+        // 2) 云端缺数据或与合并结果不一致 → 回写云端（双向收敛，保证家人端能拉到）
+        if (cloudJson !== mergedJson) {
+          const { data, iv } = await encrypt(key, mergedJson);
+          const newTs = Math.max(cloudTs, getLocalRecordTs(ds), Date.now());
+          await supabaseUpsert('family_records', { family_id: fid, record_date: ds, encrypted_data: data, iv, last_modified: newTs, modified_by: getDeviceName() });
+          localStorage.setItem(`records_${ds}_ts`, String(newTs));
+        } else {
+          if (cloudTs > 0) localStorage.setItem(`records_${ds}_ts`, String(cloudTs));
         }
       } catch {}
     }
@@ -4651,6 +4724,20 @@ async function syncPullAll() {
       const configRows = await supabaseGet(`family_config?family_id=eq.${fid}&select=config_key,encrypted_data,iv,last_modified`);
       for (const row of configRows) {
         if (row.config_key === '_salt') continue;
+        // 删除墓碑：合并到本地（取并集），使其他设备已删除的记录不会在本地复活
+        if (row.config_key && row.config_key.indexOf('_del_') === 0) {
+          try {
+            const dsT = row.config_key.slice(5);
+            const plaintext = await decrypt(key, row.encrypted_data, row.iv);
+            let arr = []; try { arr = JSON.parse(plaintext); } catch {}
+            if (Array.isArray(arr) && arr.length) {
+              const before = getTombstones(dsT).size;
+              const merged = addTombstones(dsT, arr);
+              if (merged.size > before) changed = true;   // 有新墓碑 → 需重渲染
+            }
+          } catch {}
+          continue;
+        }
         try {
           const localTs = parseInt(localStorage.getItem(`cfgts_${row.config_key}`) || '0');
           if (row.last_modified > localTs) {
@@ -4675,7 +4762,12 @@ async function syncPullAll() {
 }
 async function syncPullAllAndRefresh() {
   if (!isSyncReady()) { showToast('请先配置同步'); openSyncSettings(); return; }
-  showToast('同步中...'); await syncPullAll(); showToast('同步完成');
+  showToast('同步中...');
+  // 双向：先把本地改动推上去，再拉取合并（旧版只拉不推，本地改动会一直卡在本机）
+  try { await syncUpload('records', getTodayDateStr()); } catch (e) {}
+  try { await syncUpload('config'); } catch (e) {}
+  await syncPullAll();
+  showToast('同步完成');
 }
 // v3.5.6 数据保护：从备份恢复今日数据（恢复最近一次云端拉取覆盖前的本地数据）
 async function restoreTodayFromBackup() {
@@ -4913,11 +5005,20 @@ async function initSync() {
   showFamilySetup();
 }
 function setupSyncListeners() {
-  // v3.5.10：启动自动双向同步已在 initSync() 内调用 syncPullAll()（含备份+冲突保护）
-  // 以下定时/visibility 同步仍保持禁用，避免高频拉取增加云端冲突风险；启动一次足够
-  // document.addEventListener('visibilitychange', () => { if (!document.hidden && isSyncReady()) syncPullAll(); });
-  // window.addEventListener('online', () => { if (isSyncReady()) { flushSyncQueue(); syncPullAll(); } });
-  // setInterval(() => { if (isSyncReady() && navigator.onLine) syncPullAll(); }, SYNC_CONFIG.pollInterval);
+  // v3.5.55：重新启用前台恢复/网络恢复/轮询同步。
+  // 原实现只在页面首次加载时同步一次，PWA 从后台切回前台不会重新同步，
+  // 导致家人"打开小程序"其实没触发任何同步，看不到别人的新记录。
+  // 为控制请求量，这些增量同步只处理最近 3 天（启动与手动"立即同步"仍为全量 30 天）。
+  const quick = { days: 3 };
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && isSyncReady() && navigator.onLine) { flushSyncQueue(); syncPullAll(quick); }
+  });
+  window.addEventListener('online', () => {
+    if (isSyncReady()) { flushSyncQueue(); syncPullAll(quick); }
+  });
+  setInterval(() => {
+    if (isSyncReady() && navigator.onLine && !document.hidden) syncPullAll(quick);
+  }, SYNC_CONFIG.pollInterval);
 }
 
 // ===== 全局兜底：未捕获 JS 错误 toast 提示（便于真机定位问题） =====
