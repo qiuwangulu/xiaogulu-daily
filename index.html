@@ -901,6 +901,18 @@
     text-align: center; font-size: 12px; color: #74b9ff;
     padding: 9px 0 3px; cursor: pointer; -webkit-tap-highlight-color: transparent;
   }
+  /* 徽章行（三大关注类别） */
+  .ms-badges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .ms-badge {
+    border-radius: 13px; padding: 10px 5px 8px; text-align: center; position: relative;
+    border: 1px solid var(--msbd, #74b9ff);   /* 渐变底色由 JS 内联，避免新颜色函数兼容问题 */
+  }
+  .ms-badge .ms-badge-em { font-size: 20px; line-height: 1; margin-bottom: 5px; display: block; }
+  .ms-badge .ms-badge-nm { font-size: 11.5px; color: #dfe6e9; font-weight: 600; line-height: 1.3; word-break: break-all; }
+  .ms-badge .ms-badge-dt { font-size: 9px; color: rgba(255,255,255,0.45); margin-top: 3px; }
+  .ms-badge.empty { border-style: dashed; border-color: rgba(255,255,255,0.14); background: rgba(255,255,255,0.025); }
+  .ms-badge.empty .ms-badge-em { opacity: 0.4; }
+  .ms-badge.empty .ms-badge-nm { color: rgba(255,255,255,0.35); font-weight: 500; }
   .modal-actions.space-between { justify-content: space-between; }
   .copy-float {
     position: sticky; bottom: 6px;
@@ -1149,6 +1161,10 @@
   body.theme-day .ms-date { color: rgba(61,72,82,0.5); }
   body.theme-day .ms-item::before { border-color: #f5f8fd; }
   body.theme-day .ms-more { color: #0984e3; }
+  body.theme-day .ms-badge .ms-badge-nm { color: #3d4852; }
+  body.theme-day .ms-badge .ms-badge-dt { color: rgba(61,72,82,0.55); }
+  body.theme-day .ms-badge.empty { border-color: rgba(61,72,82,0.2); }
+  body.theme-day .ms-badge.empty .ms-badge-nm { color: rgba(61,72,82,0.4); }
   body.theme-day .chart-zoom-btn { color: #0984e3; background: rgba(9,132,227,0.12); border-color: rgba(9,132,227,0.35); }
   body.theme-day .chart-zoom-btn.active { background: rgba(9,132,227,0.35); color: #fff; }
   /* SVG 内颜色（CSS 优先级高于 SVG 属性，可整体接管；tiptext 为绿底白字浮层需排除） */
@@ -2611,7 +2627,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.56 0910-1915'; // 分析弹窗新增「成长里程碑」时间轴:跨全部历史扫描note字段,关键词自动归类6大发展领域(大运动/精细/语言/认知/社交/自理,匹配不上归「成长点滴」),自动识别首次出现并标注,显示日期+月龄;默认展示15条可展开;夜间/白天皮肤均适配
+const APP_VERSION = 'v3.5.57 0910-2100'; // 成长里程碑优化:卡片移至分析弹窗最下方;默认显示5条可展开;新增「健康」类别(大便/医院/疫苗/发烧等);时间轴上方新增3个徽章(大运动/语言社交/健康,各取最新达成的首次成就并简化描述,显示达成月龄);统计行显示当前月龄
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4495,9 +4511,27 @@ const MILESTONE_DOMAINS = [
   { id:'lang',   name:'语言',     icon:'💬', color:'#48dbfb', kw:['咿呀','发音','叫妈妈','叫爸爸','说话','咕咕','应答','模仿声','啊呜','尖叫','哼','学语','发声'] },
   { id:'cog',    name:'认知',     icon:'🧠', color:'#a29bfe', kw:['认生','认人','追视','找东西','镜子','好奇','明白','懂','寻找','记住','认得','注视','反应','模仿'] },
   { id:'social', name:'社交情感', icon:'😊', color:'#ff6b9d', kw:['笑','开心','互动','回应','撒娇','依恋','逗','表情','兴奋','闹','黏人','认妈妈','看人','打招呼'] },
-  { id:'self',   name:'生活自理', icon:'💤', color:'#1dd1a1', kw:['自主入睡','自己睡','入睡','抱奶瓶','自己吃','咀嚼','吞咽','辅食','断夜奶','睡整觉','接觉','含着','奶睡','拍睡'] }
+  { id:'self',   name:'生活自理', icon:'💤', color:'#1dd1a1', kw:['自主入睡','自己睡','入睡','抱奶瓶','自己吃','咀嚼','吞咽','辅食','断夜奶','睡整觉','接觉','含着','奶睡','拍睡'] },
+  { id:'health', name:'健康',     icon:'🏥', color:'#ff7675', kw:['大便','便便','拉了','臭臭','便秘','腹泻','拉稀','医院','看病','就医','疫苗','打针','预防针','发烧','体温','感冒','咳嗽','吃药','用药','体检','黄疸','湿疹','红屁屁','尿布疹','鼻涕','呕吐','吐奶','胀气','肚肚'] }
 ];
 const MILESTONE_OTHER = { id:'other', name:'成长点滴', icon:'🌟', color:'#74b9ff', kw:[] };
+// 徽章行：三大关注类别（可合并多个领域）
+const MILESTONE_BADGE_GROUPS = [
+  { label: '大运动',   icon: '🏃', color: '#ff9f43', domains: ['gross'] },
+  { label: '语言社交', icon: '💬', color: '#48dbfb', domains: ['lang', 'social'] },
+  { label: '健康',     icon: '🏥', color: '#ff7675', domains: ['health'] }
+];
+// 简化描述：优先取文本中最早命中的领域关键词；无命中则截断前 6 字
+function simplifyMilestone(text, domain) {
+  const t = String(text || '');
+  let best = null, bestPos = Infinity;
+  for (const kw of (domain && domain.kw ? domain.kw : [])) {
+    const p = t.indexOf(kw);
+    if (p !== -1 && p < bestPos) { bestPos = p; best = kw; }
+  }
+  if (best) return best;
+  return t.length > 6 ? t.slice(0, 6) + '…' : (t || '—');
+}
 
 function classifyMilestone(text) {
   const t = String(text || '');
@@ -4553,7 +4587,32 @@ function collectMilestones() {
 }
 let _milestoneItems = [];
 let _milestoneExpanded = false;
-const MILESTONE_PREVIEW = 15;
+const MILESTONE_PREVIEW = 5;
+
+// 徽章行：三大类别各取一条「最新达成的首次」成就，简化描述 + 达成月龄
+function renderMilestoneBadges(items) {
+  let html = '<div class="ms-badges">';
+  for (const g of MILESTONE_BADGE_GROUPS) {
+    // items 已按日期倒序 → 第一个命中的即为该类别最新达成的首次成就
+    const hit = items.find(i => i.isFirst && g.domains.indexOf(i.domain.id) !== -1);
+    if (hit) {
+      const short = simplifyMilestone(hit.text, hit.domain);
+      const age = `${hit.ageMonths}月龄`;
+      html += `<div class="ms-badge" style="--msbd:${g.color};background:linear-gradient(160deg, ${g.color}2e, ${g.color}0d)">` +
+        `<span class="ms-badge-em">${g.icon}</span>` +
+        `<div class="ms-badge-nm">${short.replace(/</g, '&lt;')}</div>` +
+        `<div class="ms-badge-dt">${age} · ${g.label}</div>` +
+      `</div>`;
+    } else {
+      html += `<div class="ms-badge empty">` +
+        `<span class="ms-badge-em">${g.icon}</span>` +
+        `<div class="ms-badge-nm">待解锁</div>` +
+        `<div class="ms-badge-dt">${g.label}</div>` +
+      `</div>`;
+    }
+  }
+  return html + '</div>';
+}
 
 function renderMilestoneInner() {
   const items = _milestoneItems;
@@ -4592,8 +4651,10 @@ function makeMilestoneTimeline() {
     return head + `<div class="chart-empty">还没有成就记录<br><span style="font-size:12px;opacity:.7">记录时写点什么，比如「第一次翻身」</span></div></div>`;
   }
   const firstCount = items.filter(i => i.isFirst).length;
-  const stat = `<div class="ms-stat">共 ${items.length} 条 · ${firstCount} 个「第一次」</div>`;
-  return head + stat + `<div class="ms-timeline" id="milestoneTimeline">${renderMilestoneInner()}</div></div>`;
+  const nowAge = getAgeDetail(getTodayDateStr());
+  const stat = `<div class="ms-stat">当前 ${nowAge.months}月龄${nowAge.days > 0 ? nowAge.days + '天' : ''} · 共 ${items.length} 条 · ${firstCount} 个「第一次」</div>`;
+  return head + stat + renderMilestoneBadges(items) +
+    `<div class="ms-timeline" id="milestoneTimeline">${renderMilestoneInner()}</div></div>`;
 }
 function openAnalysis() {
   const content = document.getElementById('analysisContent');
@@ -4620,13 +4681,13 @@ function openAnalysis() {
   const countStdRows = days.map(d => getStdRow(MILK_COUNT_STD, d.ds));
   const sleepStdRows = days.map(d => getStdRow(SLEEP_STD, d.ds));
   const poopStdRows = days.map(d => getStdRow(POOP_STD, d.ds));
-  html += makeMilestoneTimeline();   // 成长里程碑时间轴（置顶：最有纪念意义的内容优先）
   html += makeBarChart(milkData, { title: '🍼 每日奶量（水+奶，近15天）', unit: 'ml', color: '#7da8e6', tickStep: 100, stdLines: [{ values: milkStdRows.map(r => r.min) }, { values: milkStdRows.map(r => r.max) }] });
   html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
   html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
   html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
   html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT }, zoomTiers: { min: 3, step: 1 } });
   html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT }, zoomTiers: { min: 50, step: 5 } });
+  html += makeMilestoneTimeline();   // 成长里程碑时间轴（置于最下方）
   content.innerHTML = html;
   bindChartTipDismiss();
   showModal('analysisModal');
