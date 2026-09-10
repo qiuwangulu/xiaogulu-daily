@@ -877,14 +877,16 @@
     width: 2px; border-radius: 2px;
     background: linear-gradient(180deg, rgba(255,159,67,0.5), rgba(116,185,255,0.22));
   }
-  .ms-item { position: relative; margin-bottom: 11px; }
-  .ms-item:last-child { margin-bottom: 2px; }
-  .ms-item::before {
-    content: ''; position: absolute; left: -18px; top: 5px;
+  /* 同一天为一个分组，日期只显示一次，节点画在分组上 */
+  .ms-group { position: relative; margin-bottom: 12px; }
+  .ms-group:last-child { margin-bottom: 2px; }
+  .ms-group::before {
+    content: ''; position: absolute; left: -18px; top: 4px;
     width: 10px; height: 10px; border-radius: 50%;
-    background: var(--msdot, #74b9ff); border: 2px solid #0a0f1e;
+    background: #74b9ff; border: 2px solid #0a0f1e;
   }
-  .ms-date { font-size: 10px; color: rgba(255,255,255,0.45); margin-bottom: 3px; padding-left: 2px; }
+  .ms-group-items { display: flex; flex-direction: column; gap: 7px; }
+  .ms-date { font-size: 10px; color: rgba(255,255,255,0.45); margin-bottom: 5px; padding-left: 2px; }
   .ms-card {
     background: rgba(255,255,255,0.045);
     border-radius: 10px; padding: 8px 10px;
@@ -913,6 +915,13 @@
   .ms-badge.empty { border-style: dashed; border-color: rgba(255,255,255,0.14); background: rgba(255,255,255,0.025); }
   .ms-badge.empty .ms-badge-em { opacity: 0.4; }
   .ms-badge.empty .ms-badge-nm { color: rgba(255,255,255,0.35); font-weight: 500; }
+  /* 点击徽章后展开的完整描述 */
+  .ms-badge-detail {
+    background: rgba(116,185,255,0.08); border-left: 2px solid #74b9ff;
+    border-radius: 9px; padding: 9px 11px; margin-bottom: 12px; cursor: pointer;
+  }
+  .ms-badge-detail .ms-bd-text { font-size: 12.5px; color: #dfe6e9; line-height: 1.5; word-break: break-word; }
+  .ms-badge-detail .ms-bd-meta { font-size: 9.5px; color: rgba(255,255,255,0.45); margin-top: 5px; }
   .modal-actions.space-between { justify-content: space-between; }
   .copy-float {
     position: sticky; bottom: 6px;
@@ -1159,7 +1168,10 @@
   body.theme-day .ms-card { background: rgba(9,132,227,0.05); }
   body.theme-day .ms-text { color: #3d4852; }
   body.theme-day .ms-date { color: rgba(61,72,82,0.5); }
-  body.theme-day .ms-item::before { border-color: #f5f8fd; }
+  body.theme-day .ms-group::before { border-color: #f5f8fd; }
+  body.theme-day .ms-badge-detail { background: rgba(9,132,227,0.07); border-left-color: #0984e3; }
+  body.theme-day .ms-badge-detail .ms-bd-text { color: #3d4852; }
+  body.theme-day .ms-badge-detail .ms-bd-meta { color: rgba(61,72,82,0.55); }
   body.theme-day .ms-more { color: #0984e3; }
   body.theme-day .ms-badge .ms-badge-nm { color: #3d4852; }
   body.theme-day .ms-badge .ms-badge-dt { color: rgba(61,72,82,0.55); }
@@ -2627,7 +2639,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.57 0910-2100'; // 成长里程碑优化:卡片移至分析弹窗最下方;默认显示5条可展开;新增「健康」类别(大便/医院/疫苗/发烧等);时间轴上方新增3个徽章(大运动/语言社交/健康,各取最新达成的首次成就并简化描述,显示达成月龄);统计行显示当前月龄
+const APP_VERSION = 'v3.5.58 0910-2125'; // 成长里程碑优化:徽章改为显示完整年月日并去掉类别名;简化描述改为取最长命中关键词且至少2字(避免「闹」这类语义不明),无合格关键词则截取原文前8字;点击徽章可展开/收起完整描述(含日期/类别/月龄);时间轴同一天多条记录按日期分组,日期只显示一次
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4510,7 +4522,7 @@ const MILESTONE_DOMAINS = [
   { id:'fine',   name:'精细运动', icon:'✋', color:'#feca57', kw:['抓','握','捏','拿','撕','拍手','换手','积木','摇铃','吃手','够','拍打','攥','抠','塞嘴里'] },
   { id:'lang',   name:'语言',     icon:'💬', color:'#48dbfb', kw:['咿呀','发音','叫妈妈','叫爸爸','说话','咕咕','应答','模仿声','啊呜','尖叫','哼','学语','发声'] },
   { id:'cog',    name:'认知',     icon:'🧠', color:'#a29bfe', kw:['认生','认人','追视','找东西','镜子','好奇','明白','懂','寻找','记住','认得','注视','反应','模仿'] },
-  { id:'social', name:'社交情感', icon:'😊', color:'#ff6b9d', kw:['笑','开心','互动','回应','撒娇','依恋','逗','表情','兴奋','闹','黏人','认妈妈','看人','打招呼'] },
+  { id:'social', name:'社交情感', icon:'😊', color:'#ff6b9d', kw:['笑','开心','互动','回应','撒娇','依恋','逗','表情','兴奋','闹觉','黏人','认妈妈','看人','打招呼','微笑','笑出声'] },
   { id:'self',   name:'生活自理', icon:'💤', color:'#1dd1a1', kw:['自主入睡','自己睡','入睡','抱奶瓶','自己吃','咀嚼','吞咽','辅食','断夜奶','睡整觉','接觉','含着','奶睡','拍睡'] },
   { id:'health', name:'健康',     icon:'🏥', color:'#ff7675', kw:['大便','便便','拉了','臭臭','便秘','腹泻','拉稀','医院','看病','就医','疫苗','打针','预防针','发烧','体温','感冒','咳嗽','吃药','用药','体检','黄疸','湿疹','红屁屁','尿布疹','鼻涕','呕吐','吐奶','胀气','肚肚'] }
 ];
@@ -4521,16 +4533,20 @@ const MILESTONE_BADGE_GROUPS = [
   { label: '语言社交', icon: '💬', color: '#48dbfb', domains: ['lang', 'social'] },
   { label: '健康',     icon: '🏥', color: '#ff7675', domains: ['health'] }
 ];
-// 简化描述：优先取文本中最早命中的领域关键词；无命中则截断前 6 字
+// 简化描述（徽章用）：取命中的领域关键词中最长的一个，且至少 2 字
+// —— 只取 1 字的关键词（如「笑」「闹」）会语义不明，故设下限；
+//    无合格关键词时回退为截取原文（比硬取单字更好懂）。
+const MS_SIMPLIFY_MIN = 2;
+const MS_SIMPLIFY_MAX = 8;
 function simplifyMilestone(text, domain) {
   const t = String(text || '');
-  let best = null, bestPos = Infinity;
+  let best = '';
   for (const kw of (domain && domain.kw ? domain.kw : [])) {
-    const p = t.indexOf(kw);
-    if (p !== -1 && p < bestPos) { bestPos = p; best = kw; }
+    if (kw.length < MS_SIMPLIFY_MIN) continue;                 // 过短关键词不作为描述
+    if (t.indexOf(kw) !== -1 && kw.length > best.length) best = kw;
   }
   if (best) return best;
-  return t.length > 6 ? t.slice(0, 6) + '…' : (t || '—');
+  return t.length > MS_SIMPLIFY_MAX ? t.slice(0, MS_SIMPLIFY_MAX) + '…' : (t || '—');
 }
 
 function classifyMilestone(text) {
@@ -4589,49 +4605,80 @@ let _milestoneItems = [];
 let _milestoneExpanded = false;
 const MILESTONE_PREVIEW = 5;
 
-// 徽章行：三大类别各取一条「最新达成的首次」成就，简化描述 + 达成月龄
+// 徽章行：三大类别各取一条「最新达成的首次」成就，简化描述 + 完整日期；点击看全文
+let _msBadgeHits = [];        // 徽章对应的原始条目（供点击展开）
+let _msBadgeOpen = -1;        // 当前展开的徽章索引，-1 = 无
 function renderMilestoneBadges(items) {
+  _msBadgeHits = [];
+  _msBadgeOpen = -1;
   let html = '<div class="ms-badges">';
-  for (const g of MILESTONE_BADGE_GROUPS) {
+  MILESTONE_BADGE_GROUPS.forEach((g, idx) => {
     // items 已按日期倒序 → 第一个命中的即为该类别最新达成的首次成就
     const hit = items.find(i => i.isFirst && g.domains.indexOf(i.domain.id) !== -1);
     if (hit) {
+      _msBadgeHits[idx] = hit;
       const short = simplifyMilestone(hit.text, hit.domain);
-      const age = `${hit.ageMonths}月龄`;
-      html += `<div class="ms-badge" style="--msbd:${g.color};background:linear-gradient(160deg, ${g.color}2e, ${g.color}0d)">` +
+      html += `<div class="ms-badge" style="--msbd:${g.color};background:linear-gradient(160deg, ${g.color}2e, ${g.color}0d)" onclick="toggleMilestoneBadge(${idx})">` +
         `<span class="ms-badge-em">${g.icon}</span>` +
         `<div class="ms-badge-nm">${short.replace(/</g, '&lt;')}</div>` +
-        `<div class="ms-badge-dt">${age} · ${g.label}</div>` +
+        `<div class="ms-badge-dt">${hit.date}</div>` +
       `</div>`;
     } else {
+      _msBadgeHits[idx] = null;
       html += `<div class="ms-badge empty">` +
         `<span class="ms-badge-em">${g.icon}</span>` +
         `<div class="ms-badge-nm">待解锁</div>` +
         `<div class="ms-badge-dt">${g.label}</div>` +
       `</div>`;
     }
-  }
+  });
   return html + '</div>';
+}
+// 点击徽章 → 展开/收起完整描述
+function toggleMilestoneBadge(idx) {
+  _msBadgeOpen = (_msBadgeOpen === idx) ? -1 : idx;
+  const el = document.getElementById('milestoneBadgeDetail');
+  if (el) el.innerHTML = renderBadgeDetail();
+}
+function renderBadgeDetail() {
+  const it = _msBadgeHits[_msBadgeOpen];
+  if (!it) return '';
+  return `<div class="ms-badge-detail" onclick="toggleMilestoneBadge(${_msBadgeOpen})">` +
+    `<div class="ms-bd-text">${it.text.replace(/</g, '&lt;')}</div>` +
+    `<div class="ms-bd-meta">${it.date} · ${it.domain.icon} ${it.domain.name}` +
+      (it.isFirst ? ' · 首次' : '') + ` · ${it.ageMonths}月龄${it.ageDays > 0 ? it.ageDays + '天' : ''}</div>` +
+  `</div>`;
 }
 
 function renderMilestoneInner() {
   const items = _milestoneItems;
   const shown = _milestoneExpanded ? items : items.slice(0, MILESTONE_PREVIEW);
-  let html = '';
+  // 按日期分组（items 已按日期倒序，同日期天然相邻）→ 同一天只显示一次日期
+  const groups = [];
   for (const it of shown) {
-    const d = it.domain;
-    const [ , mo, dd ] = it.date.split('-');
-    const dateLabel = `${parseInt(mo)}/${parseInt(dd)}`;
-    const ageLabel = `${it.ageMonths}月龄${it.ageDays > 0 ? it.ageDays + '天' : ''}`;
-    html += `<div class="ms-item" style="--msdot:${d.color}">` +
-      `<div class="ms-date">${dateLabel} · ${ageLabel}</div>` +
-      `<div class="ms-card" style="border-left-color:${d.color}">` +
+    const g = groups[groups.length - 1];
+    if (g && g.date === it.date) g.items.push(it);
+    else groups.push({ date: it.date, items: [it] });
+  }
+  let html = '';
+  for (const g of groups) {
+    const head = g.items[0];
+    const ageLabel = `${head.ageMonths}月龄${head.ageDays > 0 ? head.ageDays + '天' : ''}`;
+    let cards = '';
+    for (const it of g.items) {
+      const d = it.domain;
+      cards += `<div class="ms-card" style="border-left-color:${d.color}">` +
         `<div class="ms-text">${it.text.replace(/</g, '&lt;')}</div>` +
         `<div class="ms-meta">` +
           `<span class="ms-tag" style="background:${d.color}22;color:${d.color}">${d.icon} ${d.name}</span>` +
           (it.isFirst ? `<span class="ms-first">首次</span>` : '') +
         `</div>` +
-      `</div></div>`;
+      `</div>`;
+    }
+    html += `<div class="ms-group">` +
+      `<div class="ms-date">${g.date} · ${ageLabel}</div>` +
+      `<div class="ms-group-items">${cards}</div>` +
+    `</div>`;
   }
   if (items.length > MILESTONE_PREVIEW) {
     html += `<div class="ms-more" onclick="toggleMilestoneExpand()">${_milestoneExpanded ? '收起 ▲' : `展开全部 ${items.length} 条 ▼`}</div>`;
@@ -4654,6 +4701,7 @@ function makeMilestoneTimeline() {
   const nowAge = getAgeDetail(getTodayDateStr());
   const stat = `<div class="ms-stat">当前 ${nowAge.months}月龄${nowAge.days > 0 ? nowAge.days + '天' : ''} · 共 ${items.length} 条 · ${firstCount} 个「第一次」</div>`;
   return head + stat + renderMilestoneBadges(items) +
+    `<div id="milestoneBadgeDetail"></div>` +
     `<div class="ms-timeline" id="milestoneTimeline">${renderMilestoneInner()}</div></div>`;
 }
 function openAnalysis() {
