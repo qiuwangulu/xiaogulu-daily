@@ -2639,7 +2639,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.58 0910-2125'; // 成长里程碑优化:徽章改为显示完整年月日并去掉类别名;简化描述改为取最长命中关键词且至少2字(避免「闹」这类语义不明),无合格关键词则截取原文前8字;点击徽章可展开/收起完整描述(含日期/类别/月龄);时间轴同一天多条记录按日期分组,日期只显示一次
+const APP_VERSION = 'v3.5.59 0911-0025'; // 分析弹窗顶部新增「奶量趋势」双轴折线图:横轴为全部已记录日期,左轴每日总奶量(蓝,与近15天柱状图同口径×1.12),右轴每日单次平均奶量(橙);共用5条等分网格线;支持点击数据点查看数值;点数过多时抽稀命中区;无数据显示提示
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4690,6 +4690,114 @@ function toggleMilestoneExpand() {
   const el = document.getElementById('milestoneTimeline');
   if (el) el.innerHTML = renderMilestoneInner();   // 只重绘时间轴，保持弹窗滚动位置
 }
+/* ==================== 奶量趋势（双轴折线图，v3.5.59） ====================
+ * 横轴：日期（全部已记录数据，非近15天）
+ * 左轴：每日总奶量（与近15天柱状图同口径：奶量×1.12 折算水+奶）
+ * 右轴：每日单次平均奶量（当日总奶量 ÷ 当日喝奶次数）
+ * ============================================================ */
+function collectMilkTrendData() {
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (/^records_\d{4}-\d{2}-\d{2}$/.test(k)) keys.push(k);
+  }
+  keys.sort();                       // 日期升序
+  const out = [];
+  for (const k of keys) {
+    const ds = k.slice(8);
+    let recs = [];
+    try { recs = JSON.parse(localStorage.getItem(k) || '[]'); } catch { continue; }
+    if (!Array.isArray(recs)) continue;
+    let sum = 0, cnt = 0;
+    for (const r of recs) {
+      if (r && r.type === 'milk') { cnt++; if (r.milkAmount) sum += r.milkAmount; }
+    }
+    if (cnt === 0 || sum <= 0) continue;
+    const total = Math.round(sum * 1.12);        // 与「近15天奶量」柱状图口径一致
+    out.push({ ds: ds, t: Date.parse(ds + 'T00:00:00'), total: total, avg: Math.round(total / cnt) });
+  }
+  return out;
+}
+// 取合适的刻度步长（1/2/5 × 10^n）
+function niceStep(raw) {
+  if (!(raw > 0)) return 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const s = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+  return s * mag;
+}
+function makeMilkTrendChart() {
+  const data = collectMilkTrendData();
+  const legend = `<span style="float:right;font-size:10px;color:#b2bec3;margin-right:4px;">` +
+    `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#7da8e6;margin-right:2px;vertical-align:middle;"></span>总奶量 ` +
+    `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ff9f43;margin-right:2px;vertical-align:middle;"></span>单次平均</span>`;
+  const head = `<div class="chart-card"><div class="chart-title">🍼 奶量趋势（全部记录）${legend}</div>`;
+  const n = data.length;
+  if (n === 0) return head + `<div class="chart-empty">暂无奶量数据</div></div>`;
+
+  const W = 360, H = 180, PL = 42, PR = 48, PT = 24, PB = 26;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  const tMin = data[0].t, tMax = data[n - 1].t;
+  const xf = ts => (tMax === tMin) ? (PL + iw / 2) : (PL + (iw * (ts - tMin)) / (tMax - tMin));
+
+  // 左右轴各自独立缩放，但共用 5 条等分网格线（0/25/50/75/100%）
+  const maxTotal = Math.max(...data.map(d => d.total));
+  const maxAvg = Math.max(...data.map(d => d.avg));
+  const lStep = niceStep(maxTotal / 4), aStep = niceStep(maxAvg / 4);
+  const lTop = Math.max(lStep * 4, Math.ceil(maxTotal / lStep) * lStep) || lStep;
+  const aTop = Math.max(aStep * 4, Math.ceil(maxAvg / aStep) * aStep) || aStep;
+  const yT = v => PT + ih - (ih * v) / lTop;
+  const yA = v => PT + ih - (ih * v) / aTop;
+
+  const pcts = [0, 0.25, 0.5, 0.75, 1];
+  let grid = '', ylabels = '';
+  pcts.forEach(p => {
+    const gy = (PT + ih - ih * p).toFixed(1);
+    grid += `<line class="gridln" x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#fff" font-size="9" text-anchor="end">${Math.round(lTop * p)}</text>`;
+    ylabels += `<text x="${W - PR + 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#ff9f43" font-size="9" text-anchor="start">${Math.round(aTop * p)}</text>`;
+  });
+  ylabels += `<text x="${PL - 5}" y="13" fill="#fff" font-size="8.5" font-weight="bold" text-anchor="end">总量ml</text>`;
+  ylabels += `<text x="${W - PR + 5}" y="13" fill="#ff9f43" font-size="8.5" font-weight="bold" text-anchor="start">单次ml</text>`;
+
+  // 横轴日期标签：首末 + 抽稀，最多约 7 个
+  let xlabels = '';
+  const xStep = Math.max(1, Math.ceil(n / 6));
+  data.forEach((d, i) => {
+    if (i % xStep !== 0 && i !== n - 1) return;
+    const [ , mo, dd ] = d.ds.split('-');
+    xlabels += `<text x="${xf(d.t).toFixed(1)}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${parseInt(mo)}/${parseInt(dd)}</text>`;
+  });
+
+  const pathT = data.map(d => `${xf(d.t).toFixed(1)} ${yT(d.total).toFixed(1)}`).join(' L');
+  const pathA = data.map(d => `${xf(d.t).toFixed(1)} ${yA(d.avg).toFixed(1)}`).join(' L');
+
+  // 数据点 + 点击提示（点数过多时抽稀命中区，避免 HTML 过大）
+  const tipId = 'mtip' + (++_chartTipSeq);
+  const hitStep = Math.max(1, Math.ceil(n / 40));
+  let dots = '';
+  data.forEach((d, i) => {
+    const px = xf(d.t).toFixed(1);
+    const pyT = yT(d.total).toFixed(1), pyA = yA(d.avg).toFixed(1);
+    dots += `<circle cx="${px}" cy="${pyT}" r="2" fill="#7da8e6" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
+    dots += `<circle cx="${px}" cy="${pyA}" r="2" fill="#ff9f43" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
+    if (i % hitStep !== 0 && i !== n - 1) return;
+    const [ , mo, dd ] = d.ds.split('-');
+    const lb = `${parseInt(mo)}/${parseInt(dd)}`;
+    dots += `<circle class="chart-hit" cx="${px}" cy="${pyT}" r="10" fill="transparent" data-cx="${px}" data-cy="${pyT}" onclick="chartTip(this,'${tipId}','${lb}','总 ${d.total}ml')"/>`;
+    dots += `<circle class="chart-hit" cx="${px}" cy="${pyA}" r="10" fill="transparent" data-cx="${px}" data-cy="${pyA}" onclick="chartTip(this,'${tipId}','${lb}','单次均 ${d.avg}ml')"/>`;
+  });
+  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.45)" stroke-width="0.5"/><text class="tiptext" font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  const clipId = 'mclip' + (++_chartTipSeq);
+
+  return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
+    `<defs><clipPath id="${clipId}"><rect x="${PL}" y="${PT}" width="${iw}" height="${ih}"/></clipPath></defs>` +
+    grid + ylabels + xlabels +
+    `<g clip-path="url(#${clipId})">` +
+      `<path class="dataline" d="M${pathT}" fill="none" stroke="#7da8e6" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` +
+      `<path d="M${pathA}" fill="none" stroke="#ff9f43" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` +
+    `</g>` + dots + tip + `</svg></div>`;
+}
 function makeMilestoneTimeline() {
   const items = collectMilestones();
   _milestoneItems = items;
@@ -4729,6 +4837,7 @@ function openAnalysis() {
   const countStdRows = days.map(d => getStdRow(MILK_COUNT_STD, d.ds));
   const sleepStdRows = days.map(d => getStdRow(SLEEP_STD, d.ds));
   const poopStdRows = days.map(d => getStdRow(POOP_STD, d.ds));
+  html += makeMilkTrendChart();   // 奶量趋势（全部记录，双轴：总奶量 + 单次平均）
   html += makeBarChart(milkData, { title: '🍼 每日奶量（水+奶，近15天）', unit: 'ml', color: '#7da8e6', tickStep: 100, stdLines: [{ values: milkStdRows.map(r => r.min) }, { values: milkStdRows.map(r => r.max) }] });
   html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
   html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
