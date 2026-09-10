@@ -866,6 +866,41 @@
     text-align: center; color: #636e72;
     padding: 28px 0; font-size: 14px;
   }
+  /* ---- 成长里程碑时间轴 ---- */
+  .ms-stat {
+    font-size: 11px; color: rgba(255,255,255,0.45);
+    padding: 0 4px 10px;
+  }
+  .ms-timeline { position: relative; padding-left: 18px; }
+  .ms-timeline::before {
+    content: ''; position: absolute; left: 4px; top: 8px; bottom: 8px;
+    width: 2px; border-radius: 2px;
+    background: linear-gradient(180deg, rgba(255,159,67,0.5), rgba(116,185,255,0.22));
+  }
+  .ms-item { position: relative; margin-bottom: 11px; }
+  .ms-item:last-child { margin-bottom: 2px; }
+  .ms-item::before {
+    content: ''; position: absolute; left: -18px; top: 5px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--msdot, #74b9ff); border: 2px solid #0a0f1e;
+  }
+  .ms-date { font-size: 10px; color: rgba(255,255,255,0.45); margin-bottom: 3px; padding-left: 2px; }
+  .ms-card {
+    background: rgba(255,255,255,0.045);
+    border-radius: 10px; padding: 8px 10px;
+    border-left: 3px solid #74b9ff;
+  }
+  .ms-text { font-size: 13px; color: #dfe6e9; line-height: 1.45; word-break: break-word; }
+  .ms-meta { margin-top: 5px; display: flex; gap: 5px; flex-wrap: wrap; }
+  .ms-tag { font-size: 9.5px; padding: 1.5px 6px; border-radius: 8px; font-weight: 600; }
+  .ms-first {
+    font-size: 9.5px; padding: 1.5px 6px; border-radius: 8px;
+    background: rgba(255,159,67,0.18); color: #ff9f43; font-weight: 700;
+  }
+  .ms-more {
+    text-align: center; font-size: 12px; color: #74b9ff;
+    padding: 9px 0 3px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
   .modal-actions.space-between { justify-content: space-between; }
   .copy-float {
     position: sticky; bottom: 6px;
@@ -1108,6 +1143,12 @@
   /* ===== 分析图表 ===== */
   body.theme-day .chart-card { background: rgba(9,132,227,0.04); border-color: rgba(9,132,227,0.12); }
   body.theme-day .chart-title { color: #3d4852; }
+  body.theme-day .ms-stat { color: rgba(61,72,82,0.55); }
+  body.theme-day .ms-card { background: rgba(9,132,227,0.05); }
+  body.theme-day .ms-text { color: #3d4852; }
+  body.theme-day .ms-date { color: rgba(61,72,82,0.5); }
+  body.theme-day .ms-item::before { border-color: #f5f8fd; }
+  body.theme-day .ms-more { color: #0984e3; }
   body.theme-day .chart-zoom-btn { color: #0984e3; background: rgba(9,132,227,0.12); border-color: rgba(9,132,227,0.35); }
   body.theme-day .chart-zoom-btn.active { background: rgba(9,132,227,0.35); color: #fff; }
   /* SVG 内颜色（CSS 优先级高于 SVG 属性，可整体接管；tiptext 为绿底白字浮层需排除） */
@@ -2570,7 +2611,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.55 0909-1530'; // 修复家人看不到更新记录:①拉取由「谁时间戳新谁赢」的单向覆盖改为记录级合并(并集+删除墓碑+同键取updatedAt较新者),双向收敛,不再互相覆盖丢失;②重新启用切回前台/网络恢复/轮询同步(PWA从后台恢复不再只同步一次),增量同步仅最近3天控制请求量;③立即同步改为双向(先推后拉);④增删改记录带updatedAt,删除写墓碑
+const APP_VERSION = 'v3.5.56 0910-1915'; // 分析弹窗新增「成长里程碑」时间轴:跨全部历史扫描note字段,关键词自动归类6大发展领域(大运动/精细/语言/认知/社交/自理,匹配不上归「成长点滴」),自动识别首次出现并标注,显示日期+月龄;默认展示15条可展开;夜间/白天皮肤均适配
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4443,6 +4484,117 @@ function makeBarChart(data, opts) {
   return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
     grid + ylabels + xlabels + bars + stdSvg + tip + `</svg></div>`;
 }
+/* ==================== 成长里程碑时间轴（v3.5.56） ====================
+ * 数据来源：全部历史记录里的 note 字段（今日成就），跨日期扫描。
+ * 非结构化文本 → 展示层轻结构化：关键词自动归类到发展领域 + 自动识别"首次"。
+ * 不改变用户输入习惯（仍是自由文本），匹配不上归入「成长点滴」，绝不丢条目。
+ * ============================================================ */
+const MILESTONE_DOMAINS = [
+  { id:'gross',  name:'大运动',   icon:'🏃', color:'#ff9f43', kw:['翻身','抬头','趴','爬','站','走','独坐','坐稳','蹬腿','踢','扶站','翻滚','爬行','迈步','跳','撑起','靠坐','竖抱'] },
+  { id:'fine',   name:'精细运动', icon:'✋', color:'#feca57', kw:['抓','握','捏','拿','撕','拍手','换手','积木','摇铃','吃手','够','拍打','攥','抠','塞嘴里'] },
+  { id:'lang',   name:'语言',     icon:'💬', color:'#48dbfb', kw:['咿呀','发音','叫妈妈','叫爸爸','说话','咕咕','应答','模仿声','啊呜','尖叫','哼','学语','发声'] },
+  { id:'cog',    name:'认知',     icon:'🧠', color:'#a29bfe', kw:['认生','认人','追视','找东西','镜子','好奇','明白','懂','寻找','记住','认得','注视','反应','模仿'] },
+  { id:'social', name:'社交情感', icon:'😊', color:'#ff6b9d', kw:['笑','开心','互动','回应','撒娇','依恋','逗','表情','兴奋','闹','黏人','认妈妈','看人','打招呼'] },
+  { id:'self',   name:'生活自理', icon:'💤', color:'#1dd1a1', kw:['自主入睡','自己睡','入睡','抱奶瓶','自己吃','咀嚼','吞咽','辅食','断夜奶','睡整觉','接觉','含着','奶睡','拍睡'] }
+];
+const MILESTONE_OTHER = { id:'other', name:'成长点滴', icon:'🌟', color:'#74b9ff', kw:[] };
+
+function classifyMilestone(text) {
+  const t = String(text || '');
+  for (const d of MILESTONE_DOMAINS) {
+    for (const kw of d.kw) { if (t.indexOf(kw) !== -1) return d; }
+  }
+  return MILESTONE_OTHER;
+}
+// 月龄 + 距上次满月的天数（如 4月龄11天）
+function getAgeDetail(ds) {
+  const [y, m, d] = ds.split('-').map(Number);
+  const cur = new Date(y, m - 1, d);
+  let months = (y - BIRTH_DATE.getFullYear()) * 12 + (m - 1 - BIRTH_DATE.getMonth());
+  if (d < BIRTH_DATE.getDate()) months--;
+  months = Math.max(0, months);
+  const anniv = new Date(BIRTH_DATE.getFullYear(), BIRTH_DATE.getMonth() + months, BIRTH_DATE.getDate());
+  let days = Math.round((cur - anniv) / 86400000);
+  if (days < 0) days = 0;
+  return { months: months, days: days };
+}
+// 扫描全部历史日期的 note，按日期倒序返回；标注领域与是否首次出现
+function collectMilestones() {
+  const allKeys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (/^records_\d{4}-\d{2}-\d{2}$/.test(k)) allKeys.push(k);
+  }
+  allKeys.sort();                       // 日期升序，首次遇到的即为"最早"
+  const firstSeen = {};
+  const items = [];
+  for (const k of allKeys) {
+    const ds = k.slice(8);
+    let recs = [];
+    try { recs = JSON.parse(localStorage.getItem(k) || '[]'); } catch { continue; }
+    if (!Array.isArray(recs)) continue;
+    const seenToday = new Set();
+    for (const r of recs) {
+      const t = (r && r.note) ? String(r.note).trim() : '';
+      if (!t || seenToday.has(t)) continue;
+      seenToday.add(t);
+      if (!(t in firstSeen)) firstSeen[t] = ds;
+      items.push({ text: t, date: ds, isFirst: (firstSeen[t] === ds) });
+    }
+  }
+  // 按日期倒序（最新在上），同一天保持原顺序
+  items.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  for (const it of items) {
+    it.domain = classifyMilestone(it.text);
+    const ad = getAgeDetail(it.date);
+    it.ageMonths = ad.months; it.ageDays = ad.days;
+  }
+  return items;
+}
+let _milestoneItems = [];
+let _milestoneExpanded = false;
+const MILESTONE_PREVIEW = 15;
+
+function renderMilestoneInner() {
+  const items = _milestoneItems;
+  const shown = _milestoneExpanded ? items : items.slice(0, MILESTONE_PREVIEW);
+  let html = '';
+  for (const it of shown) {
+    const d = it.domain;
+    const [ , mo, dd ] = it.date.split('-');
+    const dateLabel = `${parseInt(mo)}/${parseInt(dd)}`;
+    const ageLabel = `${it.ageMonths}月龄${it.ageDays > 0 ? it.ageDays + '天' : ''}`;
+    html += `<div class="ms-item" style="--msdot:${d.color}">` +
+      `<div class="ms-date">${dateLabel} · ${ageLabel}</div>` +
+      `<div class="ms-card" style="border-left-color:${d.color}">` +
+        `<div class="ms-text">${it.text.replace(/</g, '&lt;')}</div>` +
+        `<div class="ms-meta">` +
+          `<span class="ms-tag" style="background:${d.color}22;color:${d.color}">${d.icon} ${d.name}</span>` +
+          (it.isFirst ? `<span class="ms-first">首次</span>` : '') +
+        `</div>` +
+      `</div></div>`;
+  }
+  if (items.length > MILESTONE_PREVIEW) {
+    html += `<div class="ms-more" onclick="toggleMilestoneExpand()">${_milestoneExpanded ? '收起 ▲' : `展开全部 ${items.length} 条 ▼`}</div>`;
+  }
+  return html;
+}
+function toggleMilestoneExpand() {
+  _milestoneExpanded = !_milestoneExpanded;
+  const el = document.getElementById('milestoneTimeline');
+  if (el) el.innerHTML = renderMilestoneInner();   // 只重绘时间轴，保持弹窗滚动位置
+}
+function makeMilestoneTimeline() {
+  const items = collectMilestones();
+  _milestoneItems = items;
+  const head = `<div class="chart-card"><div class="chart-title">🌟 成长里程碑</div>`;
+  if (!items.length) {
+    return head + `<div class="chart-empty">还没有成就记录<br><span style="font-size:12px;opacity:.7">记录时写点什么，比如「第一次翻身」</span></div></div>`;
+  }
+  const firstCount = items.filter(i => i.isFirst).length;
+  const stat = `<div class="ms-stat">共 ${items.length} 条 · ${firstCount} 个「第一次」</div>`;
+  return head + stat + `<div class="ms-timeline" id="milestoneTimeline">${renderMilestoneInner()}</div></div>`;
+}
 function openAnalysis() {
   const content = document.getElementById('analysisContent');
   // 1) 近15天（含当天）每日数据
@@ -4468,6 +4620,7 @@ function openAnalysis() {
   const countStdRows = days.map(d => getStdRow(MILK_COUNT_STD, d.ds));
   const sleepStdRows = days.map(d => getStdRow(SLEEP_STD, d.ds));
   const poopStdRows = days.map(d => getStdRow(POOP_STD, d.ds));
+  html += makeMilestoneTimeline();   // 成长里程碑时间轴（置顶：最有纪念意义的内容优先）
   html += makeBarChart(milkData, { title: '🍼 每日奶量（水+奶，近15天）', unit: 'ml', color: '#7da8e6', tickStep: 100, stdLines: [{ values: milkStdRows.map(r => r.min) }, { values: milkStdRows.map(r => r.max) }] });
   html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
   html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
