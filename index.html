@@ -2639,7 +2639,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.59 0911-0025'; // 分析弹窗顶部新增「奶量趋势」双轴折线图:横轴为全部已记录日期,左轴每日总奶量(蓝,与近15天柱状图同口径×1.12),右轴每日单次平均奶量(橙);共用5条等分网格线;支持点击数据点查看数值;点数过多时抽稀命中区;无数据显示提示
+const APP_VERSION = 'v3.5.60 0911-0745'; // 奶量趋势图两纵轴改为非0起点动态区间:最小值=最低值×0.8向下取整,最大值=最高值×1.2向上取整(左轴总量/右轴单次平均各自独立),5条等分网格线按各自区间线性标注,防除零边界处理
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4694,6 +4694,8 @@ function toggleMilestoneExpand() {
  * 横轴：日期（全部已记录数据，非近15天）
  * 左轴：每日总奶量（与近15天柱状图同口径：奶量×1.12 折算水+奶）
  * 右轴：每日单次平均奶量（当日总奶量 ÷ 当日喝奶次数）
+ * v3.5.60：两轴均改为非 0 起点的动态区间，最小值 = 最低值×0.8 向下取整，
+ *          最大值 = 最高值×1.2 向上取整，让波动看得更清楚（milkAxisRange）
  * ============================================================ */
 function collectMilkTrendData() {
   const keys = [];
@@ -4718,13 +4720,12 @@ function collectMilkTrendData() {
   }
   return out;
 }
-// 取合适的刻度步长（1/2/5 × 10^n）
-function niceStep(raw) {
-  if (!(raw > 0)) return 1;
-  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
-  const norm = raw / mag;
-  const s = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
-  return s * mag;
+// 纵轴区间：最小值 = 最低值 × 0.8 向下取整，最大值 = 最高值 × 1.2 向上取整（v3.5.60）
+function milkAxisRange(minV, maxV) {
+  let lo = Math.floor((Number(minV) || 0) * 0.8);
+  let hi = Math.ceil((Number(maxV) || 0) * 1.2);
+  if (!(hi > lo)) hi = lo + 1;          // 防止区间为 0 导致除零
+  return { min: lo, max: hi };
 }
 function makeMilkTrendChart() {
   const data = collectMilkTrendData();
@@ -4740,22 +4741,20 @@ function makeMilkTrendChart() {
   const tMin = data[0].t, tMax = data[n - 1].t;
   const xf = ts => (tMax === tMin) ? (PL + iw / 2) : (PL + (iw * (ts - tMin)) / (tMax - tMin));
 
-  // 左右轴各自独立缩放，但共用 5 条等分网格线（0/25/50/75/100%）
-  const maxTotal = Math.max(...data.map(d => d.total));
-  const maxAvg = Math.max(...data.map(d => d.avg));
-  const lStep = niceStep(maxTotal / 4), aStep = niceStep(maxAvg / 4);
-  const lTop = Math.max(lStep * 4, Math.ceil(maxTotal / lStep) * lStep) || lStep;
-  const aTop = Math.max(aStep * 4, Math.ceil(maxAvg / aStep) * aStep) || aStep;
-  const yT = v => PT + ih - (ih * v) / lTop;
-  const yA = v => PT + ih - (ih * v) / aTop;
+  // 左右轴各自独立缩放，共用 5 条等分网格线（0/25/50/75/100% 对应各自 [min,max] 区间）
+  const totals = data.map(d => d.total), avgs = data.map(d => d.avg);
+  const rT = milkAxisRange(Math.min(...totals), Math.max(...totals));
+  const rA = milkAxisRange(Math.min(...avgs), Math.max(...avgs));
+  const yT = v => PT + ih - (ih * (v - rT.min)) / (rT.max - rT.min);
+  const yA = v => PT + ih - (ih * (v - rA.min)) / (rA.max - rA.min);
 
   const pcts = [0, 0.25, 0.5, 0.75, 1];
   let grid = '', ylabels = '';
   pcts.forEach(p => {
     const gy = (PT + ih - ih * p).toFixed(1);
     grid += `<line class="gridln" x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
-    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#fff" font-size="9" text-anchor="end">${Math.round(lTop * p)}</text>`;
-    ylabels += `<text x="${W - PR + 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#ff9f43" font-size="9" text-anchor="start">${Math.round(aTop * p)}</text>`;
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#fff" font-size="9" text-anchor="end">${Math.round(rT.min + (rT.max - rT.min) * p)}</text>`;
+    ylabels += `<text x="${W - PR + 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#ff9f43" font-size="9" text-anchor="start">${Math.round(rA.min + (rA.max - rA.min) * p)}</text>`;
   });
   ylabels += `<text x="${PL - 5}" y="13" fill="#fff" font-size="8.5" font-weight="bold" text-anchor="end">总量ml</text>`;
   ylabels += `<text x="${W - PR + 5}" y="13" fill="#ff9f43" font-size="8.5" font-weight="bold" text-anchor="start">单次ml</text>`;
