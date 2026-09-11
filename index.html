@@ -2639,7 +2639,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.60 0911-0745'; // 奶量趋势图两纵轴改为非0起点动态区间:最小值=最低值×0.8向下取整,最大值=最高值×1.2向上取整(左轴总量/右轴单次平均各自独立),5条等分网格线按各自区间线性标注,防除零边界处理
+const APP_VERSION = 'v3.5.61 0911-0815'; // 奶量趋势图排除当天数据点(当天未记全会拉低曲线),标题改为「截至昨日」;两纵轴非0起点动态区间:min=最低×0.8向下取整,max=最高×1.2向上取整,5条等分网格线按各自区间线性标注
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4699,6 +4699,9 @@ function toggleMilestoneExpand() {
  * ============================================================ */
 function collectMilkTrendData() {
   const keys = [];
+  // 当天还没过完、奶量没记全，统计进去会拉低曲线 → 只统计今天之前的完整日期
+  const _now = new Date();
+  const todayKey = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (/^records_\d{4}-\d{2}-\d{2}$/.test(k)) keys.push(k);
@@ -4707,6 +4710,7 @@ function collectMilkTrendData() {
   const out = [];
   for (const k of keys) {
     const ds = k.slice(8);
+    if (ds >= todayKey) continue;    // 跳过当天及以后
     let recs = [];
     try { recs = JSON.parse(localStorage.getItem(k) || '[]'); } catch { continue; }
     if (!Array.isArray(recs)) continue;
@@ -4732,7 +4736,7 @@ function makeMilkTrendChart() {
   const legend = `<span style="float:right;font-size:10px;color:#b2bec3;margin-right:4px;">` +
     `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#7da8e6;margin-right:2px;vertical-align:middle;"></span>总奶量 ` +
     `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ff9f43;margin-right:2px;vertical-align:middle;"></span>单次平均</span>`;
-  const head = `<div class="chart-card"><div class="chart-title">🍼 奶量趋势（全部记录）${legend}</div>`;
+  const head = `<div class="chart-card"><div class="chart-title">🍼 奶量趋势（截至昨日）${legend}</div>`;
   const n = data.length;
   if (n === 0) return head + `<div class="chart-empty">暂无奶量数据</div></div>`;
 
