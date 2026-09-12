@@ -2639,7 +2639,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.62 0912-0825'; // 奶量趋势两纵轴系数分开:总奶量 min=0.8×最低/max=1.1×最高,单次平均 min=0.9×最低/max=1.2×最高(均向下/向上取整,含1e-9浮点误差修正);另含 v3.5.61 排除当天数据点
+const APP_VERSION = 'v3.5.63 0912-0831'; // 奶量趋势两纵轴系数:总奶量 min=0.7×最低/max=1.05×最高,单次平均 min=0.95×最低/max=1.25×最高(均向下/向上取整,含1e-9浮点误差修正);另含 v3.5.61 排除当天数据点
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4695,7 +4695,7 @@ function toggleMilestoneExpand() {
  * 左轴：每日总奶量（与近15天柱状图同口径：奶量×1.12 折算水+奶）
  * 右轴：每日单次平均奶量（当日总奶量 ÷ 当日喝奶次数）
  * v3.5.60：两轴均改为非 0 起点的动态区间，让波动看得更清楚（milkAxisRange）
- * v3.5.62：两轴系数分开——总奶量 0.8×最低 ~ 1.1×最高；单次平均 0.9×最低 ~ 1.2×最高
+ * v3.5.62：两轴系数分开；v3.5.63 系数微调——总奶量 0.7×最低 ~ 1.05×最高；单次平均 0.95×最低 ~ 1.25×最高
  * ============================================================ */
 function collectMilkTrendData() {
   const keys = [];
@@ -4725,7 +4725,7 @@ function collectMilkTrendData() {
   return out;
 }
 // 纵轴区间：最小值 = 最低值 × loF 向下取整，最大值 = 最高值 × hiF 向上取整
-// 左轴（总奶量）用 0.8 / 1.1，右轴（单次平均）用 0.9 / 1.2（v3.5.62）
+// 左轴（总奶量）用 0.7 / 1.05，右轴（单次平均）用 0.95 / 1.25（v3.5.63）
 function milkAxisRange(minV, maxV, loF, hiF) {
   const lf = (typeof loF === 'number') ? loF : 0.8;
   const hf = (typeof hiF === 'number') ? hiF : 1.2;
@@ -4750,10 +4750,10 @@ function makeMilkTrendChart() {
   const xf = ts => (tMax === tMin) ? (PL + iw / 2) : (PL + (iw * (ts - tMin)) / (tMax - tMin));
 
   // 左右轴各自独立缩放，共用 5 条等分网格线（0/25/50/75/100% 对应各自 [min,max] 区间）
-  // 总奶量：0.8×最低 ~ 1.1×最高；单次平均：0.9×最低 ~ 1.2×最高
+  // 总奶量：0.7×最低 ~ 1.05×最高；单次平均：0.95×最低 ~ 1.25×最高
   const totals = data.map(d => d.total), avgs = data.map(d => d.avg);
-  const rT = milkAxisRange(Math.min(...totals), Math.max(...totals), 0.8, 1.1);
-  const rA = milkAxisRange(Math.min(...avgs), Math.max(...avgs), 0.9, 1.2);
+  const rT = milkAxisRange(Math.min(...totals), Math.max(...totals), 0.7, 1.05);
+  const rA = milkAxisRange(Math.min(...avgs), Math.max(...avgs), 0.95, 1.25);
   const yT = v => PT + ih - (ih * (v - rT.min)) / (rT.max - rT.min);
   const yA = v => PT + ih - (ih * (v - rA.min)) / (rA.max - rA.min);
 
