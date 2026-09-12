@@ -2639,7 +2639,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.64 0912-1510'; // 推送内容修复:标题与正文只呈现「本次新增成就」(不再列今日全量成就),统计数字仍为今日全量;标题超3条显示「前3条 等N条」
+const APP_VERSION = 'v3.5.65 0912-1650'; // 成长里程碑分类重构:命中即返回→打分制(词长²×前后半句位置权重),词典拆强词/情绪弱词(权重25%),补充健身架/手脚并用等动作词;修复「玩健身架」被误判为社交情感
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4517,44 +4517,91 @@ function makeBarChart(data, opts) {
  * 非结构化文本 → 展示层轻结构化：关键词自动归类到发展领域 + 自动识别"首次"。
  * 不改变用户输入习惯（仍是自由文本），匹配不上归入「成长点滴」，绝不丢条目。
  * ============================================================ */
+/* 领域词典（v3.5.65 重构）
+ * kw   = 强词：能体现"这条记录到底在说什么"的主题词（动作、物件、症状、事件）
+ * weak = 弱词：情绪/氛围修饰语（开心、好玩、兴奋…），几乎出现在任何句子里，
+ *        只作为"实在没有强词"时的兜底信号，权重仅 25%，避免句末情绪词盖过整句主题。
+ */
 const MILESTONE_DOMAINS = [
-  { id:'gross',  name:'大运动',   icon:'🏃', color:'#ff9f43', kw:['翻身','抬头','趴','爬','站','走','独坐','坐稳','蹬腿','踢','扶站','翻滚','爬行','迈步','跳','撑起','靠坐','竖抱'] },
-  { id:'fine',   name:'精细运动', icon:'✋', color:'#feca57', kw:['抓','握','捏','拿','撕','拍手','换手','积木','摇铃','吃手','够','拍打','攥','抠','塞嘴里'] },
-  { id:'lang',   name:'语言',     icon:'💬', color:'#48dbfb', kw:['咿呀','发音','叫妈妈','叫爸爸','说话','咕咕','应答','模仿声','啊呜','尖叫','哼','学语','发声'] },
-  { id:'cog',    name:'认知',     icon:'🧠', color:'#a29bfe', kw:['认生','认人','追视','找东西','镜子','好奇','明白','懂','寻找','记住','认得','注视','反应','模仿'] },
-  { id:'social', name:'社交情感', icon:'😊', color:'#ff6b9d', kw:['笑','开心','互动','回应','撒娇','依恋','逗','表情','兴奋','闹觉','黏人','认妈妈','看人','打招呼','微笑','笑出声'] },
-  { id:'self',   name:'生活自理', icon:'💤', color:'#1dd1a1', kw:['自主入睡','自己睡','入睡','抱奶瓶','自己吃','咀嚼','吞咽','辅食','断夜奶','睡整觉','接觉','含着','奶睡','拍睡'] },
-  { id:'health', name:'健康',     icon:'🏥', color:'#ff7675', kw:['大便','便便','拉了','臭臭','便秘','腹泻','拉稀','医院','看病','就医','疫苗','打针','预防针','发烧','体温','感冒','咳嗽','吃药','用药','体检','黄疸','湿疹','红屁屁','尿布疹','鼻涕','呕吐','吐奶','胀气','肚肚'] }
+  { id:'gross',  name:'大运动',   icon:'🏃', color:'#ff9f43',
+    kw:['健身架','手脚并用','翻身','抬头','趴','爬','站','走','独坐','坐稳','坐起来','坐得稳','蹬腿','踢腿','蹬','踢','扶站','翻滚','爬行','迈步','学步','跳','撑起','支撑','靠坐','拉坐','靠站','竖抱','俯卧','挥手','抬腿','侧翻','蹦','手舞足蹈','翻身练习','抬头练习','爬行垫'],
+    weak:[] },
+  { id:'fine',   name:'精细运动', icon:'✋', color:'#feca57',
+    kw:['抓握','抓住','换手','捏取','对敲','撕纸','翻书','按键','拍手','拍打','摇铃','积木','吃手','塞嘴里','攥','抠','捏','拿','抓','握','撕','够','拨弄','伸手','手绢','握持','拨','摸'],
+    weak:[] },
+  { id:'lang',   name:'语言',     icon:'💬', color:'#48dbfb',
+    kw:['咿咿呀呀','咿呀','学说话','发音','叫妈妈','叫爸爸','说话','咕咕','应答','模仿声','啊呜','尖叫','哼','学语','发声','对话','叫唤','儿歌','唱歌','元音'],
+    weak:[] },
+  { id:'cog',    name:'认知',     icon:'🧠', color:'#a29bfe',
+    kw:['认生','认人','追视','追听','寻声','找东西','镜子','好奇','明白','理解','懂','寻找','记住','认得','注视','反应','模仿','探索','发现','盯着','玩具','会玩','因果关系'],
+    weak:[] },
+  { id:'social', name:'社交情感', icon:'😊', color:'#ff6b9d',
+    kw:['微笑','笑出声','互动','回应','撒娇','依恋','黏人','认妈妈','打招呼','逗引','社交','不怕生','闹觉'],
+    weak:['开心','高兴','好玩','兴奋','激动','表情','笑','乐','配合','乖','勇敢','暖和','喜欢'] },
+  { id:'self',   name:'生活自理', icon:'💤', color:'#1dd1a1',
+    kw:['自主入睡','自己睡着','自己睡','入睡','抱奶瓶','自己吃','自己拿','咀嚼','吞咽','辅食','断夜奶','睡整觉','接觉','含着','奶睡','拍睡','自主','抓勺','用勺','学饮杯','洗手','刷牙'],
+    weak:[] },
+  { id:'health', name:'健康',     icon:'🏥', color:'#ff7675',
+    kw:['大便','便便','拉了','臭臭','便秘','腹泻','拉稀','医院','看病','就医','疫苗','打针','预防针','发烧','体温','感冒','咳嗽','打喷嚏','流鼻涕','吃药','用药','体检','黄疸','褪黄','晒黄疸','湿疹','热疹','痱子','皮疹','纽强','药膏','红屁屁','尿布疹','尿布','鼻涕','呕吐','吐奶','胀气','肠胀气','肚肚','乳糖酶','益生菌','厌奶'],
+    weak:[] }
 ];
-const MILESTONE_OTHER = { id:'other', name:'成长点滴', icon:'🌟', color:'#74b9ff', kw:[] };
+const MILESTONE_OTHER = { id:'other', name:'成长点滴', icon:'🌟', color:'#74b9ff', kw:[], weak:[] };
 // 徽章行：三大关注类别（可合并多个领域）
 const MILESTONE_BADGE_GROUPS = [
   { label: '大运动',   icon: '🏃', color: '#ff9f43', domains: ['gross'] },
   { label: '语言社交', icon: '💬', color: '#48dbfb', domains: ['lang', 'social'] },
   { label: '健康',     icon: '🏥', color: '#ff7675', domains: ['health'] }
 ];
-// 简化描述（徽章用）：取命中的领域关键词中最长的一个，且至少 2 字
+// 简化描述（徽章用）：优先取前半句（主题位置）里命中的最长关键词，且至少 2 字
 // —— 只取 1 字的关键词（如「笑」「闹」）会语义不明，故设下限；
-//    无合格关键词时回退为截取原文（比硬取单字更好懂）。
+//    强词命中优先，没有强词才看弱词；都没有则回退为截取原文。
 const MS_SIMPLIFY_MIN = 2;
 const MS_SIMPLIFY_MAX = 8;
 function simplifyMilestone(text, domain) {
   const t = String(text || '');
-  let best = '';
-  for (const kw of (domain && domain.kw ? domain.kw : [])) {
-    if (kw.length < MS_SIMPLIFY_MIN) continue;                 // 过短关键词不作为描述
-    if (t.indexOf(kw) !== -1 && kw.length > best.length) best = kw;
-  }
+  const len = t.length || 1;
+  let best = '', bestKey = null;
+  const scan = list => {
+    for (const kw of (list || [])) {
+      if (kw.length < MS_SIMPLIFY_MIN) continue;
+      const idx = t.indexOf(kw);
+      if (idx === -1) continue;
+      const key = [(idx / len) < 0.5 ? 0 : 1, -kw.length];   // 前半句优先，其次取长
+      if (!bestKey || key[0] < bestKey[0] || (key[0] === bestKey[0] && key[1] < bestKey[1])) {
+        best = kw; bestKey = key;
+      }
+    }
+  };
+  scan(domain && domain.kw);
+  if (!best) scan(domain && domain.weak);
   if (best) return best;
   return t.length > MS_SIMPLIFY_MAX ? t.slice(0, MS_SIMPLIFY_MAX) + '…' : (t || '—');
 }
 
+// 弱词（情绪泛词）权重：只有强词时才让位，避免「…非常开心」这类句末情绪抢走归类
+const MS_WEAK_FACTOR = 0.25;
+// 关键词得分：长度² × 位置权重（前半句 ×2）。累加同领域的多个命中。
+function _msDomainScore(text, list, factor) {
+  const len = text.length || 1;
+  let s = 0;
+  for (const kw of (list || [])) {
+    const idx = text.indexOf(kw);
+    if (idx === -1) continue;
+    const posW = (idx / len) < 0.5 ? 2 : 1;      // 前半句通常是主题，权重翻倍
+    s += kw.length * kw.length * posW * factor;
+  }
+  return s;
+}
+// 打分制归类：取总得分最高的领域；并列时靠前者优先（数组顺序即语义优先级）
+// 旧实现是"命中即返回"，导致句末情绪词（开心）盖过整句主题（玩健身架）
 function classifyMilestone(text) {
   const t = String(text || '');
+  let best = null, bestScore = 0;
   for (const d of MILESTONE_DOMAINS) {
-    for (const kw of d.kw) { if (t.indexOf(kw) !== -1) return d; }
+    const s = _msDomainScore(t, d.kw, 1) + _msDomainScore(t, d.weak || [], MS_WEAK_FACTOR);
+    if (s > bestScore) { bestScore = s; best = d; }
   }
-  return MILESTONE_OTHER;
+  return best || MILESTONE_OTHER;
 }
 // 月龄 + 距上次满月的天数（如 4月龄11天）
 function getAgeDetail(ds) {
