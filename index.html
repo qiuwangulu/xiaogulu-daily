@@ -2639,7 +2639,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.61 0911-0815'; // 奶量趋势图排除当天数据点(当天未记全会拉低曲线),标题改为「截至昨日」;两纵轴非0起点动态区间:min=最低×0.8向下取整,max=最高×1.2向上取整,5条等分网格线按各自区间线性标注
+const APP_VERSION = 'v3.5.62 0912-0825'; // 奶量趋势两纵轴系数分开:总奶量 min=0.8×最低/max=1.1×最高,单次平均 min=0.9×最低/max=1.2×最高(均向下/向上取整,含1e-9浮点误差修正);另含 v3.5.61 排除当天数据点
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4694,8 +4694,8 @@ function toggleMilestoneExpand() {
  * 横轴：日期（全部已记录数据，非近15天）
  * 左轴：每日总奶量（与近15天柱状图同口径：奶量×1.12 折算水+奶）
  * 右轴：每日单次平均奶量（当日总奶量 ÷ 当日喝奶次数）
- * v3.5.60：两轴均改为非 0 起点的动态区间，最小值 = 最低值×0.8 向下取整，
- *          最大值 = 最高值×1.2 向上取整，让波动看得更清楚（milkAxisRange）
+ * v3.5.60：两轴均改为非 0 起点的动态区间，让波动看得更清楚（milkAxisRange）
+ * v3.5.62：两轴系数分开——总奶量 0.8×最低 ~ 1.1×最高；单次平均 0.9×最低 ~ 1.2×最高
  * ============================================================ */
 function collectMilkTrendData() {
   const keys = [];
@@ -4724,10 +4724,14 @@ function collectMilkTrendData() {
   }
   return out;
 }
-// 纵轴区间：最小值 = 最低值 × 0.8 向下取整，最大值 = 最高值 × 1.2 向上取整（v3.5.60）
-function milkAxisRange(minV, maxV) {
-  let lo = Math.floor((Number(minV) || 0) * 0.8);
-  let hi = Math.ceil((Number(maxV) || 0) * 1.2);
+// 纵轴区间：最小值 = 最低值 × loF 向下取整，最大值 = 最高值 × hiF 向上取整
+// 左轴（总奶量）用 0.8 / 1.1，右轴（单次平均）用 0.9 / 1.2（v3.5.62）
+function milkAxisRange(minV, maxV, loF, hiF) {
+  const lf = (typeof loF === 'number') ? loF : 0.8;
+  const hf = (typeof hiF === 'number') ? hiF : 1.2;
+  // ±1e-9 抵消浮点误差（如 800×1.1=880.0000000000001，直接 ceil 会变成 881）
+  let lo = Math.floor((Number(minV) || 0) * lf + 1e-9);
+  let hi = Math.ceil((Number(maxV) || 0) * hf - 1e-9);
   if (!(hi > lo)) hi = lo + 1;          // 防止区间为 0 导致除零
   return { min: lo, max: hi };
 }
@@ -4746,9 +4750,10 @@ function makeMilkTrendChart() {
   const xf = ts => (tMax === tMin) ? (PL + iw / 2) : (PL + (iw * (ts - tMin)) / (tMax - tMin));
 
   // 左右轴各自独立缩放，共用 5 条等分网格线（0/25/50/75/100% 对应各自 [min,max] 区间）
+  // 总奶量：0.8×最低 ~ 1.1×最高；单次平均：0.9×最低 ~ 1.2×最高
   const totals = data.map(d => d.total), avgs = data.map(d => d.avg);
-  const rT = milkAxisRange(Math.min(...totals), Math.max(...totals));
-  const rA = milkAxisRange(Math.min(...avgs), Math.max(...avgs));
+  const rT = milkAxisRange(Math.min(...totals), Math.max(...totals), 0.8, 1.1);
+  const rA = milkAxisRange(Math.min(...avgs), Math.max(...avgs), 0.9, 1.2);
   const yT = v => PT + ih - (ih * (v - rT.min)) / (rT.max - rT.min);
   const yA = v => PT + ih - (ih * (v - rA.min)) / (rA.max - rA.min);
 
