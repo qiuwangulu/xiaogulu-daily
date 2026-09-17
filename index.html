@@ -2264,10 +2264,13 @@ function doPush(achArr, totalMilk, newAchievements) {
         ? titleSrc.slice(0, 3).join(' · ') + ` 等${titleSrc.length}条`
         : titleSrc.join(' · ');
 
-      // 详情内容 = 只列本次新增的成就（历史成就不再出现，避免每次都列全量）
+      // 详情内容 = 今日全部成就，其中本次新增的高亮（v3.5.66 恢复）
+      // 标题段保持"本次新增"不变：通知栏只给结论，点开才看全天完整清单
       const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const items = newAchievements.map(a =>
-        `<li><span style="background:#ffecb3;color:#c0392b;font-weight:bold;padding:1px 4px;border-radius:3px;">${esc(a)}</span></li>`
+      const newSet = new Set(newAchievements);
+      const items = achArr.map(a => newSet.has(a)
+        ? `<li><span style="background:#ffecb3;color:#c0392b;font-weight:bold;padding:1px 4px;border-radius:3px;">${esc(a)}</span></li>`
+        : `<li>${esc(a)}</li>`
       ).join('');
       // 当天统计
       let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
@@ -2279,8 +2282,9 @@ function doPush(achArr, totalMilk, newAchievements) {
         else if (r.type === 'sleep' && r.duration) sleepMin += r.duration;
       });
       const fmtDur = min => { min = Math.round(min); const h = Math.floor(min / 60), m = min % 60; if (h > 0 && m > 0) return `${h}小时${m}分钟`; return h > 0 ? `${h}小时` : `${m}分钟`; };
-      // 新增为空时（极端兜底）不渲染空的成就区块，避免出现"本次新增成就:"下面空一片
-      const achBlock = items ? `<p><b>🏆 本次新增成就:</b></p><ul>${items}</ul>` : '';
+      // 区块标题按是否有新增区分：有新增时才写"本次新增"高亮说明
+      const achLabel = newAchievements.length > 0 ? '🏆 今日成就（加亮为本次新增）:' : '🏆 今日成就:';
+      const achBlock = items ? `<p><b>${achLabel}</b></p><ul>${items}</ul>` : '';
       const content = `<h3>小咕噜的今日成就 ${ds}</h3>` + achBlock +
         `<p><b>🍼 水+奶量:</b> ${Math.round(totalMilk * 1.12)} ml</p>` +
         `<p><b>💩 大便次数:</b> ${poopCount} 次</p>` +
@@ -2639,7 +2643,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.65 0912-1650'; // 成长里程碑分类重构:命中即返回→打分制(词长²×前后半句位置权重),词典拆强词/情绪弱词(权重25%),补充健身架/手脚并用等动作词;修复「玩健身架」被误判为社交情感
+const APP_VERSION = 'v3.5.66 0917-1635'; // 推送体例:通知标题=本次新增成就,点开正文=今日全部成就(本次新增项高亮,区块标题注明「加亮为本次新增」)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
