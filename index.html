@@ -2643,7 +2643,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.66 0917-1635'; // 推送体例:通知标题=本次新增成就,点开正文=今日全部成就(本次新增项高亮,区块标题注明「加亮为本次新增」)
+const APP_VERSION = 'v3.5.67 0919-1610'; // 修复奶量趋势图:点空白可取消标注(dismiss 覆盖 mtip)、双轴各用独立 tip 不再串味、命中半径按两线垂直间距自适应防遮挡、同图同时只显示一个标注
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4400,6 +4400,8 @@ function chartTip(hitEl, tipId, label, valueText) {
   const text = g.querySelector('text');
   const rect = g.querySelector('rect');
   if (g.style.display !== 'none' && text.textContent === content) { g.style.display = 'none'; return; } // 再点同一点隐藏
+  // 同一张图里同时只保留一个标注（点新的自动关掉旧的），与其它图表行为一致
+  svg.querySelectorAll('g[id^="ctip"], g[id^="mtip"]').forEach(o => { if (o !== g) o.style.display = 'none'; });
   text.textContent = content;
   const wChar = [...content].reduce((s, c) => s + (/[\u4e00-\u9fff\uff1a：]/.test(c) ? 11 : 7), 0);
   const w = wChar + 14;
@@ -4422,7 +4424,8 @@ function bindChartTipDismiss() {
   modal.addEventListener('click', e => {
     const t = e.target;
     if (t.classList && (t.classList.contains('bar-hit') || t.classList.contains('chart-hit'))) return;
-    document.querySelectorAll('#analysisContent g[id^="ctip"]').forEach(g => { g.style.display = 'none'; });
+    // mtip = 奶量趋势图（双轴各自一个 tip），ctip = 其余图表
+    document.querySelectorAll('#analysisContent g[id^="ctip"], #analysisContent g[id^="mtip"]').forEach(g => { g.style.display = 'none'; });
   }, true);
 }
 // 柱状图（内联SVG，无外部依赖；点击柱形显示横纵坐标）
@@ -4832,21 +4835,27 @@ function makeMilkTrendChart() {
   const pathA = data.map(d => `${xf(d.t).toFixed(1)} ${yA(d.avg).toFixed(1)}`).join(' L');
 
   // 数据点 + 点击提示（点数过多时抽稀命中区，避免 HTML 过大）
-  const tipId = 'mtip' + (++_chartTipSeq);
+  // v3.5.67：两条线各用独立 tip，避免点总奶量却弹出单次平均的标注
+  const tipIdT = 'mtip' + (++_chartTipSeq);   // 左轴：总奶量
+  const tipIdA = 'mtip' + (++_chartTipSeq);   // 右轴：单次平均
+  const mkTip = id => `<g id="${id}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.45)" stroke-width="0.5"/><text class="tiptext" font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
   const hitStep = Math.max(1, Math.ceil(n / 40));
   let dots = '';
   data.forEach((d, i) => {
     const px = xf(d.t).toFixed(1);
-    const pyT = yT(d.total).toFixed(1), pyA = yA(d.avg).toFixed(1);
-    dots += `<circle cx="${px}" cy="${pyT}" r="2" fill="#7da8e6" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
-    dots += `<circle cx="${px}" cy="${pyA}" r="2" fill="#ff9f43" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
+    const pyT = yT(d.total), pyA = yA(d.avg);
+    dots += `<circle cx="${px}" cy="${pyT.toFixed(1)}" r="2" fill="#7da8e6" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
+    dots += `<circle cx="${px}" cy="${pyA.toFixed(1)}" r="2" fill="#ff9f43" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
     if (i % hitStep !== 0 && i !== n - 1) return;
     const [ , mo, dd ] = d.ds.split('-');
     const lb = `${parseInt(mo)}/${parseInt(dd)}`;
-    dots += `<circle class="chart-hit" cx="${px}" cy="${pyT}" r="10" fill="transparent" data-cx="${px}" data-cy="${pyT}" onclick="chartTip(this,'${tipId}','${lb}','总 ${d.total}ml')"/>`;
-    dots += `<circle class="chart-hit" cx="${px}" cy="${pyA}" r="10" fill="transparent" data-cx="${px}" data-cy="${pyA}" onclick="chartTip(this,'${tipId}','${lb}','单次均 ${d.avg}ml')"/>`;
+    // 命中半径按两条线的垂直间距收缩：间距近时缩小，防止上层的命中区盖住另一条线
+    const gap = Math.abs(pyT - pyA);
+    const hr = Math.max(4, Math.min(10, gap / 2));
+    dots += `<circle class="chart-hit" cx="${px}" cy="${pyT.toFixed(1)}" r="${hr.toFixed(1)}" fill="transparent" data-cx="${px}" data-cy="${pyT.toFixed(1)}" onclick="chartTip(this,'${tipIdT}','${lb}','总 ${d.total}ml')"/>`;
+    dots += `<circle class="chart-hit" cx="${px}" cy="${pyA.toFixed(1)}" r="${hr.toFixed(1)}" fill="transparent" data-cx="${px}" data-cy="${pyA.toFixed(1)}" onclick="chartTip(this,'${tipIdA}','${lb}','单次均 ${d.avg}ml')"/>`;
   });
-  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.45)" stroke-width="0.5"/><text class="tiptext" font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  const tip = mkTip(tipIdT) + mkTip(tipIdA);
   const clipId = 'mclip' + (++_chartTipSeq);
 
   return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
