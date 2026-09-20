@@ -508,6 +508,8 @@
   .btn-primary:active { opacity: 0.85; }
   .btn-success { background: #25375f; border-color: #b2bec3; color: #b2bec3; font-size: 16px; }
   .btn-success:active { opacity: 0.85; }
+  .btn-danger { background: #c0392b; border-color: #e74c3c; color: #fff; }
+  .btn-danger:active { opacity: 0.85; }
 
   /* ===== 添加弹窗 ===== */
   .add-search-wrap {
@@ -836,6 +838,19 @@
     border-radius: 8px; color: #fff; font-size: 14px;
     padding: 6px 8px; flex: 1; outline: none;
   }
+  /* v3.5.69 选项「已永久保存」提示 + 底部固定操作条 */
+  .cos-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .cos-saved {
+    font-size: 12px; color: #2ecc71; white-space: nowrap;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .manage-footer {
+    position: sticky; bottom: 0; z-index: 6;
+    margin: 16px -20px -20px; padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to top, rgba(24,30,34,0.98) 60%, rgba(24,30,34,0.86));
+    border-top: 1px solid rgba(255,255,255,0.1);
+  }
+  .manage-footer .btn { width: 100%; }
 
   /* ===== 云端同步 ===== */
   .sync-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); }
@@ -1164,6 +1179,8 @@
   body.theme-day .custom-options-section .cos-title { color: #0984e3; }
   body.theme-day .custom-tag { background: rgba(9,132,227,0.1); border-color: rgba(9,132,227,0.3); color: #3d4852; }
   body.theme-day .custom-add-row input { background: #ffffff; border-color: rgba(9,132,227,0.25); color: #3d4852; }
+  body.theme-day .cos-saved { color: #00875a; }
+  body.theme-day .manage-footer { background: linear-gradient(to top, #ffffff 60%, rgba(255,255,255,0.88)); border-top-color: rgba(9,132,227,0.18); }
   body.theme-day .sync-section { border-top-color: rgba(9,132,227,0.15); }
   body.theme-day .sync-section .cos-title { color: #0984e3; }
   body.theme-day .sync-status-row { color: #636e72; }
@@ -1429,6 +1446,10 @@
       </div>
       <div style="font-size:11px;color:#b2bec3;margin-top:4px;">每次从云端拉取前会自动备份本地数据；若同步后数据异常，可点击上方按钮恢复</div>
     </div>
+    <!-- v3.5.69 底部固定操作条：选项区很长，滚到最底下也能一键关闭（选项为即时保存，无需"保存"按钮） -->
+    <div class="manage-footer">
+      <button class="btn btn-primary" onclick="hideModal('manageModal')">完成</button>
+    </div>
   </div>
 </div>
 <!-- 分析 -->
@@ -1513,6 +1534,21 @@
     <div id="editFormContent" class="add-inputs show"></div>
     <div class="modal-actions">
       <button class="btn btn-success" onclick="saveEditRecord()">确认</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="optionsResetModal" onclick="closeModal(event,'optionsResetModal')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="hideModal('optionsResetModal')">&times;</button>
+    <div class="modal-title">🔄 恢复默认选项</div>
+    <div style="font-size:14px;line-height:1.7;color:#b2bec3;margin-bottom:6px;">
+      将把「大运动选项」和「精细动作选项」恢复为出厂默认值。<br>
+      <span style="color:#e17055;">你自己添加的选项会被移除</span>，已记录的历史数据不受影响。
+    </div>
+    <div id="optionsResetPreview" style="font-size:13px;line-height:1.6;color:#636e72;margin-bottom:10px;"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="hideModal('optionsResetModal')">取消</button>
+      <button class="btn btn-danger" onclick="doResetCustomOptions()">确认恢复</button>
     </div>
   </div>
 </div>
@@ -1611,17 +1647,45 @@ let addModalCategory = 'all';
 let addSelectedSet = new Set(); // 跨分类保留已勾选活动
 let grossMotorOptions = [];
 let fineMotorOptions = [];
+// v3.5.69 自定义选项永久保存：本地保存时间戳 + 云端并集重试，避免被回滚覆盖
+const CUSTOM_OPT_KEYS = ['grossMotorOptions', 'fineMotorOptions'];
+const CUSTOM_OPT_DEFS = { grossMotorOptions: DEFAULT_GROSS_MOTOR, fineMotorOptions: DEFAULT_FINE_MOTOR };
+let _optRetryTimer = null, _optRetryLeft = 0;
 
 function loadCustomOptions() {
   try { grossMotorOptions = JSON.parse(localStorage.getItem('grossMotorOptions') || '[]'); } catch { grossMotorOptions = []; }
-  if (grossMotorOptions.length === 0) grossMotorOptions = [...DEFAULT_GROSS_MOTOR];
+  if (!Array.isArray(grossMotorOptions)) grossMotorOptions = [];
+  // v3.5.69 不再用「空数组 → 回落默认值」，否则用户删光全部选项后刷新会复活；
+  // 改为只补上还没出现过的出厂项，用户自行删除的（有删除记录时）保持删除
+  const _gDel = safeParseArr(localStorage.getItem('grossMotorDeleted'));
+  DEFAULT_GROSS_MOTOR.forEach(o => { if (!grossMotorOptions.includes(o) && !_gDel.includes(o)) grossMotorOptions.push(o); });
   try { fineMotorOptions = JSON.parse(localStorage.getItem('fineMotorOptions') || '[]'); } catch { fineMotorOptions = []; }
-  if (fineMotorOptions.length === 0) fineMotorOptions = [...DEFAULT_FINE_MOTOR];
+  if (!Array.isArray(fineMotorOptions)) fineMotorOptions = [];
+  const _fDel = safeParseArr(localStorage.getItem('fineMotorDeleted'));
+  DEFAULT_FINE_MOTOR.forEach(o => { if (!fineMotorOptions.includes(o) && !_fDel.includes(o)) fineMotorOptions.push(o); });
 }
+function safeParseArr(s) { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } }
 function saveCustomOptions() {
+  const now = Date.now();
   localStorage.setItem('grossMotorOptions', JSON.stringify(grossMotorOptions));
   localStorage.setItem('fineMotorOptions', JSON.stringify(fineMotorOptions));
+  // 记录本地改动时间，供同步下行判断"该不该覆盖本地"（含本地保存时间，不依赖墙钟一致性即可保护本机改动）
+  CUSTOM_OPT_KEYS.forEach(k => localStorage.setItem(`cfgts_${k}`, String(now)));
   syncUpload('config');
+  scheduleOptionsRetry();   // 静默上传可能失败（离线/网络抖动），延后重试确保永久生效
+}
+function scheduleOptionsRetry() {
+  _optRetryLeft = 3;
+  clearTimeout(_optRetryTimer);
+  const tick = async () => {
+    if (_optRetryLeft <= 0) return;
+    _optRetryLeft--;
+    try {
+      if (isSyncReady() && navigator.onLine) { await syncUpload('config'); _optRetryLeft = 0; return; }
+    } catch (e) {}
+    _optRetryTimer = setTimeout(tick, 8000);
+  };
+  _optRetryTimer = setTimeout(tick, 5000);
 }
 
 /* ==================== v3.5.20 白天/夜间皮肤自动切换 ==================== */
@@ -2654,7 +2718,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.68 0920-1120'; // 新增奶量默认值(水量)配置:管理弹窗喝奶开关下方增加数值输入框(默认140,必须>0),添加弹窗/语音记录的奶量预填取自该配置并随云端配置同步给家人设备
+const APP_VERSION = 'v3.5.69 0920-1225'; // 自定义选项永久保存:修正同步拉取会整键覆盖导致新加选项(如踢腿)消失的问题,改为并集合并+本地上传时间戳+静默失败重试;选项区加"已永久保存"提示与恢复默认入口,管理弹窗底部加固定"完成"按钮
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4047,31 +4111,85 @@ function toggleManage(id) {
 function renderCustomOptionsSection() {
   const section = document.getElementById('customOptionsSection');
   let html = '';
-  html += `<div class="cos-title">🤸 大运动选项</div>`;
+  // v3.5.69 明确告知：选项即改即存（本地 + 云端），不会因为换天/刷新而丢失
+  const savedTip = `<span class="cos-saved">✓ 已永久保存</span>`;
+  const esc = o => String(o).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const tag = (o, fn) => `<span class="custom-tag">${esc(o)}<span class="tag-remove" onclick="${fn}('${esc(o).replace(/'/g,"\\'")}')">×</span></span>`;
+  html += `<div class="cos-title-row"><div class="cos-title">🤸 大运动选项</div>${savedTip}</div>`;
   html += `<div class="custom-options-tags">`;
-  grossMotorOptions.forEach(o => { html += `<span class="custom-tag">${o}<span class="tag-remove" onclick="removeGrossMotorOpt('${o}')">×</span></span>`; });
+  grossMotorOptions.forEach(o => { html += tag(o, 'removeGrossMotorOpt'); });
   html += `</div>`;
-  html += `<div class="custom-add-row"><input type="text" id="newGrossMotorOpt" placeholder="新增选项"><button class="btn btn-primary" onclick="addGrossMotorOpt()">添加</button></div>`;
+  html += `<div class="custom-add-row"><input type="text" id="newGrossMotorOpt" placeholder="新增选项" onkeydown="if(event.key==='Enter'){event.preventDefault();addGrossMotorOpt();}"><button class="btn btn-primary" onclick="addGrossMotorOpt()">添加</button></div>`;
   html += '<div style="height:14px;"></div>';
-  html += `<div class="cos-title">✋ 精细动作选项</div>`;
+  html += `<div class="cos-title-row"><div class="cos-title">✋ 精细动作选项</div>${savedTip}</div>`;
   html += `<div class="custom-options-tags">`;
-  fineMotorOptions.forEach(o => { html += `<span class="custom-tag">${o}<span class="tag-remove" onclick="removeFineMotorOpt('${o}')">×</span></span>`; });
+  fineMotorOptions.forEach(o => { html += tag(o, 'removeFineMotorOpt'); });
   html += `</div>`;
-  html += `<div class="custom-add-row"><input type="text" id="newFineMotorOpt" placeholder="新增选项"><button class="btn btn-primary" onclick="addFineMotorOpt()">添加</button></div>`;
+  html += `<div class="custom-add-row"><input type="text" id="newFineMotorOpt" placeholder="新增选项" onkeydown="if(event.key==='Enter'){event.preventDefault();addFineMotorOpt();}"><button class="btn btn-primary" onclick="addFineMotorOpt()">添加</button></div>`;
+  html += `<div style="height:12px;"></div>`;
+  html += `<div class="custom-add-row"><button class="btn" style="flex:1;font-size:13px;" onclick="openResetOptionsConfirm()">🔄 恢复默认选项</button></div>`;
   section.innerHTML = html;
+}
+function _optLenLimit(val) {
+  if (val.length > 12) { showToast('选项名最多 12 个字'); return false; }
+  if (/^\d+$/.test(val)) { showToast('选项名不能纯数字'); return false; }
+  return true;
 }
 function addGrossMotorOpt() {
   const inp = document.getElementById('newGrossMotorOpt'); const val = inp.value.trim();
   if (!val) return; if (grossMotorOptions.includes(val)) { showToast('已存在'); return; }
-  grossMotorOptions.push(val); saveCustomOptions(); renderCustomOptionsSection(); showToast('已添加');
+  if (!_optLenLimit(val)) return;
+  grossMotorOptions.push(val); saveCustomOptions(); renderCustomOptionsSection();
+  markOptDeleted('grossMotorDeleted', val, false);
+  showToast('已添加「' + val + '」，长期有效');
 }
-function removeGrossMotorOpt(opt) { grossMotorOptions = grossMotorOptions.filter(o => o !== opt); saveCustomOptions(); renderCustomOptionsSection(); }
+function removeGrossMotorOpt(opt) {
+  if (!confirm(`删除大运动选项「${opt}」？\n已记录的条目不会受影响。`)) return;
+  grossMotorOptions = grossMotorOptions.filter(o => o !== opt); saveCustomOptions(); renderCustomOptionsSection();
+  markOptDeleted('grossMotorDeleted', opt, true);
+  showToast('已删除「' + opt + '」');
+}
 function addFineMotorOpt() {
   const inp = document.getElementById('newFineMotorOpt'); const val = inp.value.trim();
   if (!val) return; if (fineMotorOptions.includes(val)) { showToast('已存在'); return; }
-  fineMotorOptions.push(val); saveCustomOptions(); renderCustomOptionsSection(); showToast('已添加');
+  if (!_optLenLimit(val)) return;
+  fineMotorOptions.push(val); saveCustomOptions(); renderCustomOptionsSection();
+  markOptDeleted('fineMotorDeleted', val, false);
+  showToast('已添加「' + val + '」，长期有效');
 }
-function removeFineMotorOpt(opt) { fineMotorOptions = fineMotorOptions.filter(o => o !== opt); saveCustomOptions(); renderCustomOptionsSection(); }
+function removeFineMotorOpt(opt) {
+  if (!confirm(`删除精细动作选项「${opt}」？\n已记录的条目不会受影响。`)) return;
+  fineMotorOptions = fineMotorOptions.filter(o => o !== opt); saveCustomOptions(); renderCustomOptionsSection();
+  markOptDeleted('fineMotorDeleted', opt, true);
+  showToast('已删除「' + opt + '」');
+}
+// 删除记录：防止"出厂默认项"在下次加载时被自动补回（用户主动删掉的要保持删除）
+function markOptDeleted(key, val, del) {
+  let arr = safeParseArr(localStorage.getItem(key));
+  if (del) { if (!arr.includes(val)) arr.push(val); }
+  else { arr = arr.filter(o => o !== val); }
+  localStorage.setItem(key, JSON.stringify(arr));
+}
+function resetCustomOptions() { grossMotorOptions = [...DEFAULT_GROSS_MOTOR]; fineMotorOptions = [...DEFAULT_FINE_MOTOR]; saveCustomOptions(); renderCustomOptionsSection(); }
+function openResetOptionsConfirm() {
+  const removedG = grossMotorOptions.filter(o => !DEFAULT_GROSS_MOTOR.includes(o));
+  const removedF = fineMotorOptions.filter(o => !DEFAULT_FINE_MOTOR.includes(o));
+  const el = document.getElementById('optionsResetPreview');
+  if (el) {
+    const all = [...removedG, ...removedF];
+    el.innerHTML = all.length
+      ? `将移除你添加的 ${all.length} 个选项：<span style="color:#e17055;">${all.join('、')}</span>`
+      : '当前没有自定义选项，恢复后与现状一致。';
+  }
+  showModal('optionsResetModal');
+}
+function doResetCustomOptions() {
+  resetCustomOptions();
+  localStorage.setItem('grossMotorDeleted', '[]');
+  localStorage.setItem('fineMotorDeleted', '[]');
+  hideModal('optionsResetModal');
+  showToast('已恢复默认选项');
+}
 function saveManage() { saveHiddenActivities(); renderCategoryBar(); renderCards(); hideModal('manageModal'); showToast('已保存'); }
 
 /* ==================== 日报复制 ==================== */
@@ -5137,10 +5255,13 @@ async function syncUpload(category, dateStr) {
       } catch (e) {}
     } else if (category === 'config') {
       const configKeys = ['hiddenActivities','grossMotorOptions','fineMotorOptions','babyHeight','babyWeight','bodyHistory','milkDefaultAmount'];
+      const upTs = Date.now();
       for (const ck of configKeys) {
         const val = localStorage.getItem(ck) || '';
         const { data, iv } = await encrypt(key, val);
-        await supabaseUpsert('family_config', { family_id: fid, config_key: ck, encrypted_data: data, iv, last_modified: Date.now() });
+        await supabaseUpsert('family_config', { family_id: fid, config_key: ck, encrypted_data: data, iv, last_modified: upTs });
+        // v3.5.69 上传成功后对齐本地时间戳，以免下次拉取时把自己刚传的内容判为"云端更新"再覆盖回来
+        if (CUSTOM_OPT_KEYS.includes(ck)) localStorage.setItem(`cfgts_${ck}`, String(upTs));
       }
     }
     setSyncStatus('synced');
@@ -5223,6 +5344,42 @@ async function syncPullAll(opts) {
         }
         try {
           const localTs = parseInt(localStorage.getItem(`cfgts_${row.config_key}`) || '0');
+          // v3.5.69 自定义选项改为「并集合并」，绝不因时间戳判断失误而整体覆盖、丢掉用户新加的选项。
+          // 判定"本地是否独有"用三个信号：本地时间戳较新 / 两分钟内保存过 / 云端原文本里确实没有这些项
+          // （第三点专门覆盖长期离线的情况：云端若早已包含，就不该判为本地独有）
+          if (CUSTOM_OPT_KEYS.includes(row.config_key)) {
+            const plaintext = await decrypt(key, row.encrypted_data, row.iv);
+            let cloudArr = [];
+            try { const p = JSON.parse(plaintext); if (Array.isArray(p)) cloudArr = p; } catch {}
+            let localArr = [];
+            try { const p = JSON.parse(localStorage.getItem(row.config_key) || '[]'); if (Array.isArray(p)) localArr = p; } catch {}
+            const _fresh = CUSTOM_OPT_DEFS[row.config_key] || [];
+            const _delKey = row.config_key === 'grossMotorOptions' ? 'grossMotorDeleted' : 'fineMotorDeleted';
+            const _delArr = safeParseArr(localStorage.getItem(_delKey));
+            const localOnly = localArr.filter(o => localArr.includes(o) && !cloudArr.includes(o));
+            const cloudOnly = cloudArr.filter(o => cloudArr.includes(o) && !localArr.includes(o));
+            const _withinWindow = localTs > 0 && (Date.now() - localTs) < 120000;
+            const _realLocalOnly = localOnly.filter(o => !_fresh.includes(o));
+            const _keepLocal = localTs > row.last_modified || _withinWindow || _realLocalOnly.length > 0;
+            let merged;
+            if (_keepLocal) merged = Array.from(new Set([...localArr, ...cloudArr]));
+            else merged = Array.from(new Set([...cloudArr, ...localArr]));
+            // 已删除的出厂项不再补回（尊重用户删除），然后再把没见过的出厂项补齐
+            merged = merged.filter(o => !_delArr.includes(o));
+            _fresh.forEach(o => { if (!merged.includes(o) && !_delArr.includes(o)) merged.push(o); });
+            const before = localStorage.getItem(row.config_key);
+            localStorage.setItem(row.config_key, JSON.stringify(merged));
+            localStorage.setItem(`cfgts_${row.config_key}`, String(Math.max(localTs, row.last_modified)));
+            if (before !== JSON.stringify(merged)) changed = true;
+            // 本地独有的项（用户新加的）→ 立即回写云端，保证家人设备与以后任何覆盖都能拿到
+            if (_keepLocal && (merged.length > cloudArr.length || merged.join('|') !== cloudArr.join('|'))) {
+              try {
+                const { data: upData, iv: upIv } = await encrypt(key, JSON.stringify(merged));
+                await supabaseUpsert('family_config', { family_id: fid, config_key: row.config_key, encrypted_data: upData, iv: upIv, last_modified: Date.now() });
+              } catch (e) {}
+            }
+            continue;   // 已处理，跳过下面的整体覆盖逻辑
+          }
           if (row.last_modified > localTs) {
             const plaintext = await decrypt(key, row.encrypted_data, row.iv);
             localStorage.setItem(row.config_key, plaintext);
