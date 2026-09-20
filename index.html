@@ -734,6 +734,15 @@
   }
   .manage-item:last-child { border-bottom: none; }
   .manage-name { font-size: 15px; color: #dfe6e9; }
+  /* 奶量默认值输入行（喝奶开关下方） */
+  .mi-value { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .mi-value input {
+    width: 84px; background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px; color: #fff; font-size: 14px;
+    padding: 6px 8px; outline: none; text-align: center;
+  }
+  .mi-value .mi-unit { font-size: 13px; color: #b2bec3; }
   .toggle-switch {
     width: 48px; height: 28px;
     background: rgba(255,255,255,0.1);
@@ -1136,6 +1145,8 @@
   /* ===== 管理 ===== */
   body.theme-day .manage-item { border-bottom-color: rgba(9,132,227,0.1); }
   body.theme-day .manage-name { color: #3d4852; }
+  body.theme-day .mi-value input { background: #ffffff; border-color: rgba(9,132,227,0.25); color: #3d4852; }
+  body.theme-day .mi-value .mi-unit { color: #636e72; }
   /* v3.5.21 白天开关：打开=深蓝（同按钮底色），关闭=白色（圆点深灰保证可见） */
   body.theme-day .toggle-switch { background: #ffffff !important; border-color: rgba(9,132,227,0.45) !important; }
   body.theme-day .toggle-switch.on { background: #0984e3 !important; border-color: #0984e3 !important; }
@@ -2643,7 +2654,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.67 0919-1610'; // 修复奶量趋势图:点空白可取消标注(dismiss 覆盖 mtip)、双轴各用独立 tip 不再串味、命中半径按两线垂直间距自适应防遮挡、同图同时只显示一个标注
+const APP_VERSION = 'v3.5.68 0920-1120'; // 新增奶量默认值(水量)配置:管理弹窗喝奶开关下方增加数值输入框(默认140,必须>0),添加弹窗/语音记录的奶量预填取自该配置并随云端配置同步给家人设备
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2690,7 +2701,7 @@ function renderAddList(filterText) {
 
     let inputsHtml = '';
     if (act.type === 'milk') {
-      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">奶量:</label><input type="number" step="1" min="1" id="adinp_${act.id}" value="120"><span class="unit">ml</span></div>`;
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">奶量:</label><input type="number" step="1" min="1" id="adinp_${act.id}" value="${getDefaultMilkAmount()}"><span class="unit">ml</span></div>`;
     } else if (act.type === 'sleep') {
       // 睡眠：开始时间 + 时长（X h Y min）
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">时长:</label><input type="number" min="0" id="adinp_${act.id}_dur_h" placeholder="0" style="width:50px;"><span class="unit">h</span><input type="number" min="0" max="59" id="adinp_${act.id}_dur_m" placeholder="0" style="width:50px;margin-left:8px;"><span class="unit">min</span></div>`;
@@ -2799,7 +2810,7 @@ function confirmAdd() {
 
     if (act.type === 'milk') {
       record.milkTime = recTime;
-      const el = document.getElementById(`adinp_${id}`); record.milkAmount = (el && !isNaN(parseInt(el.value))) ? Math.max(1, parseInt(el.value)) : 120;
+      const el = document.getElementById(`adinp_${id}`); const _mv = el ? parseFloat(String(el.value).trim()) : NaN; record.milkAmount = (!isNaN(_mv) && Math.round(_mv) > 0) ? Math.max(1, Math.round(_mv)) : getDefaultMilkAmount();
     } else if (act.type === 'sleep') {
       record.sleepStartTime = recTime;
       const dhEl = document.getElementById(`adinp_${id}_dur_h`); const dmEl = document.getElementById(`adinp_${id}_dur_m`);
@@ -3035,7 +3046,7 @@ const VOICE_RULES = [
         const n = cnNum(m[0]);
         if (n !== null && n >= 20 && n <= 400) { amount = Math.round(n); break; }
       }
-      return amount === null ? { params: { milkAmount: 120 }, warn: true } : { params: { milkAmount: amount } };
+      return amount === null ? { params: { milkAmount: getDefaultMilkAmount() }, warn: true } : { params: { milkAmount: amount } };
     } },
   { id: 'sleep', re: /睡着了|睡觉了?|睡了|小睡|午睡|睡了一|睡眠|哄睡|补觉/,
     parse: (zone, ctx) => {
@@ -3706,7 +3717,7 @@ function confirmVoiceAdd() {
     const act = ACTIVITIES.find(a => a.id === it.actId); if (!act) return;
     const p = it.params;
     const record = { type: it.actId, name: act.name, time: timeStr, recTime: it.recTime, timestamp: ts, note: p.note || '', updatedAt: Date.now() };
-    if (act.type === 'milk') { record.milkTime = it.recTime; record.milkAmount = Math.max(1, Math.round(p.milkAmount || 120)); }
+    if (act.type === 'milk') { record.milkTime = it.recTime; record.milkAmount = Math.max(1, Math.round(p.milkAmount || getDefaultMilkAmount())); }
     else if (act.type === 'sleep') { record.sleepStartTime = it.recTime; record.duration = Math.max(0, Math.round(p.duration || 0)); }
     else if (act.type === 'drinkWater') { record.drinkTime = it.recTime; }
     else if (act.type === 'poop') { record.poopTime = it.recTime; record.poopStatus = p.poopStatus || '正常'; }
@@ -3950,6 +3961,32 @@ function confirmHistoryDatePicker() {
 }
 
 /* ==================== 管理 ==================== */
+// 奶量默认值（水量）：添加弹窗中喝奶的预填数值，可在管理弹窗修改，必须大于 0
+const MILK_DEFAULT_KEY = 'milkDefaultAmount';
+const MILK_DEFAULT_FALLBACK = 140;
+function getDefaultMilkAmount() {
+  const v = parseInt(localStorage.getItem(MILK_DEFAULT_KEY), 10);
+  return (!isNaN(v) && v > 0) ? v : MILK_DEFAULT_FALLBACK;
+}
+function setDefaultMilkAmount(v) { localStorage.setItem(MILK_DEFAULT_KEY, String(v)); }
+// 输入框失焦/回车时保存：必须大于 0，非法值恢复上次有效值并提示
+function saveMilkDefault() {
+  const el = document.getElementById('milkDefaultInput');
+  if (!el) return;
+  const raw = String(el.value || '').trim();
+  const v = parseFloat(raw);            // 用 parseFloat 而非 parseInt，避免 155.6 被截成 155
+  const r = Math.round(v);              // 四舍五入到整数毫升
+  if (!raw || isNaN(v) || r <= 0) {
+    el.value = getDefaultMilkAmount();
+    showToast('奶量默认值必须大于 0');
+    return;
+  }
+  if (r === Number(localStorage.getItem(MILK_DEFAULT_KEY))) { el.value = r; return; }
+  setDefaultMilkAmount(r);
+  el.value = r;
+  try { syncUpload('config'); } catch (e) {}   // 同步给家人设备
+  showToast('奶量默认值已设为 ' + r + 'ml');
+}
 function openManage() {
   // 每次打开都从 localStorage 重新加载，保证显示最新值（包括上次关闭时即时修改的内容）
   loadHiddenActivities();
@@ -3959,6 +3996,13 @@ function openManage() {
   ACTIVITIES.forEach(act => {
     const visible = !hiddenActivities.includes(act.id);
     html += `<div class="manage-item"><span class="manage-name">${act.icon} ${act.name}</span><div class="toggle-switch ${visible?'on':''}" data-id="${act.id}" onclick="toggleManage('${act.id}')"></div></div>`;
+    // 喝奶开关下方紧跟「奶量默认值」输入框
+    if (act.id === 'milk') {
+      html += `<div class="manage-item"><span class="manage-name" style="font-size:14px;">🍼 奶量默认值（水量）</span>` +
+        `<span class="mi-value"><input type="number" inputmode="numeric" min="1" step="1" id="milkDefaultInput" ` +
+        `value="${getDefaultMilkAmount()}" onchange="saveMilkDefault()" onblur="saveMilkDefault()" ` +
+        `onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"><span class="mi-unit">ml</span></span></div>`;
+    }
   });
   list.innerHTML = html;
   renderCustomOptionsSection();
@@ -5092,7 +5136,7 @@ async function syncUpload(category, dateStr) {
         await supabaseUpsert('family_config', { family_id: fid, config_key: '_del_' + dateStr, encrypted_data: tdata, iv: tiv, last_modified: Date.now() });
       } catch (e) {}
     } else if (category === 'config') {
-      const configKeys = ['hiddenActivities','grossMotorOptions','fineMotorOptions','babyHeight','babyWeight','bodyHistory'];
+      const configKeys = ['hiddenActivities','grossMotorOptions','fineMotorOptions','babyHeight','babyWeight','bodyHistory','milkDefaultAmount'];
       for (const ck of configKeys) {
         const val = localStorage.getItem(ck) || '';
         const { data, iv } = await encrypt(key, val);
