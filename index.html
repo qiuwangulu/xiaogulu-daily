@@ -2718,7 +2718,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.71 0921-0840'; // 大便与喝奶间隔改为折线图:范围从近15天改为截止昨天的全部历史,排除无大便的日子,并用竖线标注"9/8 加乳糖酶"等干预时间点便于对比前后趋势
+const APP_VERSION = 'v3.5.72 0921-1315'; // 大便与喝奶间隔y轴口径改为喂奶后排便:用大便时间减去早于它的最近一次喝奶时间(分钟),不再取前后绝对值最近;喝奶仅在当天及往前回溯3天内查找
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4376,7 +4376,7 @@ function getInterventionMarks() {
   } catch {}
   return DEFAULT_INTERVENTION_MARKS;
 }
-// 截止「昨天」的全部历史：只保留当天确实有大便、且前后能找到喝奶记录的日期（其余不画点）
+// 截止「昨天」的全部历史：只保留当天确实有大便、且能算出间隔的日期（其余不画点）
 function collectPoopGapSeries() {
   const cache = {};
   const load = d => {
@@ -4409,10 +4409,10 @@ function collectPoopGapSeries() {
   });
   return out;
 }
-// 口径：当天每一次大便，分别找到「时间上离它最近的那次喝奶」，取两者时间差的绝对值（分钟）；
-//      再把当天所有大便的时间差求平均，作为这一天的数据点。
-//      喝奶记录会在「前一天 / 当天 / 后一天」范围内查找，这样凌晨的大便也能匹配到夜奶、晚上
-//      的大便也能匹配到临睡前的那顿奶，不会因为跨天就丢失样本。
+// 口径（v3.5.72）：对当天每一次大便，找到「早于它、且离它最近」的那次喝奶，
+//      间隔 = 大便时间 − 那次喝奶时间（分钟，非负）；再把当天所有大便的间隔求平均，作为这天的数据点。
+//      喝奶只在「当天 + 往前回溯 3 天」里找：凌晨的大便能匹配到前一天夜奶；
+//      若某次大便之前回溯范围内都没有喂奶记录，则该次大便不参与当天的平均。
 function _hmToMin(hm) {
   const m = /^(\d{1,2}):(\d{1,2})$/.exec(String(hm == null ? '' : hm).trim());
   if (!m) return null;
@@ -4446,9 +4446,9 @@ function dailyPoopMilkGap(ds, loader) {
     if (t != null) poopAbs.push(base + t * 60000);
   });
   if (poopAbs.length === 0) return null;   // 当天没大便 → 该天无数据点
-  // 收集前后各一天的喝奶时间点（绝对毫秒）
+  // v3.5.72 只收集「当天 + 往前回溯数天」的喝奶时间点：取早于大便的那一次（喂奶 → 排便的方向）
   const milkAbs = [];
-  [-1, 0, 1].forEach(off => {
+  [0, -1, -2, -3].forEach(off => {
     const d2 = _shiftDs(ds, off); if (!d2) return;
     const b2 = _dsToBaseMs(d2);
     const rs = load(d2);
@@ -4459,12 +4459,16 @@ function dailyPoopMilkGap(ds, loader) {
       if (t != null) milkAbs.push(b2 + t * 60000);
     });
   });
-  if (milkAbs.length === 0) return null;   // 没有任何喝奶记录 → 无法计算间隔
+  if (milkAbs.length === 0) return null;   // 回溯范围内没有喝奶记录 → 无法计算间隔
   const gaps = [];
   poopAbs.forEach(p => {
     let best = null;
-    milkAbs.forEach(m => { const g = Math.abs(m - p) / 60000; if (best === null || g < best) best = g; });
-    if (best != null) gaps.push(best);
+    milkAbs.forEach(m => {
+      if (m > p) return;                   // 晚于大便的喝奶不算（只认"喂完奶之后拉"）
+      const g = (p - m) / 60000;           // 大便时间 − 之前最近一次喝奶时间
+      if (best === null || g < best) best = g;
+    });
+    if (best != null) gaps.push(best);     // 之前确实没有喂奶记录的样本直接跳过
   });
   if (gaps.length === 0) return null;
   const sum = gaps.reduce((a, b) => a + b, 0);
@@ -5211,6 +5215,7 @@ function openAnalysis() {
   html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
   html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
   // v3.5.71 间隔趋势：截止昨天的全部历史，折线图（无大便的日子不画点），并用竖线标出「加乳糖酶」等干预时间点
+  // v3.5.72 y 轴口径：大便时间 − 早于它的最近一次喝奶时间（分钟）
   html += makeLineChart(poopGapPts, {
     title: '💩🍼 大便与喝奶间隔（截至昨日）',
     unit: '分钟', color: '#8fbc8f',
