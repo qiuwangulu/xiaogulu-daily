@@ -2718,7 +2718,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.69 0920-1225'; // 自定义选项永久保存:修正同步拉取会整键覆盖导致新加选项(如踢腿)消失的问题,改为并集合并+本地上传时间戳+静默失败重试;选项区加"已永久保存"提示与恢复默认入口,管理弹窗底部加固定"完成"按钮
+const APP_VERSION = 'v3.5.70 0921-0830'; // 分析弹窗新增"大便与喝奶间隔(近15天)"柱状图:每天每次大便取距其最近一次喝奶的时间差(分钟)后当天求平均;喝奶记录跨前后一天查找,凌晨大便也能匹配夜奶
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4361,6 +4361,69 @@ function dailyPoopInfo(ds) {
   recs.forEach(r => { if (r.type === 'poop') statuses.push(r.poopStatus || '正常'); });
   return statuses.length > 0 ? { count: statuses.length, statuses: statuses } : null;
 }
+/* ==================== v3.5.70 大便与喝奶时间间隔 ==================== */
+// 口径：当天每一次大便，分别找到「时间上离它最近的那次喝奶」，取两者时间差的绝对值（分钟）；
+//      再把当天所有大便的时间差求平均，作为这一天的数据点。
+//      喝奶记录会在「前一天 / 当天 / 后一天」范围内查找，这样凌晨的大便也能匹配到夜奶、晚上
+//      的大便也能匹配到临睡前的那顿奶，不会因为跨天就丢失样本。
+function _hmToMin(hm) {
+  const m = /^(\d{1,2}):(\d{1,2})$/.exec(String(hm == null ? '' : hm).trim());
+  if (!m) return null;
+  const h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+  if (isNaN(h) || isNaN(mi) || h > 23 || mi > 59) return null;
+  return h * 60 + mi;
+}
+function _dsToBaseMs(ds) {
+  const p = String(ds == null ? '' : ds).split('-').map(Number);
+  if (p.length !== 3 || p.some(isNaN)) return null;
+  return new Date(p[0], p[1] - 1, p[2], 0, 0, 0, 0).getTime();
+}
+function _shiftDs(ds, days) {
+  const b = _dsToBaseMs(ds); if (b == null) return null;
+  const d = new Date(b); d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+// 返回 { avg: 平均间隔分钟, count: 参与平均的大便次数, min, max } 或 null（当天无大便/无喝奶记录）
+function dailyPoopMilkGap(ds) {
+  const base = _dsToBaseMs(ds); if (base == null) return null;
+  let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
+  if (!Array.isArray(recs)) recs = [];
+  const poopAbs = [];
+  recs.forEach(r => {
+    if (!r || r.type !== 'poop') return;
+    const t = _hmToMin(r.poopTime || r.recTime || r.time);
+    if (t != null) poopAbs.push(base + t * 60000);
+  });
+  if (poopAbs.length === 0) return null;   // 当天没大便 → 该天无数据点
+  // 收集前后各一天的喝奶时间点（绝对毫秒）
+  const milkAbs = [];
+  [-1, 0, 1].forEach(off => {
+    const d2 = _shiftDs(ds, off); if (!d2) return;
+    const b2 = _dsToBaseMs(d2);
+    let rs = []; try { rs = JSON.parse(localStorage.getItem(getDateKey(d2)) || '[]'); } catch {}
+    if (!Array.isArray(rs)) return;
+    rs.forEach(r => {
+      if (!r || r.type !== 'milk') return;
+      const t = _hmToMin(r.milkTime || r.recTime || r.time);
+      if (t != null) milkAbs.push(b2 + t * 60000);
+    });
+  });
+  if (milkAbs.length === 0) return null;   // 没有任何喝奶记录 → 无法计算间隔
+  const gaps = [];
+  poopAbs.forEach(p => {
+    let best = null;
+    milkAbs.forEach(m => { const g = Math.abs(m - p) / 60000; if (best === null || g < best) best = g; });
+    if (best != null) gaps.push(best);
+  });
+  if (gaps.length === 0) return null;
+  const sum = gaps.reduce((a, b) => a + b, 0);
+  return {
+    avg: Math.round(sum / gaps.length),
+    count: gaps.length,
+    min: Math.round(Math.min(...gaps)),
+    max: Math.round(Math.max(...gaps))
+  };
+}
 // 通用折线图（内联SVG，无外部依赖；点击数据点显示横纵坐标）
 let _chartTipSeq = 0;
 // v3.5.13 图表 Y 轴档位状态：compact/undefined=紧凑档（数据范围），full=全量档（含 WHO 参考线）
@@ -5056,6 +5119,8 @@ function openAnalysis() {
   const milkCountData = days.map(d => ({ label: d.label, value: dailyMilkCount(d.ds) }));
   const sleepData = days.map(d => ({ label: d.label, value: dailySleepHours(d.ds) }));
   const poopData = days.map(d => { const info = dailyPoopInfo(d.ds); return { label: d.label, value: info ? info.count : null, statuses: info ? info.statuses : null }; });
+  // v3.5.70 大便与喝奶时间间隔：当天每次大便 → 距其最近的那次喝奶的时间差 → 当天取平均（分钟）
+  const poopGapData = days.map(d => { const g = dailyPoopMilkGap(d.ds); return { label: d.label, value: g ? g.avg : null, gapCount: g ? g.count : null, gapMin: g ? g.min : null, gapMax: g ? g.max : null }; });
   // 2) 体重/身高曲线（相同数值只保留最早日期；横轴按日期间隔等分）
   const hist = getBodyHistory();
   const weightPts = dedupeBodySeries(hist.map(x => ({ d: x.d, v: x.w })));
@@ -5072,6 +5137,7 @@ function openAnalysis() {
   html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
   html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
   html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
+  html += makeBarChart(poopGapData, { title: '💩🍼 大便与喝奶间隔（近15天）', unit: '分钟', color: '#8fbc8f', tickStep: 30, tipText: d => (d.gapCount > 1 ? `${d.value}分钟 · ${d.gapCount}次平均` : `${d.value}分钟`) });
   html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT }, zoomTiers: { min: 3, step: 1 } });
   html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT }, zoomTiers: { min: 50, step: 5 } });
   html += makeMilestoneTimeline();   // 成长里程碑时间轴（置于最下方）
