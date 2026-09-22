@@ -660,6 +660,19 @@
     margin-bottom: 16px; justify-content: center;
   }
   .history-date-row input[type="date"] { display: none; }
+  /* v3.5.73 历史页身高体重输入行 */
+  .history-body-row {
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    margin: -4px 0 14px; font-size: 14px;
+  }
+  .history-body-row label { color: #b2bec3; font-size: 13px; white-space: nowrap; }
+  .history-body-row input {
+    background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px; color: #fff; font-size: 14px;
+    padding: 5px 6px; width: 66px; outline: none; text-align: center;
+  }
+  .history-body-row input:focus { border-color: rgba(116,185,255,0.6); }
+  .history-body-row .hb-unit { font-size: 12px; color: #b2bec3; margin-right: 4px; }
   /* 自绘日期选择器 */
   .dp-month-nav {
     display: flex; align-items: center; justify-content: space-between;
@@ -1156,6 +1169,10 @@
   body.theme-day .history-summary { background: rgba(9,132,227,0.05); border-color: rgba(9,132,227,0.12); }
   body.theme-day .history-sum-row .hs-label { color: #636e72; }
   body.theme-day .history-sum-row .hs-value { color: #d68910; }
+  body.theme-day .history-body-row label { color: #636e72; }
+  body.theme-day .history-body-row input { background: #ffffff; border-color: rgba(9,132,227,0.25); color: #3d4852; }
+  body.theme-day .history-body-row input:focus { border-color: rgba(9,132,227,0.5); }
+  body.theme-day .history-body-row .hb-unit { color: #636e72; }
 
   /* ===== 管理 ===== */
   body.theme-day .manage-item { border-bottom-color: rgba(9,132,227,0.1); }
@@ -1343,6 +1360,19 @@
       <button class="fab-btn" onclick="openHistoryDatePicker()" id="historyDatePickerBtn"><span class="fab-icon fab-emoji">📅</span>选日</button>
       <input type="hidden" id="historyDate">
       <button class="fab-btn" onclick="addHistoryRecord()"><span class="fab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></span>添加</button>
+    </div>
+    <!-- v3.5.73 所选日期的身高/体重：可补录与修改，数据同步进入体重/身高趋势曲线 -->
+    <div class="history-body-row">
+      <label>📏 高</label>
+      <input type="number" step="0.1" min="0" id="historyHeightInput" placeholder="—" inputmode="decimal"
+             onchange="saveHistoryBody('h')" onblur="saveHistoryBody('h')"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+      <span class="hb-unit">cm</span>
+      <label>⚖️ 重</label>
+      <input type="number" step="0.1" min="0" id="historyWeightInput" placeholder="—" inputmode="decimal"
+             onchange="saveHistoryBody('w')" onblur="saveHistoryBody('w')"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+      <span class="hb-unit">kg</span>
     </div>
     <div class="history-summary" id="historySummary" style="display:none;"></div>
     <div class="history-list" id="historyList"></div>
@@ -2718,7 +2748,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.72 0921-1315'; // 大便与喝奶间隔y轴口径改为喂奶后排便:用大便时间减去早于它的最近一次喝奶时间(分钟),不再取前后绝对值最近;喝奶仅在当天及往前回溯3天内查找
+const APP_VERSION = 'v3.5.73 0922-0800'; // 历史弹窗新增身高体重输入框:可为所选日期补录/修改高和重,切换日期自动回填,留空即清除,数据即时同步并写入体重身高趋势曲线
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3885,6 +3915,7 @@ function openHistory() {
 }
 function loadHistory() {
   const ds = document.getElementById('historyDate').value; if (!ds) return;
+  loadHistoryBody(ds);   // 回填该日期已记录的身高/体重
   let records = []; try { records = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
   if (!Array.isArray(records)) records = [];
   const list = document.getElementById('historyList');
@@ -3926,6 +3957,39 @@ function loadHistory() {
     `</div>`;
   });
   list.innerHTML = html;
+}
+// ---------- 历史页：所选日期的身高/体重（v3.5.73） ----------
+// 回填：bodyHistory 里该日期有值就显示，没有则留空
+function loadHistoryBody(ds) {
+  const el = document.getElementById('historyHeightInput');
+  const ew = document.getElementById('historyWeightInput');
+  if (!el && !ew) return;
+  const rec = getBodyHistory().find(x => x.d === ds);
+  if (el) el.value = (rec && rec.h != null) ? rec.h : '';
+  if (ew) ew.value = (rec && rec.w != null) ? rec.w : '';
+}
+// 保存：留空表示清除该项；写入后即时同步云端，并刷新体重/身高趋势曲线
+function saveHistoryBody(field) {
+  const dsEl = document.getElementById('historyDate');
+  const ds = dsEl ? dsEl.value : '';
+  if (!ds) { showToast('请先选择日期'); return; }
+  const el = document.getElementById(field === 'h' ? 'historyHeightInput' : 'historyWeightInput');
+  if (!el) return;
+  const raw = String(el.value == null ? '' : el.value).trim();
+  const name = field === 'h' ? '身高' : '体重';
+  let v = null;
+  if (raw !== '') {
+    v = parseFloat(raw);
+    if (isNaN(v) || v <= 0) { showToast(name + '需为大于 0 的数字'); loadHistoryBody(ds); return; }
+    v = Math.round(v * 10) / 10;   // 统一保留 1 位小数
+  }
+  // 与上次值相同则不重复写盘/同步（onchange 与 onblur 会各触发一次）
+  const prev = getBodyHistory().find(x => x.d === ds);
+  const oldV = prev ? prev[field] : null;
+  if ((oldV == null && v == null) || (oldV != null && v != null && Math.abs(oldV - v) < 1e-9)) { loadHistoryBody(ds); return; }
+  recordBodyMeasurement(field, v, ds);
+  loadHistoryBody(ds);
+  showToast(v == null ? ('已清除该日' + name) : (name + '已记录 ' + v + (field === 'h' ? 'cm' : 'kg')));
 }
 // 历史页：向所选日期添加记录
 function addHistoryRecord() {
@@ -4232,19 +4296,25 @@ function fallbackCopyText(text) { const ta = document.createElement('textarea');
 function getBodyHistory() {
   try { const a = JSON.parse(localStorage.getItem('bodyHistory') || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
 }
-function recordBodyMeasurement(field, val) {
-  // field: 'h' | 'w'；当天已有记录则覆盖，否则新增
+// field: 'h' | 'w'；dateStr 省略时记到今天。val 传 null 表示清除该字段
+// （历史弹窗用来补录/修改过去某一天的高重）
+function recordBodyMeasurement(field, val, dateStr) {
   let hist = getBodyHistory();
-  const ds = getTodayDateStr();
+  const ds = dateStr || getTodayDateStr();
   if (hist.length === 0) {
     // 首次记录：以当前已有值作为曲线起点
     const h = parseFloat(localStorage.getItem('babyHeight')) || null;
     const w = parseFloat(localStorage.getItem('babyWeight')) || null;
     if (h || w) hist.push({ d: ds, h: h, w: w });
   }
-  let todayRec = hist.find(x => x.d === ds);
-  if (!todayRec) { todayRec = { d: ds, h: null, w: null }; hist.push(todayRec); }
-  todayRec[field] = val;
+  let rec = hist.find(x => x.d === ds);
+  if (!rec) {
+    if (val == null) return;                 // 本来就没有记录，无需清除
+    rec = { d: ds, h: null, w: null }; hist.push(rec);
+  }
+  rec[field] = val;
+  // 高和重都被清空 → 整条记录移除，避免曲线上留下空白点
+  if (rec.h == null && rec.w == null) hist = hist.filter(x => x.d !== ds);
   hist.sort((a, b) => a.d.localeCompare(b.d));
   localStorage.setItem('bodyHistory', JSON.stringify(hist));
   syncUpload('config');
