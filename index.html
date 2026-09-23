@@ -610,6 +610,46 @@
   .radio-group, .checkbox-group { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .radio-group label, .checkbox-group label { display: flex; align-items: center; gap: 4px; font-size: 14px; color: #dfe6e9; cursor: pointer; }
   .radio-group input[type="radio"], .checkbox-group input[type="checkbox"] { accent-color: #667eea; width:16px; height:16px; }
+  /* v3.5.74 辅食：食物多选下拉（关键字搜索 + 滚动条） */
+  .sf-row { align-items: center; }
+  .sf-row .sf-label { font-size: 14px; color: #b2bec3; flex-shrink: 0; }
+  .sf-select { position: relative; flex: 1 1 140px; min-width: 120px; }
+  .sf-select .sf-trigger {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px; padding: 6px 10px; cursor: pointer; min-height: 33px; box-sizing: border-box;
+  }
+  .sf-select .sf-trigger .sf-ph { font-size: 14px; color: #dfe6e9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sf-select .sf-trigger .sf-ph.sf-ph-empty { color: rgba(255,255,255,0.4); }
+  .sf-select .sf-trigger .sf-arrow { color: #b2bec3; font-size: 12px; flex-shrink: 0; }
+  .sf-select .sf-panel {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 999;
+    background: #22272e; border: 1px solid rgba(255,255,255,0.2); border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.5); padding: 8px; box-sizing: border-box;
+  }
+  .sf-select .sf-panel .sf-search input {
+    width: 100%; box-sizing: border-box;
+    background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px; color: #fff; font-size: 14px; padding: 6px 8px; outline: none;
+  }
+  .sf-select .sf-panel .sf-list { max-height: 168px; overflow-y: auto; -webkit-overflow-scrolling: touch; margin-top: 6px; }
+  .sf-select .sf-panel .sf-list::-webkit-scrollbar { width: 5px; }
+  .sf-select .sf-panel .sf-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.28); border-radius: 3px; }
+  .sf-select .sf-panel .sf-opt {
+    display: flex; align-items: center; gap: 8px; padding: 7px 6px;
+    font-size: 14px; color: #dfe6e9; cursor: pointer; border-radius: 6px;
+  }
+  .sf-select .sf-panel .sf-opt:hover { background: rgba(255,255,255,0.08); }
+  .sf-select .sf-panel .sf-opt input[type="checkbox"] { width: 16px; height: 16px; accent-color: #74b9ff; flex-shrink: 0; }
+  .sf-select .sf-panel .sf-opt .sf-opt-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sf-select .sf-panel .sf-addnew {
+    padding: 8px 6px; font-size: 13px; color: #74b9ff; cursor: pointer;
+    border-top: 1px dashed rgba(255,255,255,0.18); margin-top: 4px;
+  }
+  .sf-select .sf-panel .sf-empty { padding: 10px 6px; font-size: 13px; color: #8a949c; text-align: center; }
+  .add-inputs input[type="number"].sf-amt { width: 66px; flex-shrink: 0; }
+  .sf-meal-row { gap: 12px; }
+  .sf-tags { max-height: 180px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .temp-indicator-inline { font-size: 17px; margin-left: 5px; }
   .temp-normal { color: #2ecc71; }
   .temp-high { color: #e74c3c; }
@@ -1197,6 +1237,20 @@
   body.theme-day .custom-tag { background: rgba(9,132,227,0.1); border-color: rgba(9,132,227,0.3); color: #3d4852; }
   body.theme-day .custom-add-row input { background: #ffffff; border-color: rgba(9,132,227,0.25); color: #3d4852; }
   body.theme-day .cos-saved { color: #00875a; }
+  /* v3.5.74 辅食食物下拉（白天皮肤） */
+  body.theme-day .sf-select .sf-trigger { background: #ffffff; border-color: rgba(9,132,227,0.25); }
+  body.theme-day .sf-select .sf-trigger .sf-ph { color: #3d4852; }
+  body.theme-day .sf-select .sf-trigger .sf-ph.sf-ph-empty { color: #a4b0be; }
+  body.theme-day .sf-select .sf-trigger .sf-arrow { color: #636e72; }
+  body.theme-day .sf-select .sf-panel { background: #ffffff; border-color: rgba(9,132,227,0.25); box-shadow: 0 10px 28px rgba(9,132,227,0.18); }
+  body.theme-day .sf-select .sf-panel .sf-search input { background: #f5f8fa; border-color: rgba(9,132,227,0.25); color: #3d4852; }
+  body.theme-day .sf-select .sf-panel .sf-opt { color: #3d4852; }
+  body.theme-day .sf-select .sf-panel .sf-opt:hover { background: rgba(9,132,227,0.08); }
+  body.theme-day .sf-select .sf-panel .sf-list::-webkit-scrollbar-thumb { background: rgba(9,132,227,0.3); }
+  body.theme-day .sf-select .sf-panel .sf-addnew { color: #0984e3; border-top-color: rgba(9,132,227,0.25); }
+  body.theme-day .sf-select .sf-panel .sf-empty { color: #8395a7; }
+  body.theme-day .sf-row .sf-label { color: #636e72; }
+  body.theme-day .sf-tags .custom-tag { background: rgba(9,132,227,0.1); }
   body.theme-day .manage-footer { background: linear-gradient(to top, #ffffff 60%, rgba(255,255,255,0.88)); border-top-color: rgba(9,132,227,0.18); }
   body.theme-day .sync-section { border-top-color: rgba(9,132,227,0.15); }
   body.theme-day .sync-section .cos-title { color: #0984e3; }
@@ -1637,6 +1691,7 @@ const ACTIVITIES = [
   { id: 'sleep', name: '睡眠', icon: '😴', type: 'sleep', unit: '分钟', category: 'eatSleep' },
   { id: 'drinkWater', name: '喝水', icon: '💧', type: 'drinkWater', category: 'eatSleep' },
   { id: 'supplement', name: '营养补剂', icon: '💊', type: 'supplement', category: 'eatSleep' },
+  { id: 'solidFood', name: '辅食', icon: '🥣', type: 'solidFood', category: 'eatSleep' },
   // 健康
   { id: 'poop', name: '大便', icon: '💩', type: 'poop', category: 'health' },
   { id: 'airButt', name: '晾屁股', icon: '🍑', type: 'airButt', category: 'health' },
@@ -1670,6 +1725,8 @@ const POOP_STATUS = [
 
 const DEFAULT_GROSS_MOTOR = ['会抬头', '会翻身', '会爬', '会坐', '会站', '会走路', '会跑步'];
 const DEFAULT_FINE_MOTOR = ['抓握', '摇头', '点头', '挥手', '放东西', '捏', '戳'];
+// v3.5.74 辅食食物默认清单（用户可在管理弹窗增删，长期有效）
+const DEFAULT_SOLID_FOODS = ['高铁米粉','不含铁米粉','苹果','南瓜','山药','小米','红薯','玉米','紫薯','猪肉','牛肉','羊肉','鱼','鸡肉','虾','鸡蛋','猪肝','胡萝卜','梨','豆腐','花生','枣','黄豆','绿豆','红豆','油菜','白菜','西兰花','西红柿','茄子','牛油果','芒果','猕猴桃','莴苣','黄瓜','核桃','冬瓜','香菇','香蕉','西瓜'];
 
 let hiddenActivities = [];
 let currentCategory = 'all';
@@ -1677,9 +1734,12 @@ let addModalCategory = 'all';
 let addSelectedSet = new Set(); // 跨分类保留已勾选活动
 let grossMotorOptions = [];
 let fineMotorOptions = [];
+let solidFoodOptions = [];   // v3.5.74 辅食食物清单（可在管理弹窗增删）
 // v3.5.69 自定义选项永久保存：本地保存时间戳 + 云端并集重试，避免被回滚覆盖
-const CUSTOM_OPT_KEYS = ['grossMotorOptions', 'fineMotorOptions'];
-const CUSTOM_OPT_DEFS = { grossMotorOptions: DEFAULT_GROSS_MOTOR, fineMotorOptions: DEFAULT_FINE_MOTOR };
+const CUSTOM_OPT_KEYS = ['grossMotorOptions', 'fineMotorOptions', 'solidFoodOptions'];
+const CUSTOM_OPT_DEFS = { grossMotorOptions: DEFAULT_GROSS_MOTOR, fineMotorOptions: DEFAULT_FINE_MOTOR, solidFoodOptions: DEFAULT_SOLID_FOODS };
+// 每个选项键对应的「用户已删除」墓碑键（防止出厂项被自动补回）
+const CUSTOM_OPT_DEL_KEYS = { grossMotorOptions: 'grossMotorDeleted', fineMotorOptions: 'fineMotorDeleted', solidFoodOptions: 'solidFoodDeleted' };
 let _optRetryTimer = null, _optRetryLeft = 0;
 
 function loadCustomOptions() {
@@ -1693,12 +1753,21 @@ function loadCustomOptions() {
   if (!Array.isArray(fineMotorOptions)) fineMotorOptions = [];
   const _fDel = safeParseArr(localStorage.getItem('fineMotorDeleted'));
   DEFAULT_FINE_MOTOR.forEach(o => { if (!fineMotorOptions.includes(o) && !_fDel.includes(o)) fineMotorOptions.push(o); });
+  try { solidFoodOptions = JSON.parse(localStorage.getItem('solidFoodOptions') || '[]'); } catch { solidFoodOptions = []; }
+  if (!Array.isArray(solidFoodOptions)) solidFoodOptions = [];
+  const _sDel = safeParseArr(localStorage.getItem('solidFoodDeleted'));
+  DEFAULT_SOLID_FOODS.forEach(o => { if (!solidFoodOptions.includes(o) && !_sDel.includes(o)) solidFoodOptions.push(o); });
+}
+function getSolidFoodOptions() {
+  if (!Array.isArray(solidFoodOptions) || solidFoodOptions.length === 0) loadCustomOptions();
+  return (Array.isArray(solidFoodOptions) && solidFoodOptions.length) ? solidFoodOptions : DEFAULT_SOLID_FOODS;
 }
 function safeParseArr(s) { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } }
 function saveCustomOptions() {
   const now = Date.now();
   localStorage.setItem('grossMotorOptions', JSON.stringify(grossMotorOptions));
   localStorage.setItem('fineMotorOptions', JSON.stringify(fineMotorOptions));
+  localStorage.setItem('solidFoodOptions', JSON.stringify(solidFoodOptions));
   // 记录本地改动时间，供同步下行判断"该不该覆盖本地"（含本地保存时间，不依赖墙钟一致性即可保护本机改动）
   CUSTOM_OPT_KEYS.forEach(k => localStorage.setItem(`cfgts_${k}`, String(now)));
   syncUpload('config');
@@ -2558,6 +2627,7 @@ function formatRecordBrief(r) {
   if (r.type === 'milk') { if (r.milkAmount > 0) base = r.milkAmount + 'ml'; }
   else if (r.type === 'poop') { base = r.poopStatus || ''; }
   else if (r.type === 'supplement') { base = (r.supplementTypes||[]).join('/'); if (r.supplementAmount > 0) base += ' ' + r.supplementAmount + '粒'; }
+  else if (r.type === 'solidFood') { base = (r.solidFoods||[]).join('、'); if (r.solidFoodAmount > 0) base += ' ' + r.solidFoodAmount + 'g'; if (r.afterMeal) base += ' · 饭后' + r.afterMeal; }
   else if (r.type === 'vaccine') { base = (r.vaccineTypes||[]).join('/'); if (r.vaccineDose > 0) base += ' 第' + r.vaccineDose + '剂'; }
   else if (r.type === 'listenStory') { base = (r.storyLangs||[]).join('/'); }
   else if (r.type === 'grossMotor') { base = (r.grossMotorItems||[]).join(', '); }
@@ -2609,6 +2679,7 @@ function openEditRecord(type, timestamp, ds) {
   _editingType = type; _editingTimestamp = timestamp; _editingDateStr = target;
   const act = ACTIVITIES.find(a => a.id === type);
   const container = document.getElementById('editFormContent');
+  let editPendingSf = null;   // v3.5.74 辅食下拉需在 innerHTML 落盘后回填
 
   const titleEl = document.getElementById('editFormTitle');
   if (titleEl) titleEl.textContent = target === getTodayDateStr()
@@ -2632,6 +2703,11 @@ function openEditRecord(type, timestamp, ds) {
     const sel = rec.supplementTypes || ['AD'];
     html += `<div class="input-row checkbox-group"><label><input type="checkbox" name="edt_sup" value="AD" ${sel.includes('AD')?'checked':''}> AD</label><label><input type="checkbox" name="edt_sup" value="D3" ${sel.includes('D3')?'checked':''}> D3</label></div>`;
     html += `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">用量:</label><input type="number" id="edt_val" value="${rec.supplementAmount||1}"><span class="unit">粒</span></div>`;
+  } else if (act.type === 'solidFood') {
+    // v3.5.74 辅食：食物（可搜索多选）+ 克数 + 饭后正常/异常
+    editPendingSf = { p: 'edt', id: act.id, sel: rec.solidFoods || [] };
+    html += `<div class="input-row sf-row"><label class="sf-label">食物:</label>${sfPickerHtml('edt', act.id)}<input type="number" step="1" min="0" id="edt_sfamt" class="sf-amt" placeholder="0" value="${rec.solidFoodAmount > 0 ? rec.solidFoodAmount : ''}"><span class="unit">g</span></div>`;
+    html += `<div class="input-row sf-row sf-meal-row"><label class="sf-label">饭后:</label><label><input type="radio" name="edt_meal" value="正常" ${(rec.afterMeal||'正常')==='正常'?'checked':''}> 正常</label><label><input type="radio" name="edt_meal" value="异常" ${rec.afterMeal==='异常'?'checked':''}> 异常</label></div>`;
   } else if (act.type === 'vaccine') {
     const sel = rec.vaccineTypes || [];
     let vh = ''; VACCINE_OPTIONS.forEach(v => { vh += `<label><input type="checkbox" name="edt_vac" value="${v}" ${sel.includes(v)?'checked':''}> ${v}</label>`; });
@@ -2665,6 +2741,7 @@ function openEditRecord(type, timestamp, ds) {
   html += `<div class="input-row add-note-row"><textarea id="edt_note" rows="2" placeholder="${notePh2}">${noteEsc}</textarea></div>`;
 
   container.innerHTML = html;
+  if (editPendingSf) sfInit(editPendingSf.p, editPendingSf.id, editPendingSf.sel);
   showModal('editModal');
 }
 
@@ -2699,6 +2776,13 @@ function saveEditRecord() {
     const cbs = document.getElementsByName('edt_sup'); const types = []; for (const cb of cbs) { if (cb.checked) types.push(cb.value); }
     rec.supplementTypes = types.length > 0 ? types : ['AD'];
     const a = parseInt(document.getElementById('edt_val').value); rec.supplementAmount = isNaN(a) || a < 1 ? 1 : a;
+  } else if (act.type === 'solidFood') {
+    rec.solidFoodTime = rec.recTime;
+    rec.solidFoods = sfGetSelection('edt', _editingType);
+    const el = document.getElementById('edt_sfamt'); const v = el ? parseFloat(String(el.value).trim()) : NaN;
+    rec.solidFoodAmount = (!isNaN(v) && v > 0) ? Math.round(v) : 0;
+    const rds = document.getElementsByName('edt_meal'); let _m = '正常'; for (const r of rds) { if (r.checked) { _m = r.value; break; } }
+    rec.afterMeal = _m;
   } else if (act.type === 'vaccine') {
     rec.vaccineTime = rec.recTime;
     const cbs = document.getElementsByName('edt_vac'); const types = []; for (const cb of cbs) { if (cb.checked) types.push(cb.value); }
@@ -2748,7 +2832,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.73 0922-0800'; // 历史弹窗新增身高体重输入框:可为所选日期补录/修改高和重,切换日期自动回填,留空即清除,数据即时同步并写入体重身高趋势曲线
+const APP_VERSION = 'v3.5.74 0923-0930'; // 吃睡新增「辅食」活动:开始时间+食物可搜索多选下拉(带滚动条)+克数+饭后正常/异常+备注;可编辑、进历史与日报;管理弹窗可增删食物选项,永久生效并同步
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2772,6 +2856,122 @@ function openAddModal(ds) {
 
 function getNowTimeStr() { const n = new Date(); return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0'); }
 
+/* ==================== 辅食：食物多选下拉（关键字搜索 + 滚动条） ====================
+   p = 前缀（'ad' 添加弹窗 / 'edt' 编辑弹窗），id = 活动 id
+   选中态存在内存 SF_PICKER 中，渲染后由 sfInit 回填，避免重渲染丢失勾选
+================================================================================ */
+const SF_PICKER = {};
+function sfKey(p, id) { return p + '|' + id; }
+function sfEsc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function sfJsStr(s) { return sfEsc(s).replace(/'/g, "\\'").replace(/\\/g, '\\\\'); }
+function sfState(p, id) {
+  const key = sfKey(p, id);
+  if (!SF_PICKER[key]) SF_PICKER[key] = { sel: new Set(), kw: '' };
+  return SF_PICKER[key];
+}
+function sfInit(p, id, selected) {
+  const key = sfKey(p, id);
+  SF_PICKER[key] = { sel: new Set(Array.isArray(selected) ? selected : []), kw: '' };
+  const sEl = document.getElementById(`${p}search_${id}`); if (sEl) sEl.value = '';
+  const pn = document.getElementById(`${p}panel_${id}`); if (pn) pn.style.display = 'none';
+  sfRenderList(p, id);
+  sfRenderTrigger(p, id);
+}
+function sfPickerHtml(p, id) {
+  return `<div class="sf-select" id="${p}sel_${id}">`
+    + `<div class="sf-trigger" onclick="sfTogglePanel('${p}','${id}')">`
+    + `<span class="sf-ph sf-ph-empty" id="${p}ph_${id}">请选择食物</span><span class="sf-arrow">&#9662;</span></div>`
+    + `<div class="sf-panel" id="${p}panel_${id}" style="display:none;">`
+    + `<div class="sf-search"><input type="text" id="${p}search_${id}" placeholder="输入关键字查找" oninput="sfFilter('${p}','${id}',this.value)"></div>`
+    + `<div class="sf-list" id="${p}list_${id}"></div>`
+    + `</div></div>`;
+}
+function sfRenderList(p, id) {
+  const st = sfState(p, id);
+  const box = document.getElementById(`${p}list_${id}`);
+  if (!box) return;
+  const kw = String(st.kw || '').trim();
+  const kwL = kw.toLowerCase();
+  const opts = getSolidFoodOptions();
+  const shown = kwL ? opts.filter(o => String(o).toLowerCase().includes(kwL)) : opts;
+  let h = '';
+  shown.forEach(o => {
+    const e = sfEsc(o);
+    h += `<label class="sf-opt"><input type="checkbox" name="${p}sfopt_${id}" value="${e}" ${st.sel.has(o) ? 'checked' : ''} onchange="sfOnCheck('${p}','${id}','${sfJsStr(o)}',this.checked)"><span class="sf-opt-t">${e}</span></label>`;
+  });
+  if (shown.length === 0) {
+    if (kw) h += `<div class="sf-addnew" onclick="sfAddNew('${p}','${id}','${sfJsStr(kw)}')">＋ 添加「${sfEsc(kw)}」为新食物</div>`;
+    else h += `<div class="sf-empty">暂无食物选项，可在管理弹窗添加</div>`;
+  } else if (kw && !shown.some(o => String(o) === kw)) {
+    h += `<div class="sf-addnew" onclick="sfAddNew('${p}','${id}','${sfJsStr(kw)}')">＋ 添加「${sfEsc(kw)}」为新食物</div>`;
+  }
+  box.innerHTML = h;
+}
+function sfOnCheck(p, id, val, checked) {
+  const st = sfState(p, id);
+  if (checked) st.sel.add(val); else st.sel.delete(val);
+  sfRenderTrigger(p, id);
+}
+function sfRenderTrigger(p, id) {
+  const el = document.getElementById(`${p}ph_${id}`);
+  if (!el) return;
+  const arr = Array.from(sfState(p, id).sel);
+  if (arr.length === 0) { el.textContent = '请选择食物'; el.classList.add('sf-ph-empty'); }
+  else { el.textContent = arr.join('、'); el.classList.remove('sf-ph-empty'); }
+}
+function sfCloseAllPanels() {
+  const ps = document.querySelectorAll('.sf-panel');
+  for (let i = 0; i < ps.length; i++) ps[i].style.display = 'none';
+}
+function sfTogglePanel(p, id) {
+  const panel = document.getElementById(`${p}panel_${id}`);
+  if (!panel) return;
+  const willOpen = panel.style.display === 'none';
+  sfCloseAllPanels();
+  if (!willOpen) return;
+  panel.style.display = '';
+  sfRenderList(p, id);
+  // 下方空间不足时向上展开，避免被弹窗容器裁剪
+  try {
+    const sel = document.getElementById(`${p}sel_${id}`);
+    const rect = (sel && sel.getBoundingClientRect) ? sel.getBoundingClientRect() : null;
+    const vh = (typeof window !== 'undefined' && window.innerHeight) || 0;
+    const need = 240;   // 面板大致高度
+    if (rect && vh && (vh - rect.bottom) < need && rect.top > need) {
+      panel.style.top = 'auto'; panel.style.bottom = 'calc(100% + 4px)';
+    } else {
+      panel.style.top = 'calc(100% + 4px)'; panel.style.bottom = 'auto';
+    }
+  } catch (e) {
+    panel.style.top = 'calc(100% + 4px)'; panel.style.bottom = 'auto';
+  }
+}
+function sfFilter(p, id, val) {
+  sfState(p, id).kw = (val == null ? '' : String(val));
+  sfRenderList(p, id);
+}
+function sfGetSelection(p, id) { return Array.from(sfState(p, id).sel); }
+function sfAddNew(p, id, name) {
+  name = String(name || '').trim();
+  if (!name) return;
+  if (!Array.isArray(solidFoodOptions)) solidFoodOptions = [];
+  if (!solidFoodOptions.includes(name)) {
+    solidFoodOptions.push(name);
+    saveCustomOptions();
+    markOptDeleted('solidFoodDeleted', name, false);
+    showToast('已添加食物「' + name + '」，长期有效');
+  }
+  const st = sfState(p, id);
+  st.sel.add(name); st.kw = '';
+  const sEl = document.getElementById(`${p}search_${id}`); if (sEl) sEl.value = '';
+  sfRenderList(p, id); sfRenderTrigger(p, id);
+}
+// 点击下拉以外的区域关闭面板（面板内部点击不关闭，方便多选）
+document.addEventListener('click', function (e) {
+  if (e && e.target && e.target.closest && e.target.closest('.sf-select')) return;
+  sfCloseAllPanels();
+});
+
 function renderAddModal() {
   // 分类栏高亮
   const catBar = document.getElementById('addCatBar');
@@ -2787,6 +2987,7 @@ function renderAddList(filterText) {
   filterText = (filterText || '').trim().toLowerCase();
   const list = document.getElementById('addList');
   let html = '';
+  const sfPending = [];   // v3.5.74 辅食下拉需在 innerHTML 落盘后回填选项与已选态
 
   ACTIVITIES.forEach(act => {
     if (hiddenActivities.includes(act.id)) return;
@@ -2809,6 +3010,13 @@ function renderAddList(filterText) {
       const sug = getSupplementSuggestion();
       const dow = new Date().getDay(), isMWF = (dow===1||dow===3||dow===5);
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group"><label><input type="checkbox" name="adsup_${act.id}" value="AD" ${isMWF?'checked':''}> AD</label><label><input type="checkbox" name="adsup_${act.id}" value="D3"> D3</label></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">用量:</label><input type="number" step="1" min="1" id="adinp_${act.id}" value="1"><span class="unit">粒</span></div><div class="hint-text">建议选${sug}（与上次不同）</div>`;
+    } else if (act.type === 'solidFood') {
+      // v3.5.74 辅食：开始时间 + 食物（可搜索多选下拉）+ 克数 + 饭后正常/异常
+      const _sh = String(new Date().getHours()).padStart(2,'0'), _sm = String(new Date().getMinutes()).padStart(2,'0');
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${_sh}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${_sm}"></div></div>`;
+      inputsHtml += `<div class="input-row sf-row"><label class="sf-label">食物:</label>${sfPickerHtml('ad', act.id)}<input type="number" step="1" min="0" id="adinp_${act.id}" placeholder="0" class="sf-amt"><span class="unit">g</span></div>`;
+      inputsHtml += `<div class="input-row sf-row sf-meal-row"><label class="sf-label">饭后:</label><label><input type="radio" name="admeal_${act.id}" value="正常" checked> 正常</label><label><input type="radio" name="admeal_${act.id}" value="异常"> 异常</label></div>`;
+      sfPending.push({ p: 'ad', id: act.id, sel: [] });
     } else if (act.type === 'vaccine') {
       let vh = ''; VACCINE_OPTIONS.forEach(v => { vh += `<label><input type="checkbox" name="advac_${act.id}" value="${v}"> ${v}</label>`; });
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group">${vh}</div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">第几剂:</label><input type="number" step="1" min="1" id="adinp_${act.id}" value="1"><span class="unit">剂</span></div>`;
@@ -2844,6 +3052,8 @@ function renderAddList(filterText) {
 
   if (!html) html = '<div style="text-align:center;color:#636e72;padding:24px 0;font-size:15px;">没有匹配的活动</div>';
   list.innerHTML = html;
+  // 辅食食物下拉：落盘后再填充选项列表并回填已选
+  sfPending.forEach(x => sfInit(x.p, x.id, x.sel));
 }
 
 function filterAddList() {
@@ -2921,6 +3131,13 @@ function confirmAdd() {
       record.supplementTypes = types.length > 0 ? types : ['AD'];
       record.supplementTime = recTime;
       const el = document.getElementById(`adinp_${id}`); record.supplementAmount = (el && !isNaN(parseInt(el.value))) ? Math.max(1, parseInt(el.value)) : 1;
+    } else if (act.type === 'solidFood') {
+      record.solidFoodTime = recTime;
+      record.solidFoods = sfGetSelection('ad', id);
+      const el = document.getElementById(`adinp_${id}`); const _sv = el ? parseFloat(String(el.value).trim()) : NaN;
+      record.solidFoodAmount = (!isNaN(_sv) && _sv > 0) ? Math.round(_sv) : 0;
+      const rds = document.getElementsByName(`admeal_${id}`); let _meal = '正常'; for (const r of rds) { if (r.checked) { _meal = r.value; break; } }
+      record.afterMeal = _meal;
     } else if (act.type === 'vaccine') {
       const cbs = document.getElementsByName(`advac_${id}`); const types = []; for (const cb of cbs) { if (cb.checked) types.push(cb.value); }
       record.vaccineTypes = types; record.vaccineTime = recTime;
@@ -3113,6 +3330,19 @@ const VOICE_RULES = [
       if (/D3|d3|维D/.test(zone) && !types.includes('D3')) types.push('D3');
       let amount = 1; const am = zone.match(/([一二两三四五六七八九十]|\d+)\s*[粒颗滴]/); if (am) { const n = cnNum(am[1]); if (n !== null && n >= 1 && n <= 10) amount = n; }
       return { params: { supplementTypes: types.length ? types : ['AD'], supplementAmount: amount } };
+    } },
+  { id: 'solidFood', re: /辅食|米粉|米糊|果泥|肉泥|菜泥|蛋黄|吃了?\s*(?:米糊|米粉|果泥|肉泥|菜泥)/,
+    parse: (zone) => {
+      const foods = [];
+      getSolidFoodOptions().forEach(f => { if (zone.includes(f) && !foods.includes(f)) foods.push(f); });
+      [['米糊','高铁米粉'],['米粉','高铁米粉'],['蛋黄','鸡蛋'],['鸡肉泥','鸡肉'],['猪肉泥','猪肉']]
+        .forEach(([kw, val]) => { if (zone.includes(kw) && !foods.includes(val)) foods.push(val); });
+      let amount = 0;
+      const am = zone.match(/(\d+(?:\.\d+)?)\s*(?:g|克)(?![0-9])/);
+      if (am) { const n = parseFloat(am[1]); if (!isNaN(n) && n >= 0) amount = Math.round(n); }
+      let meal = '正常';
+      if (/异常|过敏|起疹|红疹|吐了|呕吐|不舒服|拉肚|腹泻/.test(zone)) meal = '异常';
+      return { params: { solidFoods: foods, solidFoodAmount: amount, afterMeal: meal }, warn: foods.length === 0 };
     } },
   { id: 'temperature', re: /体温|发烧|额温|耳温|烧到|发低烧|低烧|高烧|有点烧/,
     parse: (zone) => {
@@ -3737,6 +3967,7 @@ function voiceItemParamDef(item) {
   if (p.duration !== undefined && (item.actId === 'sleep' || item.actId === 'outdoor' || item.actId === 'airButt')) return { key: 'duration', label: '时长', value: p.duration, unit: '分钟', min: 0, step: 1 };
   if (p.temperature !== undefined) return { key: 'temperature', label: '体温', value: p.temperature, unit: '℃', min: 30, step: 0.1 };
   if (p.supplementAmount !== undefined) return { key: 'supplementAmount', label: '用量', value: p.supplementAmount, unit: '粒', min: 1, step: 1 };
+  if (p.solidFoodAmount !== undefined) return { key: 'solidFoodAmount', label: '克数', value: p.solidFoodAmount, unit: 'g', min: 0, step: 1 };
   if (p.vaccineDose !== undefined) return { key: 'vaccineDose', label: '第几剂', value: p.vaccineDose, unit: '剂', min: 1, step: 1 };
   return null;
 }
@@ -3757,6 +3988,8 @@ function renderVoiceItems(unmatched) {
       if (it.params.vaccineTypes && it.params.vaccineTypes.length) extra.push(it.params.vaccineTypes.join('+'));
       if (it.params.grossMotorItems && it.params.grossMotorItems.length) extra.push(it.params.grossMotorItems.join('+'));
       if (it.params.fineMotorItems && it.params.fineMotorItems.length) extra.push(it.params.fineMotorItems.join('+'));
+      if (it.params.solidFoods && it.params.solidFoods.length) extra.push(it.params.solidFoods.join('+'));
+      if (it.params.afterMeal === '异常') extra.push('饭后异常');
       // 时间与数值输入同添加弹窗：HH:MM 数字直填 + 参数行（时长类拆 h/min）
       const [vhh, vmm] = (it.recTime || getNowTimeStr()).split(':').map(x => String(parseInt(x) || 0).padStart(2, '0'));
       const isDur = pd && pd.key === 'duration';
@@ -3816,6 +4049,7 @@ function confirmVoiceAdd() {
     else if (act.type === 'drinkWater') { record.drinkTime = it.recTime; }
     else if (act.type === 'poop') { record.poopTime = it.recTime; record.poopStatus = p.poopStatus || '正常'; }
     else if (act.type === 'supplement') { record.supplementTypes = (p.supplementTypes && p.supplementTypes.length) ? p.supplementTypes : ['AD']; record.supplementTime = it.recTime; record.supplementAmount = Math.max(1, Math.round(p.supplementAmount || 1)); }
+    else if (act.type === 'solidFood') { record.solidFoods = p.solidFoods || []; record.solidFoodTime = it.recTime; record.solidFoodAmount = Math.max(0, Math.round(p.solidFoodAmount || 0)); record.afterMeal = p.afterMeal || '正常'; if (p.note) record.note = p.note; }
     else if (act.type === 'vaccine') { record.vaccineTypes = p.vaccineTypes || []; record.vaccineTime = it.recTime; record.vaccineDose = Math.max(1, Math.round(p.vaccineDose || 1)); }
     else if (act.type === 'listenStory') { record.storyLangs = (p.storyLangs && p.storyLangs.length) ? p.storyLangs : ['中文']; record.storyTime = it.recTime; }
     else if (act.type === 'grossMotor') { record.grossMotorItems = p.grossMotorItems || []; record.grossMotorTime = it.recTime; }
@@ -3845,12 +4079,17 @@ function openReport() {
   const stats = {};
   const noteRecords = []; // 带备注的记录（用于备注区块）
   records.forEach(r => {
-    if (!stats[r.type]) stats[r.type] = { name: r.name, count: 0, duration: 0, totalCount: 0, details: [], totalMilk: 0, totalSuppl: 0 };
+    if (!stats[r.type]) stats[r.type] = { name: r.name, count: 0, duration: 0, totalCount: 0, details: [], totalMilk: 0, totalSuppl: 0, totalSolid: 0, solidFoods: [] };
     stats[r.type].count++;
     if (r.duration !== undefined) stats[r.type].duration += r.duration;
     if (r.count !== undefined) stats[r.type].totalCount += r.count;
     if (r.milkAmount !== undefined) stats[r.type].totalMilk += r.milkAmount;
     if (r.supplementAmount !== undefined) stats[r.type].totalSuppl += r.supplementAmount;
+    if (r.solidFoodAmount !== undefined) stats[r.type].totalSolid += r.solidFoodAmount;
+    if (r.type === 'solidFood') {
+      (r.solidFoods || []).forEach(f => { if (!stats[r.type].solidFoods.includes(f)) stats[r.type].solidFoods.push(f); });
+      if (r.afterMeal === '异常') stats[r.type].solidAbnormal = (stats[r.type].solidAbnormal || 0) + 1;
+    }
     let detail = '';
     if (r.level) detail = '程度:' + r.level;
     else if (r.shampoo && r.shampoo !== '无') detail = '使用沐浴露:' + r.shampoo;
@@ -3877,11 +4116,18 @@ function openReport() {
       else {
         if (act.type === 'sleep') { const h = Math.floor(s.duration / 60); const m = Math.round(s.duration % 60); val = s.count + '次 · ' + h + 'h ' + m + 'min'; }
         else if (act.type === 'supplement') val = s.count + '次 · ' + s.totalSuppl + '粒';
+        else if (act.type === 'solidFood') val = s.count + '次 · ' + s.totalSolid + 'g';
         else if (act.type === 'milk') val = s.count + '次 · ' + s.totalMilk + 'ml';
         else if (s.duration > 0) val = s.count + '次 · ' + s.duration.toFixed(1) + '分钟';
         else val = s.count + '次';
       }
       html += `<div class="report-item"><span class="report-label">${act.icon} ${act.name}</span><span class="report-value${isZero?' zero':''}">${val}</span></div>`;
+      // 辅食下一行展示当天吃过的食物清单（饭后异常标红提示）
+      if (act.type === 'solidFood' && s && s.solidFoods && s.solidFoods.length) {
+        const escF = s.solidFoods.map(f => String(f).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+        const abn = s.solidAbnormal ? `<span style="color:#e17055;"> · 饭后异常${s.solidAbnormal}次</span>` : '';
+        html += `<div class="report-item"><span class="report-label">${act.icon} 吃了什么</span><span class="report-value">${escF.join('、')}${abn}</span></div>`;
+      }
       // 喝奶（水量）下一行展示 水+奶 总量（奶量*1.12）
       if (act.type === 'milk') {
         const base = s ? s.totalMilk : 0;
@@ -4190,6 +4436,13 @@ function renderCustomOptionsSection() {
   fineMotorOptions.forEach(o => { html += tag(o, 'removeFineMotorOpt'); });
   html += `</div>`;
   html += `<div class="custom-add-row"><input type="text" id="newFineMotorOpt" placeholder="新增选项" onkeydown="if(event.key==='Enter'){event.preventDefault();addFineMotorOpt();}"><button class="btn btn-primary" onclick="addFineMotorOpt()">添加</button></div>`;
+  html += '<div style="height:14px;"></div>';
+  // v3.5.74 辅食食物选项（条目较多，容器限高可滚动）
+  html += `<div class="cos-title-row"><div class="cos-title">🥣 辅食食物选项</div>${savedTip}</div>`;
+  html += `<div class="custom-options-tags sf-tags">`;
+  solidFoodOptions.forEach(o => { html += tag(o, 'removeSolidFoodOpt'); });
+  html += `</div>`;
+  html += `<div class="custom-add-row"><input type="text" id="newSolidFoodOpt" placeholder="新增食物" onkeydown="if(event.key==='Enter'){event.preventDefault();addSolidFoodOpt();}"><button class="btn btn-primary" onclick="addSolidFoodOpt()">添加</button></div>`;
   html += `<div style="height:12px;"></div>`;
   html += `<div class="custom-add-row"><button class="btn" style="flex:1;font-size:13px;" onclick="openResetOptionsConfirm()">🔄 恢复默认选项</button></div>`;
   section.innerHTML = html;
@@ -4227,6 +4480,21 @@ function removeFineMotorOpt(opt) {
   markOptDeleted('fineMotorDeleted', opt, true);
   showToast('已删除「' + opt + '」');
 }
+// v3.5.74 辅食食物选项增删
+function addSolidFoodOpt() {
+  const inp = document.getElementById('newSolidFoodOpt'); const val = (inp && inp.value ? inp.value : '').trim();
+  if (!val) return; if (solidFoodOptions.includes(val)) { showToast('已存在'); return; }
+  if (!_optLenLimit(val)) return;
+  solidFoodOptions.push(val); saveCustomOptions(); renderCustomOptionsSection();
+  markOptDeleted('solidFoodDeleted', val, false);
+  showToast('已添加「' + val + '」，长期有效');
+}
+function removeSolidFoodOpt(opt) {
+  if (!confirm(`删除辅食食物「${opt}」？\n已记录的条目不会受影响。`)) return;
+  solidFoodOptions = solidFoodOptions.filter(o => o !== opt); saveCustomOptions(); renderCustomOptionsSection();
+  markOptDeleted('solidFoodDeleted', opt, true);
+  showToast('已删除「' + opt + '」');
+}
 // 删除记录：防止"出厂默认项"在下次加载时被自动补回（用户主动删掉的要保持删除）
 function markOptDeleted(key, val, del) {
   let arr = safeParseArr(localStorage.getItem(key));
@@ -4234,13 +4502,14 @@ function markOptDeleted(key, val, del) {
   else { arr = arr.filter(o => o !== val); }
   localStorage.setItem(key, JSON.stringify(arr));
 }
-function resetCustomOptions() { grossMotorOptions = [...DEFAULT_GROSS_MOTOR]; fineMotorOptions = [...DEFAULT_FINE_MOTOR]; saveCustomOptions(); renderCustomOptionsSection(); }
+function resetCustomOptions() { grossMotorOptions = [...DEFAULT_GROSS_MOTOR]; fineMotorOptions = [...DEFAULT_FINE_MOTOR]; solidFoodOptions = [...DEFAULT_SOLID_FOODS]; saveCustomOptions(); renderCustomOptionsSection(); }
 function openResetOptionsConfirm() {
   const removedG = grossMotorOptions.filter(o => !DEFAULT_GROSS_MOTOR.includes(o));
   const removedF = fineMotorOptions.filter(o => !DEFAULT_FINE_MOTOR.includes(o));
+  const removedS = solidFoodOptions.filter(o => !DEFAULT_SOLID_FOODS.includes(o));
   const el = document.getElementById('optionsResetPreview');
   if (el) {
-    const all = [...removedG, ...removedF];
+    const all = [...removedG, ...removedF, ...removedS];
     el.innerHTML = all.length
       ? `将移除你添加的 ${all.length} 个选项：<span style="color:#e17055;">${all.join('、')}</span>`
       : '当前没有自定义选项，恢复后与现状一致。';
@@ -4251,6 +4520,7 @@ function doResetCustomOptions() {
   resetCustomOptions();
   localStorage.setItem('grossMotorDeleted', '[]');
   localStorage.setItem('fineMotorDeleted', '[]');
+  localStorage.setItem('solidFoodDeleted', '[]');
   hideModal('optionsResetModal');
   showToast('已恢复默认选项');
 }
@@ -5476,7 +5746,7 @@ async function syncUpload(category, dateStr) {
         await supabaseUpsert('family_config', { family_id: fid, config_key: '_del_' + dateStr, encrypted_data: tdata, iv: tiv, last_modified: Date.now() });
       } catch (e) {}
     } else if (category === 'config') {
-      const configKeys = ['hiddenActivities','grossMotorOptions','fineMotorOptions','babyHeight','babyWeight','bodyHistory','milkDefaultAmount'];
+      const configKeys = ['hiddenActivities','grossMotorOptions','fineMotorOptions','solidFoodOptions','babyHeight','babyWeight','bodyHistory','milkDefaultAmount'];
       const upTs = Date.now();
       for (const ck of configKeys) {
         const val = localStorage.getItem(ck) || '';
@@ -5576,7 +5846,7 @@ async function syncPullAll(opts) {
             let localArr = [];
             try { const p = JSON.parse(localStorage.getItem(row.config_key) || '[]'); if (Array.isArray(p)) localArr = p; } catch {}
             const _fresh = CUSTOM_OPT_DEFS[row.config_key] || [];
-            const _delKey = row.config_key === 'grossMotorOptions' ? 'grossMotorDeleted' : 'fineMotorDeleted';
+            const _delKey = CUSTOM_OPT_DEL_KEYS[row.config_key] || '';
             const _delArr = safeParseArr(localStorage.getItem(_delKey));
             const localOnly = localArr.filter(o => localArr.includes(o) && !cloudArr.includes(o));
             const cloudOnly = cloudArr.filter(o => cloudArr.includes(o) && !localArr.includes(o));
