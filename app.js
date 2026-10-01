@@ -1,0 +1,4630 @@
+
+const BIRTH_DATE = new Date(2026, 3, 25);
+const BABY_NAME = '小咕噜';
+// 月龄（满 N 个整月，出生日为切换日：如 4/25 出生，5/25 = 1 月龄、5/24 = 0 月龄）
+function getAgeMonths(ds) {
+  const [y, m, d] = ds.split('-').map(Number);
+  let months = (y - BIRTH_DATE.getFullYear()) * 12 + (m - 1 - BIRTH_DATE.getMonth());
+  if (d < BIRTH_DATE.getDate()) months--;
+  return Math.max(0, months);
+}
+// ---------- 月龄标准范围（0-24 月龄）：数据统一在 std-config.js 中配置 ----------
+const _STD = window.STD_CONFIG || {};
+// ---------- 应用默认配置（讯飞/推送/云端同步）：统一在 app-config.js 中配置 ----------
+const _APP = window.APP_CONFIG || {};
+const _DEFAULT_XFYUN = _APP.xfyun || null;
+const _DEFAULT_PUSHTOPIC = _APP.pushplusTopic || 'xiaogulu_daily';
+const _DEFAULT_PUSHTOKEN = _APP.pushplusToken || '';
+const _DEFAULT_SUPABASE_URL = (_APP.supabase && _APP.supabase.url) || '';
+const _DEFAULT_SUPABASE_KEY = (_APP.supabase && _APP.supabase.anonKey) || '';
+const _DEFAULT_FAMILY_CODE = _APP.familyCode || '';
+const MILK_STD = _STD.MILK_STD || [];
+const MILK_COUNT_STD = _STD.MILK_COUNT_STD || [];
+const SLEEP_STD = _STD.SLEEP_STD || [];
+// 大便次数标准（0-36 月龄；仅 max 有参考意义，min 均为 0）；配置缺失时按默认规则生成兜底
+const POOP_STD = (_STD.POOP_STD && _STD.POOP_STD.length) ? _STD.POOP_STD : Array.from({ length: 37 }, (_, m) => ({ month: m, min: 0, max: m <= 5 ? 7 : 3 }));
+// ---------- WHO 生长参考曲线（0-24 月龄，男孩）：数据统一在 std-config.js 中配置 ----------
+const WHO_HEIGHT = _STD.WHO_HEIGHT || [];
+const WHO_WEIGHT = _STD.WHO_WEIGHT || [];
+// 按日期取标准行（超龄取最后一行；空表返回全 null 安全行）
+function getStdRow(table, ds) {
+  if (!table || !table.length) return { month: 0, min: null, max: null, p3: null, p50: null, p75: null };
+  const m = getAgeMonths(ds);
+  return table.find(r => r.month === m) || table[table.length - 1];
+}
+const DEFAULT_PHOTO_DAY = 'assets/photo-day.webp';
+const DEFAULT_PHOTO_DATA = 'assets/photo-data.webp';
+
+const CATEGORIES = [
+  { id: 'eatSleep', name: '吃睡', icon: '🍼' },
+  { id: 'health', name: '健康', icon: '💚' },
+  { id: 'clean', name: '清洁', icon: '🧴' },
+  { id: 'learn', name: '学习', icon: '📖' },
+  { id: 'sport', name: '运动', icon: '🏃' },
+];
+
+const ACTIVITIES = [
+  // 吃睡 - 睡眠带开始时间
+  { id: 'milk', name: '喝奶（水量）', icon: '🍼', type: 'milk', category: 'eatSleep' },
+  { id: 'sleep', name: '睡眠', icon: '😴', type: 'sleep', unit: '分钟', category: 'eatSleep' },
+  { id: 'drinkWater', name: '喝水', icon: '💧', type: 'drinkWater', category: 'eatSleep' },
+  { id: 'supplement', name: '营养补剂', icon: '💊', type: 'supplement', category: 'eatSleep' },
+  { id: 'solidFood', name: '辅食', icon: '🥣', type: 'solidFood', category: 'eatSleep' },
+  // 健康
+  { id: 'poop', name: '大便', icon: '💩', type: 'poop', category: 'health' },
+  { id: 'airButt', name: '晾屁股', icon: '🍑', type: 'airButt', category: 'health' },
+  { id: 'vaccine', name: '疫苗接种', icon: '💉', type: 'vaccine', category: 'health' },
+  { id: 'temperature', name: '测体温', icon: '🌡️', type: 'temperature', category: 'health' },
+  // 清洁
+  { id: 'bath', name: '洗澡', icon: '🛀', type: 'bath', category: 'clean' },
+  { id: 'wash', name: '洗手洗脸', icon: '🧼', type: 'simple', category: 'clean' },
+  { id: 'cleanNose', name: '清理鼻涕', icon: '🤧', type: 'simple', category: 'clean' },
+  { id: 'cutNails', name: '剪指甲', icon: '✂️', type: 'note', category: 'clean' },
+  // 学习
+  { id: 'listenStory', name: '听故事', icon: '🎧', type: 'listenStory', category: 'learn' },
+  { id: 'readBook', name: '读书', icon: '📖', type: 'simple', category: 'learn' },
+  { id: 'listenMusic', name: '听歌', icon: '🎵', type: 'simple', category: 'learn' },
+  { id: 'learnLanguage', name: '学语言', icon: '🗣️', type: 'note', category: 'learn' },
+  { id: 'learnLogic', name: '学逻辑', icon: '🧩', type: 'note', category: 'learn' },
+  // 运动
+  { id: 'outdoor', name: '户外活动', icon: '☀️', type: 'duration', unit: '分钟', category: 'sport' },
+  { id: 'grossMotor', name: '大运动', icon: '🤸', type: 'grossMotor', category: 'sport' },
+  { id: 'fineMotor', name: '精细动作', icon: '✋', type: 'fineMotor', category: 'sport' },
+];
+
+const DEFAULT_HIDDEN = ['vaccine'];
+const VACCINE_OPTIONS = ['乙肝', '五联', '轮状病毒', '肺炎', '流脑', '麻塞风', '水痘', '甲肝', '手足口'];
+const POOP_STATUS = [
+  { value: '正常', label: '正常', icon: '<svg class="poop-svg" viewBox="0 0 24 24"><path d="M5 20c0-1 .5-2 2-2.2C6 16 6.5 14.5 8 14.3c-.5-1.5 0-2.8 1.8-3 .2-1.6 1.2-2.6 2.8-2.4 1-.1 1.8.4 2.2 1.3 1.6-.2 2.8.6 3 2 .2 1.2-.4 2-1.5 2.2 1 .2 1.5 1 1.3 2-.2.8-.8 1.3-1.8 1.3H7c-1.2 0-2-.3-2-1.7z"/></svg>', cls: 'poop-normal' },
+  { value: '拉肚子', label: '拉肚子', icon: '<svg class="poop-svg" viewBox="0 0 24 24"><path d="M12 2.7C12 2.7 5.5 10.5 5.5 14.5c0 4.1 2.9 6.8 6.5 6.8s6.5-2.7 6.5-6.8C18.5 10.5 12 2.7 12 2.7z"/></svg>', cls: 'poop-watery' },
+  { value: '青屎', label: '青屎', icon: '<svg class="poop-svg" viewBox="0 0 24 24"><path d="M5 20c0-1 .5-2 2-2.2C6 16 6.5 14.5 8 14.3c-.5-1.5 0-2.8 1.8-3 .2-1.6 1.2-2.6 2.8-2.4 1-.1 1.8.4 2.2 1.3 1.6-.2 2.8.6 3 2 .2 1.2-.4 2-1.5 2.2 1 .2 1.5 1 1.3 2-.2.8-.8 1.3-1.8 1.3H7c-1.2 0-2-.3-2-1.7z"/></svg>', cls: 'poop-green' },
+  { value: '便血', label: '便血', icon: '<svg class="poop-svg" viewBox="0 0 24 24"><path d="M12 2.7C12 2.7 5.5 10.5 5.5 14.5c0 4.1 2.9 6.8 6.5 6.8s6.5-2.7 6.5-6.8C18.5 10.5 12 2.7 12 2.7z"/></svg>', cls: 'poop-blood' },
+];
+
+const DEFAULT_GROSS_MOTOR = ['会抬头', '会翻身', '会爬', '会坐', '会站', '会走路', '会跑步'];
+const DEFAULT_FINE_MOTOR = ['抓握', '摇头', '点头', '挥手', '放东西', '捏', '戳'];
+// v3.5.74 辅食食物默认清单（用户可在管理弹窗增删，长期有效）
+const DEFAULT_SOLID_FOODS = ['高铁米粉','不含铁米粉','苹果','南瓜','山药','小米','红薯','玉米','紫薯','猪肉','牛肉','羊肉','鱼','鸡肉','虾','鸡蛋','猪肝','胡萝卜','梨','豆腐','花生','枣','黄豆','绿豆','红豆','油菜','白菜','西兰花','西红柿','茄子','牛油果','芒果','猕猴桃','莴苣','黄瓜','核桃','冬瓜','香菇','香蕉','西瓜'];
+
+let hiddenActivities = [];
+let currentCategory = 'all';
+let addModalCategory = 'all';
+let addSelectedSet = new Set(); // 跨分类保留已勾选活动
+let grossMotorOptions = [];
+let fineMotorOptions = [];
+let solidFoodOptions = [];   // v3.5.74 辅食食物清单（可在管理弹窗增删）
+// v3.5.69 自定义选项永久保存：本地保存时间戳 + 云端并集重试，避免被回滚覆盖
+const CUSTOM_OPT_KEYS = ['grossMotorOptions', 'fineMotorOptions', 'solidFoodOptions'];
+const CUSTOM_OPT_DEFS = { grossMotorOptions: DEFAULT_GROSS_MOTOR, fineMotorOptions: DEFAULT_FINE_MOTOR, solidFoodOptions: DEFAULT_SOLID_FOODS };
+// 每个选项键对应的「用户已删除」墓碑键（防止出厂项被自动补回）
+const CUSTOM_OPT_DEL_KEYS = { grossMotorOptions: 'grossMotorDeleted', fineMotorOptions: 'fineMotorDeleted', solidFoodOptions: 'solidFoodDeleted' };
+let _optRetryTimer = null, _optRetryLeft = 0;
+
+function loadCustomOptions() {
+  try { grossMotorOptions = JSON.parse(localStorage.getItem('grossMotorOptions') || '[]'); } catch { grossMotorOptions = []; }
+  if (!Array.isArray(grossMotorOptions)) grossMotorOptions = [];
+  // v3.5.69 不再用「空数组 → 回落默认值」，否则用户删光全部选项后刷新会复活；
+  // 改为只补上还没出现过的出厂项，用户自行删除的（有删除记录时）保持删除
+  const _gDel = safeParseArr(localStorage.getItem('grossMotorDeleted'));
+  DEFAULT_GROSS_MOTOR.forEach(o => { if (!grossMotorOptions.includes(o) && !_gDel.includes(o)) grossMotorOptions.push(o); });
+  try { fineMotorOptions = JSON.parse(localStorage.getItem('fineMotorOptions') || '[]'); } catch { fineMotorOptions = []; }
+  if (!Array.isArray(fineMotorOptions)) fineMotorOptions = [];
+  const _fDel = safeParseArr(localStorage.getItem('fineMotorDeleted'));
+  DEFAULT_FINE_MOTOR.forEach(o => { if (!fineMotorOptions.includes(o) && !_fDel.includes(o)) fineMotorOptions.push(o); });
+  try { solidFoodOptions = JSON.parse(localStorage.getItem('solidFoodOptions') || '[]'); } catch { solidFoodOptions = []; }
+  if (!Array.isArray(solidFoodOptions)) solidFoodOptions = [];
+  const _sDel = safeParseArr(localStorage.getItem('solidFoodDeleted'));
+  DEFAULT_SOLID_FOODS.forEach(o => { if (!solidFoodOptions.includes(o) && !_sDel.includes(o)) solidFoodOptions.push(o); });
+}
+function getSolidFoodOptions() {
+  if (!Array.isArray(solidFoodOptions) || solidFoodOptions.length === 0) loadCustomOptions();
+  return (Array.isArray(solidFoodOptions) && solidFoodOptions.length) ? solidFoodOptions : DEFAULT_SOLID_FOODS;
+}
+function safeParseArr(s) { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } }
+function saveCustomOptions() {
+  const now = Date.now();
+  localStorage.setItem('grossMotorOptions', JSON.stringify(grossMotorOptions));
+  localStorage.setItem('fineMotorOptions', JSON.stringify(fineMotorOptions));
+  localStorage.setItem('solidFoodOptions', JSON.stringify(solidFoodOptions));
+  // 记录本地改动时间，供同步下行判断"该不该覆盖本地"（含本地保存时间，不依赖墙钟一致性即可保护本机改动）
+  CUSTOM_OPT_KEYS.forEach(k => localStorage.setItem(`cfgts_${k}`, String(now)));
+  syncUpload('config');
+  scheduleOptionsRetry();   // 静默上传可能失败（离线/网络抖动），延后重试确保永久生效
+}
+function scheduleOptionsRetry() {
+  _optRetryLeft = 3;
+  clearTimeout(_optRetryTimer);
+  const tick = async () => {
+    if (_optRetryLeft <= 0) return;
+    _optRetryLeft--;
+    try {
+      if (isSyncReady() && navigator.onLine) { await syncUpload('config'); _optRetryLeft = 0; return; }
+    } catch (e) {}
+    _optRetryTimer = setTimeout(tick, 8000);
+  };
+  _optRetryTimer = setTimeout(tick, 5000);
+}
+
+/* ==================== v3.5.20 白天/夜间皮肤自动切换 ==================== */
+// 规则：6:00-18:00（含 6:00 不含 18:00）为白天皮肤；其余时间为夜间皮肤（与历史版本渲染完全一致，零改动）
+// 变化范围：仅配色 + 标题图标（★→☀）。布局/字号/其他图标/按钮位置一律不动。
+// v3.5.21 手动切换：右上角 ☀浅色/★深色 按钮（localStorage theme_manual）；
+//   手动选择即时生效；跨越 6:00/18:00 时段边界时自动清除手动偏好，恢复自动切换。
+let _themeLastAutoDay = null;
+function isDaytimeNow() {
+  const h = new Date().getHours();
+  return h >= 6 && h < 18;
+}
+function applyTheme() {
+  const autoDay = isDaytimeNow();
+  // 跨越时段边界（上次校准与本次自动判定不同）：手动偏好让位于自动切换
+  if (_themeLastAutoDay !== null && _themeLastAutoDay !== autoDay) {
+    localStorage.removeItem('theme_manual');
+  }
+  // 首次加载时：若当前时段与残留的手动偏好矛盾，说明偏好已过期，立即清除
+  // （例如 18:00 后刷新页面，_themeLastAutoDay 尚未记录，但 theme_manual 残留 'day'）
+  if (_themeLastAutoDay === null) {
+    const m = localStorage.getItem('theme_manual');
+    if ((m === 'day' && !autoDay) || (m === 'night' && autoDay)) {
+      localStorage.removeItem('theme_manual');
+    }
+  }
+  _themeLastAutoDay = autoDay;
+  const manual = localStorage.getItem('theme_manual');
+  const day = manual ? manual === 'day' : autoDay;
+  document.body.classList.toggle('theme-day', day);
+  // 标题图标：夜间显示 ★、白天显示户外活动太阳（由 CSS body.theme-day 控制显隐，无需 JS 切换）
+  // 浏览器状态栏 / PWA 标题栏颜色跟随主题
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', day ? '#f5f8fd' : '#0a0f1e');
+  // 手动切换按钮高亮同步
+  const bd = document.getElementById('themeBtnDay'), bn = document.getElementById('themeBtnNight');
+  if (bd) bd.classList.toggle('active', day);
+  if (bn) bn.classList.toggle('active', !day);
+  // 白天/夜间切换时，若处于默认头像状态则同步更换
+  if (!localStorage.getItem('babyPhoto')) loadPhoto();
+}
+function setManualTheme(t) {
+  localStorage.setItem('theme_manual', t);
+  applyTheme();
+}
+function setupTheme() {
+  applyTheme();
+  // 每分钟校准：跨 6:00 / 18:00 时无需刷新页面即可自动切换（并清除过期的手动偏好）
+  setInterval(applyTheme, 60000);
+}
+
+function init() {
+  setupTheme();
+  loadCustomOptions();
+  loadHiddenActivities();
+  // ===== 升级兼容：旧版(v3.5.39及之前)没在 pushSuccessHistory 记录失败推送 =====
+  // 加载 v3.5.40 时若 pushSuccessHistory 为空但有 pushLastSig → 补一条到历史,
+  // 防止旧版失败推送的签名被新版本当作"未推送过"再次推送
+  try {
+    const histRaw = localStorage.getItem('pushSuccessHistory');
+    const hist = histRaw ? JSON.parse(histRaw) : [];
+    if ((!Array.isArray(hist) || hist.length === 0) && localStorage.getItem('pushLastSig')) {
+      localStorage.setItem('pushSuccessHistory', JSON.stringify([{ ts: Date.now(), sig: localStorage.getItem('pushLastSig') }]));
+      console.log('[推送] 升级兼容: 用旧版 pushLastSig 初始化历史');
+    }
+  } catch {}
+  checkDateReset();
+  renderCategoryBar();
+  renderCards();
+  updateAgeInfo();
+  loadHeight(); loadWeight(); loadPhoto();
+  seedBodyHistory();
+  updateAddButtonVisibility();
+  try { updateOverview(); } catch(e) { console.error('updateOverview error:', e); }
+  setupMidnightReset();
+  setInterval(() => { try { updateOverview(/*skipPush=*/true); } catch(e) { console.error(e); } }, 60000);
+  setupPWA();
+  initSync();
+  bindVoiceTouch();
+  bindFastTaps();
+  // 自动清理测试残留数据（仅一次， harmless）
+  cleanupTestData();
+  // 页面加载后检查喝奶提醒（已到时间则 toast，仅提醒一次）
+  setTimeout(checkMilkReminder, 1200);
+}
+
+// 清理本地测试残留数据（开发/测试期间写入的脏数据）
+function cleanupTestData() {
+  const testKws = ['同步bug测试', '双设备同步验证', '本地新增', '本地更新', '不被覆盖', '正常新增'];
+  const recs = getTodayRecords();
+  const clean = recs.filter(r => !testKws.some(kw => (r.note || '').includes(kw)));
+  if (clean.length < recs.length) {
+    persistRecords(clean);
+    syncUpload('records', getTodayDateStr());
+    renderCards(); updateOverview();
+    console.log('已清理 ' + (recs.length - clean.length) + ' 条测试残留记录');
+  }
+}
+
+function updateAgeInfo() {
+  const now = effectiveNow(); // 与业务日切换对齐（凌晨0-1点仍算前一天，月龄在1:00才+1）
+  const birth = BIRTH_DATE;
+  let months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+  if (now.getDate() < birth.getDate()) months--;
+  if (months < 0) months = 0;
+  const days = Math.floor((now - birth) / 86400000) + 1;
+  document.getElementById('ageInfo').innerHTML = `<span class="highlight">${months}</span>月龄，出生第<span class="highlight">${days}</span>天`;
+}
+
+// v3.5.76 身高体重保存加固：写盘即打时间戳(cfgts_*)，防止云端拉取用旧值覆盖刚输入的数据
+function bumpConfigTs(key) { try { localStorage.setItem('cfgts_' + key, String(Date.now())); } catch (e) {} }
+let _bodySaveTimer = null;
+// 输入过程中防抖保存：即使不触发 blur/change（如切后台），也能落盘且进曲线
+function onBodyInput(field) {
+  if (_bodySaveTimer) clearTimeout(_bodySaveTimer);
+  _bodySaveTimer = setTimeout(function () { _bodySaveTimer = null; if (field === 'w') saveWeight(); else saveHeight(); }, 800);
+}
+// 页面隐藏/卸载时强制落盘，避免"输入后直接切走"丢数据
+function flushBodySaves() {
+  if (_bodySaveTimer) { clearTimeout(_bodySaveTimer); _bodySaveTimer = null; }
+  try { saveHeight(); } catch (e) {}
+  try { saveWeight(); } catch (e) {}
+}
+function loadHeight() { const el = document.getElementById('heightInput'); if (!el) return; if (document.activeElement === el) return; const h = localStorage.getItem('babyHeight'); if (h != null) el.value = h; }
+function saveHeight() {
+  const el = document.getElementById('heightInput'); if (!el) return;
+  const raw = String(el.value == null ? '' : el.value).trim();
+  const prev = localStorage.getItem('babyHeight') || '';
+  if (raw !== prev) { localStorage.setItem('babyHeight', raw); bumpConfigTs('babyHeight'); }
+  const v = parseFloat(raw);
+  if (v > 0) recordBodyMeasurement('h', v);          // 幂等：无变化时不重复写盘/上传
+  else if (raw !== prev) syncUpload('config');
+}
+function loadWeight() { const el = document.getElementById('weightInput'); if (!el) return; if (document.activeElement === el) return; const w = localStorage.getItem('babyWeight'); if (w != null) el.value = w; }
+function saveWeight() {
+  const el = document.getElementById('weightInput'); if (!el) return;
+  const raw = String(el.value == null ? '' : el.value).trim();
+  const prev = localStorage.getItem('babyWeight') || '';
+  if (raw !== prev) { localStorage.setItem('babyWeight', raw); bumpConfigTs('babyWeight'); }
+  const v = parseFloat(raw);
+  if (v > 0) recordBodyMeasurement('w', v);          // 幂等：无变化时不重复写盘/上传
+  else if (raw !== prev) syncUpload('config');
+}
+document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flushBodySaves(); });
+window.addEventListener('pagehide', flushBodySaves);
+window.addEventListener('beforeunload', flushBodySaves);
+
+// 业务"今天"的判定：每日重置时间为凌晨 1:00（0:00-0:59 期间仍算昨天）
+function effectiveNow() {
+  const d = new Date();
+  if (d.getHours() === 0) return new Date(d.getTime() - 3600000); // 0点档视为前一天 23:xx
+  return d;
+}
+function getTodayKey() {
+  const d = effectiveNow();
+  return `records_${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function getDateKey(ds) { return `records_${ds}`; }
+function checkDateReset(opts) {
+  const t = effectiveNow();
+  const today = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  const last = localStorage.getItem('lastActiveDate');
+  localStorage.setItem('lastActiveDate', today);
+  // 跨日（last 存在且与今天不同）才清推送集合；仅是 init 启动记录 today 不清
+  if (opts && opts.force) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); localStorage.removeItem('pushLastSig'); localStorage.removeItem('pushAchTs'); /* pushSuccessHistory保留(24h窗口自动过期) */ return; }
+  if (last && last !== today) { localStorage.removeItem('pushAchSet'); localStorage.removeItem('pushAchSig'); localStorage.removeItem('pushLastSig'); localStorage.removeItem('pushAchTs'); /* pushSuccessHistory保留(24h窗口自动过期) */ }
+}
+function setupMidnightReset() {
+  // 定时到下一个凌晨 1:00 触发日切重置（当日重置时间为 1:00）
+  const now = new Date();
+  let next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 1, 0, 0);
+  if (next <= now) next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 1, 0, 0);
+  setTimeout(() => { checkDateReset({force:true}); renderCards(); updateAgeInfo(); updateOverview(); setupMidnightReset(); }, next - now);
+}
+
+function handlePhotoUpload(e) {
+  const f = e.target.files[0]; if (!f) return;
+  // 大小限制：100KB，确保3年存储空间
+  if (f.size > 100 * 1024) { showToast('照片不能超过100KB，请先压缩'); e.target.value = ''; return; }
+  const r = new FileReader();
+  r.onload = ev => { localStorage.setItem('babyPhoto', ev.target.result); loadPhoto(); showToast('照片已保存'); };
+  r.readAsDataURL(f);
+}
+function loadPhoto() {
+  const userPhoto = localStorage.getItem('babyPhoto');
+  const day = document.body.classList.contains('theme-day');
+  // 没上传过照片：白天皮肤用小咕噜默认照，夜间用原默认照（夜间皮肤不变）
+  let du = userPhoto || (day ? DEFAULT_PHOTO_DAY : DEFAULT_PHOTO_DATA);
+  const img = document.getElementById('babyPhoto'), ph = document.getElementById('photoPlaceholder');
+  if (du) {
+    if (img.getAttribute('src') !== du) img.src = du;
+    img.classList.remove('hidden'); ph.classList.add('hidden');
+  } else { img.classList.add('hidden'); ph.classList.remove('hidden'); }
+}
+
+function loadHiddenActivities() {
+  try { const s = JSON.parse(localStorage.getItem('hiddenActivities')); hiddenActivities = s || [...DEFAULT_HIDDEN]; }
+  catch { hiddenActivities = [...DEFAULT_HIDDEN]; }
+}
+function saveHiddenActivities() { localStorage.setItem('hiddenActivities', JSON.stringify(hiddenActivities)); syncUpload('config'); }
+
+function getTodayRecords() {
+  try { return JSON.parse(localStorage.getItem(getTodayKey()) || '[]'); } catch { return []; }
+}
+// 读取任意日期的记录（历史页编辑/添加/删除用）
+function getRecordsByDate(ds) {
+  try {
+    const arr = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+// 统一的数据落地后处理：刷新历史列表 / 今日卡片 / 分析图表，并同步云端
+function afterRecordChange(ds) {
+  const isToday = (ds === getTodayDateStr());
+  try { syncUpload('records', ds); } catch (e) { console.warn('[同步] 上传失败:', e); }
+  // 历史弹窗若打开 → 刷新列表（编辑的正是该日期）
+  const histModal = document.getElementById('historyModal');
+  if (histModal && histModal.classList.contains('show')) loadHistory();
+  if (isToday) { try { renderCards(); } catch (e) {} try { updateOverview(); } catch (e) {} }
+  // 分析弹窗若打开 → 重绘图表（历史数据变化会影响近15天柱状图）
+  const anaModal = document.getElementById('analysisModal');
+  if (anaModal && anaModal.classList.contains('show')) { try { openAnalysis(); } catch (e) {} }
+}
+// 统一持久化今日记录：时间戳单独存 records_<日期>_ts，供云端同步做"本地 vs 云端"冲突判断
+// 注意：时间戳不能塞进 records 数组（JSON.stringify 不会序列化数组的非索引属性）
+// ds 省略时写入今天；传入日期则写入该历史日期（用于历史页编辑/添加）
+function persistRecords(records, ds) {
+  const ts = Date.now();
+  const key = ds ? getDateKey(ds) : getTodayKey();
+  const json = JSON.stringify(records);
+  localStorage.setItem(key, json);
+  localStorage.setItem(key + '_ts', String(ts));
+  // 自动本地备份（保留最近 10 份，防止同步覆盖或意外丢失）
+  try {
+    const backups = JSON.parse(localStorage.getItem('record_backups') || '[]');
+    backups.push({ date: key, ts: ts, data: records });
+    // 只保留最近 10 份备份 + 每日期保留最新一份
+    const byDate = {};
+    for (const b of backups) { if (!byDate[b.date] || byDate[b.date].ts < b.ts) byDate[b.date] = b; }
+    const kept = Object.values(byDate).sort((a, b) => b.ts - a.ts).slice(0, 10);
+    localStorage.setItem('record_backups', JSON.stringify(kept));
+  } catch (e) {}
+  return records;
+}
+// 读取某日记录的本地修改时间戳（无则为 0）
+function getLocalRecordTs(ds) {
+  const v = localStorage.getItem('records_' + ds + '_ts');
+  return v ? parseInt(v) || 0 : 0;
+}
+
+/* ==================== 合并式同步（v3.5.55） ====================
+ * 旧逻辑是「谁的时间戳新谁赢」的单向覆盖，导致：
+ *   ① 家人设备本地时间戳更晚时 → 不拉取 → 看不到别人的新记录
+ *   ② 更糟的是会把自己旧数据反向推上云端 → 覆盖丢失别人的新记录
+ * 新逻辑：记录级合并 = 并集 + 删除墓碑 + 同键取 updatedAt 较新者，双向收敛。
+ * 只会保留更多数据，不会丢数据。
+ * ============================================================ */
+// 记录唯一键：type|timestamp
+function recKey(r) {
+  if (!r || typeof r !== 'object') return '';
+  return String(r.type || '') + '|' + String(r.timestamp || '');
+}
+// 墓碑（已删除记录的 key 集合）—— 防止合并时被"复活"
+function getTombstones(ds) {
+  try {
+    const a = JSON.parse(localStorage.getItem('records_' + ds + '_del') || '[]');
+    return Array.isArray(a) ? new Set(a) : new Set();
+  } catch { return new Set(); }
+}
+function addTombstones(ds, keys) {
+  const s = getTombstones(ds);
+  (keys || []).forEach(k => { if (k && k !== '|') s.add(k); });
+  const arr = [...s].slice(-300); // 上限保护，避免无限增长
+  try { localStorage.setItem('records_' + ds + '_del', JSON.stringify(arr)); } catch {}
+  return new Set(arr);
+}
+function tombstoneKey(ds) { return 'records_' + ds + '_del'; }
+// 合并两条记录列表：并集，剔除墓碑，同键取 updatedAt 较新者
+function mergeRecordLists(cloudArr, localArr, tombs) {
+  const map = new Map();
+  const put = (r) => {
+    if (!r || typeof r !== 'object') return;
+    const k = recKey(r);
+    if (!k || k === '|') return;
+    if (tombs && tombs.has(k)) return;              // 已删除 → 不复活
+    const prev = map.get(k);
+    if (!prev) { map.set(k, r); return; }
+    const a = Number(prev.updatedAt) || 0;
+    const b = Number(r.updatedAt) || 0;
+    if (b >= a) map.set(k, r);                      // 取较新版本
+  };
+  (Array.isArray(cloudArr) ? cloudArr : []).forEach(put);
+  (Array.isArray(localArr) ? localArr : []).forEach(put);
+  return [...map.values()];
+}
+
+function getMilkInterval() {
+  const h = new Date().getHours();
+  return (h >= 5 && h < 19) ? 3 : 5;
+}
+
+function getSupplementSuggestion() {
+  const allKeys = [];
+  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('records_')) allKeys.push(k); }
+  allKeys.sort().reverse();
+  for (const k of allKeys) {
+    let recs = []; try { recs = JSON.parse(localStorage.getItem(k) || '[]'); } catch { continue; }
+    if (!Array.isArray(recs)) continue; // 防止脏数据导致 "recs is not iterable"
+    for (const r of recs) {
+      if (r.type === 'supplement' && r.supplementTypes) {
+        if (r.supplementTypes.includes('AD') && !r.supplementTypes.includes('D3')) return 'D3';
+        if (r.supplementTypes.includes('D3') && !r.supplementTypes.includes('AD')) return 'AD';
+        return 'AD';
+      }
+    }
+  }
+  return 'AD';
+}
+
+/* ==================== 成就计算与订阅推送(PushPlus) ==================== */
+function computeAchievements(records) {
+  const achievements = new Set();
+  records.forEach(r => {
+    if (r.note && r.note.trim()) achievements.add(r.note.trim());
+  });
+  return [...achievements];
+}
+function isSubscribeMode() { return true; } // 订阅推送始终开启（只要有配置就自动推送）
+function savePushTopic() {
+  const inp = document.getElementById('pushTopicInput');
+  if (!inp) return;
+  const topic = inp.value.trim();
+  // 掩码/空值 → 恢复默认群组编码
+  const untouched = (!topic) || (topic === XF_MASK);
+  if (untouched) { localStorage.removeItem('pushplus_topic'); showToast('已恢复默认群组编码'); loadPushTopicUI(); return; }
+  localStorage.setItem('pushplus_topic', topic);
+  localStorage.removeItem('pushAchSig');
+  localStorage.removeItem('pushAchSet');
+  localStorage.removeItem('pushLastSig');   // 注意：不清除 pushSuccessHistory / pushLastAchievements（历史兜底防线）
+  localStorage.removeItem('pushAchTs');
+  loadPushTopicUI();
+  showToast('群组编码已保存');
+}
+// ---------- 推送：创建者 token 加密显示与保存（样式同讯飞） ----------
+function savePushToken() {
+  const inp = document.getElementById('pushTokenInput');
+  if (!inp) return;
+  const val = inp.value.trim();
+  const untouched = (!val) || (val === XF_MASK);
+  if (untouched) { localStorage.removeItem('pushplus_token'); showToast('已恢复默认推送 token'); loadPushTokenUI(); return; }
+  if (val.length < 8) { showToast('token 长度过短，请检查'); return; }
+  localStorage.setItem('pushplus_token', val);
+  localStorage.removeItem('pushAchTs');
+  loadPushTokenUI();
+  showToast('推送 token 已保存');
+}
+function loadPushTokenUI() {
+  const el = document.getElementById('pushTokenInput');
+  const see = document.getElementById('pushTokenSee');
+  if (!el) return;
+  if (see) see.checked = false;
+  el.type = 'password';
+  const hasCustom = !!localStorage.getItem('pushplus_token');
+  const hasDefault = !!_DEFAULT_PUSHTOKEN;
+  el.value = (hasCustom || hasDefault) ? XF_MASK : '';
+  bindPushTokenMaskEvents();
+}
+function togglePushTokenSee() {
+  const show = document.getElementById('pushTokenSee').checked;
+  const el = document.getElementById('pushTokenInput');
+  el.type = show ? 'text' : 'password';
+}
+function bindPushTokenMaskEvents() {
+  const el = document.getElementById('pushTokenInput');
+  if (!el || el._maskBound) return; el._maskBound = true;
+  el.addEventListener('focus', function() { if (this.value === XF_MASK) this.value = ''; });
+  el.addEventListener('blur', function() { if (!this.value) loadPushTokenUI(); });
+}
+// ---------- 推送：群组编码加密显示与保存（样式同 token） ----------
+function loadPushTopicUI() {
+  const el = document.getElementById('pushTopicInput');
+  const see = document.getElementById('pushTopicSee');
+  if (!el) return;
+  if (see) see.checked = false;
+  el.type = 'password';
+  const hasCustom = !!localStorage.getItem('pushplus_topic');
+  const hasDefault = !!_DEFAULT_PUSHTOPIC;
+  el.value = (hasCustom || hasDefault) ? XF_MASK : '';
+  bindPushTopicMaskEvents();
+}
+function togglePushTopicSee() {
+  const show = document.getElementById('pushTopicSee').checked;
+  const el = document.getElementById('pushTopicInput');
+  el.type = show ? 'text' : 'password';
+}
+function bindPushTopicMaskEvents() {
+  const el = document.getElementById('pushTopicInput');
+  if (!el || el._maskBound) return; el._maskBound = true;
+  el.addEventListener('focus', function() { if (this.value === XF_MASK) this.value = ''; });
+  el.addEventListener('blur', function() { if (!this.value) loadPushTopicUI(); });
+}
+async function notifyPushplus(title, content) {
+  // token 优先从 localStorage 读取（用户自定义），否则使用应用默认值
+  const token = localStorage.getItem('pushplus_token') || _DEFAULT_PUSHTOKEN;
+  if (!token) { console.warn('PushPlus Token未配置，无法推送'); return false; }
+  try {
+    const payload = { token: token, title: title, content: content, template: 'html' };
+    const topic = localStorage.getItem('pushplus_topic') || _DEFAULT_PUSHTOPIC;
+    payload.topic = topic; // 默认按群组编码一对多推送
+    const res = await fetch('https://www.pushplus.plus/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    return !!(data && data.code === 200);
+  } catch (e) { console.warn('PushPlus推送失败:', e); return false; }
+}
+// ========== 推送：基于成就内容变化的智能推送 ==========
+// 核心原则：成就集合变了才推，内容相同不推
+// 定时器(updateOverview(/*skipPush*/true)) 不触发推送
+//
+// 架构：脏位标记 + 延迟合并调度
+//   多个 updateOverview() 调用（添加/编辑/删除/设置变更等）只设置 _pushDirty 标记，
+//   由 3 秒后的统一调度器执行一次 checkAchievementPush。
+//   这从根本上消除"一次用户操作触发 N 次推送检查"的并发窗口。
+//
+// 五层防护（全部基于 localStorage，跨 PWA 实例/后台恢复/设置变更安全）：
+//   Layer1: pushLastSig       — 签名去重（快速路径，内容完全相同→不推）
+//   Layer2: pushSending       — 发送中锁（localStorage，60s超时自愈，防并发）
+//   Layer3: pushSuccessHistory[] — 推送历史（最近50条{ts,sig}，永不被动清除，
+//                                  即使Layer1的签名被savePushTopic等意外清除，
+//                                  Layer3仍能识别"今天已推过此内容"）
+const PUSH_HIST_KEY = 'pushSuccessHistory'; // 历史记录key（不被设置变更清除）
+const PUSH_SENDING_KEY = 'pushSending';     // 发送中标记
+const PUSH_SIG_KEY = 'pushLastSig';         // 上次推送签名
+const PUSH_ACH_KEY = 'pushLastAchievements'; // 上次推送的完整成就列表（用于计算新增项）
+const PUSH_MAX_HIST = 100;                  // 历史最多保留条数
+const PUSH_SENDING_TIMEOUT = 60000;         // 发送中锁超时 60s
+const PUSH_NEW_SIG_KEY = 'pushLastNewSig';  // 上次推送的"新增成就"签名（同内容拦截用，不被设置变更清除）
+const PUSH_TS_KEY = 'pushLastPushTs';       // 上次推送时间戳
+const PUSH_SAME_WINDOW = 2 * 60 * 1000;     // 同一批新增成就 2分钟内不重复推(辅助层)
+const PUSH_SCHED_DELAY = 3000;              // 脏位调度延迟:用户操作后等3秒再统一检查推送(合并多次调用)
+const PUSH_SENDER_OFF_KEY = 'pushSenderDisabled'; // '1' = 本设备不负责推送（多设备去重开关）
+const PUSH_LEADER_KEY = 'pushLeader';       // 同浏览器多标签页:推送领导者 {id,ts}
+const PUSH_LEADER_TTL = 15000;              // 领导者心跳有效期 15s（超时其他标签页可抢占）
+const PUSH_LEADER_HEARTBEAT = 5000;         // 心跳间隔 5s
+const PUSH_LEADER_MAX_RETRY = 12;           // 非领导者最多重试 12 次(约 60s)后再放弃，避免漏推
+const PUSH_DEDUP_KEY = '_pushdedup';        // family_config 中的跨设备推送去重键(云端共享)
+const PUSH_DEDUP_MAX_AGE = 12 * 60 * 60 * 1000; // 同日同内容去重有效期 12h
+
+// ---- 跨设备云端去重（走已配置的 Supabase 家庭同步通道）----
+// 多台设备共用同一群组编码时，每台设备都会各推一遍同样内容。
+// 利用 family_config 这张各设备共享的 KV 表记录"今天已经推过的内容指纹"，
+// 实现跨设备自动去重 —— 用户无需手动关闭任何设备的推送开关。
+// 注意：只存内容指纹(哈希)与时间戳，不存明文，不泄露宝宝记录内容。
+function _pushHash(s) {                     // djb2 稳定哈希
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+function _pushContentSig(achArr) {
+  return getTodayDateStr() + '#' + _pushHash([...achArr].sort().join('|'));
+}
+// 返回 true = 其他设备已推送过相同内容，本设备应跳过
+async function _cloudPushDup(sig) {
+  try {
+    if (typeof isSyncReady !== 'function' || !isSyncReady()) return false;
+    const fid = getFamilyId();
+    if (!fid) return false;
+    const rows = await supabaseGet(`family_config?family_id=eq.${fid}&config_key=eq.${PUSH_DEDUP_KEY}&select=encrypted_data,last_modified`);
+    if (!Array.isArray(rows) || rows.length === 0) return false;
+    let rec = null;
+    try { rec = JSON.parse(rows[0].encrypted_data || 'null'); } catch (e) { return false; }
+    if (!rec || rec.sig !== sig) return false;
+    if (Date.now() - (rec.ts || 0) > PUSH_DEDUP_MAX_AGE) return false;
+    return true;
+  } catch (e) { return false; }             // 云端不可用 → 不拦截，宁可重推也不漏推
+}
+// 推送成功后写入云端指纹，供其他设备去重
+async function _cloudPushMark(sig) {
+  try {
+    if (typeof isSyncReady !== 'function' || !isSyncReady()) return;
+    const fid = getFamilyId();
+    if (!fid) return;
+    await supabaseUpsert('family_config', {
+      family_id: fid, config_key: PUSH_DEDUP_KEY,
+      encrypted_data: JSON.stringify({ sig: sig, ts: Date.now(), dev: getDeviceName() }),
+      iv: '', last_modified: Date.now()
+    });
+  } catch (e) { console.warn('[推送] 云端去重标记失败:', e); }
+}
+
+// ---- 设备级推送开关（跨设备去重）----
+// 多台设备共用同一群组编码时，每台都会各自推送一遍 → 重复消息。
+// 由用户指定唯一一台"负责推送"的设备；其他设备只记录、不推送。
+function isPushSender() { return localStorage.getItem(PUSH_SENDER_OFF_KEY) !== '1'; }
+function togglePushSender() {
+  const el = document.getElementById('pushSenderToggle');
+  if (!el) return;
+  if (el.checked) { localStorage.removeItem(PUSH_SENDER_OFF_KEY); showToast('✅ 本设备将负责推送'); }
+  else { localStorage.setItem(PUSH_SENDER_OFF_KEY, '1'); showToast('已关闭本设备推送，由其他设备负责'); }
+}
+function loadPushSenderUI() {
+  const el = document.getElementById('pushSenderToggle');
+  if (el) el.checked = isPushSender();
+}
+
+// ---- 标签页级领导者选举（同浏览器多标签页去重）----
+// localStorage 在同一浏览器的多个标签页间共享，用「心跳 + TTL 抢占」选出唯一推送者。
+const _PAGE_ID = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+function _pushHeartbeat() {
+  try {
+    let leader = null;
+    try { leader = JSON.parse(localStorage.getItem(PUSH_LEADER_KEY) || 'null'); } catch {}
+    const now = Date.now();
+    // 无领导者 / 领导者已过期 / 自己就是领导者 → 续期
+    if (!leader || !leader.id || (now - leader.ts > PUSH_LEADER_TTL) || leader.id === _PAGE_ID) {
+      localStorage.setItem(PUSH_LEADER_KEY, JSON.stringify({ id: _PAGE_ID, ts: now }));
+    }
+  } catch (e) {}
+}
+function _isPushLeader() {
+  try {
+    const raw = localStorage.getItem(PUSH_LEADER_KEY);
+    if (!raw) return true;                  // 无记录：默认自己是领导者，避免漏推
+    let leader = null;
+    try { leader = JSON.parse(raw); } catch { return true; }
+    if (!leader || !leader.id) return true;
+    if (Date.now() - leader.ts > PUSH_LEADER_TTL) return true; // 领导者已失效 → 可抢占
+    return leader.id === _PAGE_ID;
+  } catch (e) { return true; }
+}
+_pushHeartbeat();
+setInterval(_pushHeartbeat, PUSH_LEADER_HEARTBEAT);
+
+// ---- 脏位标记 + 延迟合并调度器 ----
+// 解决根因：一次用户操作（如添加成就）会触发 updateOverview() 多次（添加后+渲染后+关弹窗后...），
+// 每次都独立走推送检查，产生并发窗口。改为：只标记脏，由单一调度器统一执行。
+let _pushDirty = false;                     // 脏位：有未处理的推送检查
+let _pushTimer = null;                      // 调度器 timer ID
+let _pushRetry = 0;                         // 因"非领导者"而重试的次数
+
+function _markPushDirty() {
+  _pushDirty = true;
+  if (_pushTimer) return;                   // 已有调度器在等待
+  _pushTimer = setTimeout(async () => {
+    _pushTimer = null;
+    if (!_pushDirty) return;
+    // 层0：本设备被用户关闭推送 → 直接丢弃，不再重试
+    if (!isPushSender()) { _pushDirty = false; _pushRetry = 0; return; }
+    // 层1：同浏览器其他标签页是推送领导者 → 稍后重试，避免漏推
+    if (!_isPushLeader()) {
+      if (_pushRetry < PUSH_LEADER_MAX_RETRY) { _pushRetry++; _markPushDirty(); return; }
+      _pushDirty = false; _pushRetry = 0; return;   // 重试上限，放弃本次
+    }
+    _pushDirty = false; _pushRetry = 0;
+    try {
+      const records = getTodayRecords();
+      let totalMilk = 0;
+      records.forEach(r => { if (r.type === 'milk' && r.milkAmount) totalMilk += r.milkAmount; });
+      const achArr = computeAchievements(records);
+      if (achArr.length === 0) return;
+      // 层2：跨设备云端去重 —— 同一天同一组成就，任一设备已推过则其他设备跳过
+      if (await _cloudPushDup(_pushContentSig(achArr))) {
+        console.log('[推送] 云端去重命中:其他设备已推送过相同内容,本设备跳过');
+        return;
+      }
+      checkAchievementPush(achArr, totalMilk);
+    } catch (e) { console.warn('[推送] 调度器异常:', e); }
+  }, PUSH_SCHED_DELAY);
+}
+
+function _isRecentlyPushed(sig) {
+  // Layer3: 检查历史记录中是否有相同签名（24小时内）
+  try {
+    const hist = JSON.parse(localStorage.getItem(PUSH_HIST_KEY) || '[]');
+    if (!Array.isArray(hist)) return false;
+    const oneDayAgo = Date.now() - 86400000;
+    return hist.some(h => h.sig === sig && h.ts > oneDayAgo);
+  } catch { return false; }
+}
+function _recordPushHistory(sig) {
+  try {
+    let hist = JSON.parse(localStorage.getItem(PUSH_HIST_KEY) || '[]');
+    if (!Array.isArray(hist)) hist = [];
+    hist.unshift({ ts: Date.now(), sig: sig });
+    if (hist.length > PUSH_MAX_HIST) hist.length = PUSH_MAX_HIST;
+    localStorage.setItem(PUSH_HIST_KEY, JSON.stringify(hist));
+  } catch {}
+}
+
+function checkAchievementPush(achArr, totalMilk) {
+  try {
+    if (!isSubscribeMode()) return;
+    const token = localStorage.getItem('pushplus_token') || _DEFAULT_PUSHTOKEN;
+    if (!token || !achArr || achArr.length === 0) return;
+
+    const currentSig = [...achArr].sort().join('|');
+
+    // Layer1: 签名去重（快速路径）
+    if (currentSig === (localStorage.getItem(PUSH_SIG_KEY) || '')) return;
+
+    // Layer3: 历史记录兜底（防止 pushLastSig 被设置变更等意外清除后的重复）
+    if (_isRecentlyPushed(currentSig)) {
+      // 历史中有同签名 → 恢复 pushLastSig（自我修复），然后跳过
+      localStorage.setItem(PUSH_SIG_KEY, currentSig);
+      // 同步成就列表，避免下次 newAchievements 计算错误
+      try { localStorage.setItem(PUSH_ACH_KEY, JSON.stringify(achArr)); } catch {}
+      console.log('[推送] 历史去重命中, sig=', currentSig);
+      return;
+    }
+
+    // Layer2: 发送中锁（localStorage，跨实例安全）
+    const sending = localStorage.getItem(PUSH_SENDING_KEY);
+    if (sending) {
+      const sendingTs = parseInt(sending, 10);
+      if (!isNaN(sendingTs) && (Date.now() - sendingTs < PUSH_SENDING_TIMEOUT)) {
+        console.log('[推送] 发送中,跳过(剩余', Math.ceil((PUSH_SENDING_TIMEOUT - (Date.now() - sendingTs))/1000), 's)');
+        return;
+      }
+      // 发送中锁已超时（上次可能异常中断），清除后继续
+      localStorage.removeItem(PUSH_SENDING_KEY);
+    }
+
+    // ===== 计算本次新增的成就（在锁定状态前完成）=====
+    let lastAch = [];
+    try { lastAch = JSON.parse(localStorage.getItem(PUSH_ACH_KEY) || '[]'); } catch {}
+    if (!Array.isArray(lastAch)) lastAch = [];
+    const newAchievements = achArr.filter(a => !lastAch.includes(a));
+    if (newAchievements.length === 0) {
+      // 签名变了但没有真正的"新"成就（极少见，如成就被删又加回同样的）
+      // 也记录签名防下次误判，但不推送
+      localStorage.setItem(PUSH_SIG_KEY, currentSig);
+      _recordPushHistory(currentSig);
+      try { localStorage.setItem(PUSH_ACH_KEY, JSON.stringify(achArr)); } catch {}
+      console.log('[推送] 签名变化但无新增成就，不推送');
+      return;
+    }
+
+    // ===== Layer4: 同一批"新增成就"短期内已推过 → 坚决不推 =====
+    // 这是间隔 1 分钟重复推送的终极防线：无论签名为何变化、状态是否被意外清除，
+    // 只要本次要推的新增内容与上次推送的新增内容完全一致，30 分钟内不再推第二次。
+    // 新增内容真的变了（如又加了一条新成就）则照常推送，不会漏推。
+    const newSig = [...newAchievements].sort().join('|');
+    const lastPushTs = parseInt(localStorage.getItem(PUSH_TS_KEY) || '0', 10);
+    if (newSig && newSig === (localStorage.getItem(PUSH_NEW_SIG_KEY) || '')
+        && !isNaN(lastPushTs) && (Date.now() - lastPushTs < PUSH_SAME_WINDOW)) {
+      // 同步全量状态，避免后续反复进入计算
+      localStorage.setItem(PUSH_SIG_KEY, currentSig);
+      _recordPushHistory(currentSig);
+      try { localStorage.setItem(PUSH_ACH_KEY, JSON.stringify(achArr)); } catch {}
+      console.log('[推送] 同内容30分钟内已推过,跳过 newSig=', newSig);
+      return;
+    }
+
+    // 同步锁定状态：在调用 doPush 之前立即写入签名+成就列表，
+    // 防止推送期间再次触发时把同一条成就当"新增"重复推。
+    localStorage.setItem(PUSH_SIG_KEY, currentSig);
+    _recordPushHistory(currentSig);
+    try { localStorage.setItem(PUSH_ACH_KEY, JSON.stringify(achArr)); } catch {}
+    localStorage.setItem(PUSH_NEW_SIG_KEY, newSig);
+    localStorage.setItem(PUSH_TS_KEY, String(Date.now()));
+
+    doPush(achArr, totalMilk, newAchievements);
+  } catch (e) { console.warn('推送检查失败:', e); }
+}
+
+function doPush(achArr, totalMilk, newAchievements) {
+  // newAchievements 已由 checkAchievementPush 计算并锁定，无需 doPush 内部再算
+  // 保留为参数传入以保证一致性
+
+  // 标记发送中（持久化到 localStorage）
+  localStorage.setItem(PUSH_SENDING_KEY, String(Date.now()));
+
+  (async () => {
+    try {
+      const ds = getTodayDateStr();
+
+      // 通知标题 = 本次新增的成就（v3.5.64：推送只呈现"本次更新"的内容）
+      // 超过 3 条时标题只放前 3 条，但补上"等N条"让家人知道还有更多，完整内容看正文
+      const titleSrc = newAchievements.length > 0 ? newAchievements : achArr;
+      const displayTitle = titleSrc.length > 3
+        ? titleSrc.slice(0, 3).join(' · ') + ` 等${titleSrc.length}条`
+        : titleSrc.join(' · ');
+
+      // 详情内容 = 今日全部成就，其中本次新增的高亮（v3.5.66 恢复）
+      // 标题段保持"本次新增"不变：通知栏只给结论，点开才看全天完整清单
+      const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const newSet = new Set(newAchievements);
+      const items = achArr.map(a => newSet.has(a)
+        ? `<li><span style="background:#ffecb3;color:#c0392b;font-weight:bold;padding:1px 4px;border-radius:3px;">${esc(a)}</span></li>`
+        : `<li>${esc(a)}</li>`
+      ).join('');
+      // 当天统计
+      let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
+      if (!Array.isArray(recs)) recs = [];
+      let poopCount = 0, outdoorMin = 0, sleepMin = 0;
+      recs.forEach(r => {
+        if (r.type === 'poop') poopCount++;
+        else if (r.type === 'outdoor' && r.duration) outdoorMin += r.duration;
+        else if (r.type === 'sleep' && r.duration) sleepMin += r.duration;
+      });
+      const fmtDur = min => { min = Math.round(min); const h = Math.floor(min / 60), m = min % 60; if (h > 0 && m > 0) return `${h}小时${m}分钟`; return h > 0 ? `${h}小时` : `${m}分钟`; };
+      // 区块标题按是否有新增区分：有新增时才写"本次新增"高亮说明
+      const achLabel = newAchievements.length > 0 ? '🏆 今日成就（加亮为本次新增）:' : '🏆 今日成就:';
+      const achBlock = items ? `<p><b>${achLabel}</b></p><ul>${items}</ul>` : '';
+      const content = `<h3>小咕噜的今日成就 ${ds}</h3>` + achBlock +
+        `<p><b>🍼 水+奶量:</b> ${Math.round(totalMilk * 1.12)} ml</p>` +
+        `<p><b>💩 大便次数:</b> ${poopCount} 次</p>` +
+        `<p><b>☀️ 户外活动:</b> ${fmtDur(outdoorMin)}</p>` +
+        `<p><b>😴 睡眠时长:</b> ${fmtDur(sleepMin)}</p>`;
+
+      const ok = await notifyPushplus(displayTitle, content);
+
+      // 推送成功后写入云端内容指纹，供家庭内其他设备去重（跨设备重复推送的核心防线）
+      if (ok) _cloudPushMark(_pushContentSig(achArr));
+
+      // 清除发送中锁
+      localStorage.removeItem(PUSH_SENDING_KEY);
+
+      // 注意：签名/历史/成就列表已在 checkAchievementPush 同步锁定，
+      // doPush 只需释放发送中锁即可。无须再次写入（幂等）。
+      console.log('[推送] 完成, ok=', ok, ' newAch=', newAchievements.length, '条');
+    } catch (e) {
+      console.warn('[推送] 异常:', e);
+      // 异常也要清除发送中锁，避免永久卡死
+      localStorage.removeItem(PUSH_SENDING_KEY);
+    }
+  })();
+}
+
+/* ==================== 信息总览 ==================== */
+function getLastMilkRecord() {
+  // 跨天查找最近的喝奶记录，从今天往前找最多7天
+  // 修复：同一天内按 milkTime 取最晚，而不是数组末尾（后者可能是后补的早期记录）
+  const today = new Date();
+  for (let d = 0; d <= 7; d++) {
+    const dt = new Date(today);
+    dt.setDate(dt.getDate() - d);
+    const ds = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+    let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch { continue; }
+    if (!Array.isArray(recs)) continue;
+    let best = null, bestMin = -1;
+    for (const r of recs) {
+      if (r.type === 'milk' && r.milkTime) {
+        const [hh, mm] = (r.milkTime || r.recTime || '00:00').split(':').map(Number);
+        const minutes = hh * 60 + mm;
+        if (minutes > bestMin) { bestMin = minutes; best = r; }
+      }
+    }
+    if (best) return best;
+  }
+  return null;
+}
+
+function updateOverview(skipPush) {
+  const records = getTodayRecords();
+  const bar = document.getElementById('overviewBar');
+
+  let totalMilk = 0;
+  records.forEach(r => { if (r.type === 'milk' && r.milkAmount) totalMilk += r.milkAmount; });
+
+  const lastMilkRec = getLastMilkRecord();
+  let html = '<div class="overview-row">';
+  if (lastMilkRec) {
+    const [h, m] = (lastMilkRec.milkTime || lastMilkRec.recTime || '00:00').split(':').map(Number);
+    const intv = getMilkInterval();
+    const ld = lastMilkRec.timestamp ? new Date(lastMilkRec.timestamp) : new Date();
+    ld.setHours(h, m, 0, 0);
+    const nd = new Date(ld.getTime() + intv * 3600000);
+    const nh = String(nd.getHours()).padStart(2, '0'), nm = String(nd.getMinutes()).padStart(2, '0');
+    html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶:</span><span class="ov-time">${nh}:${nm}</span></div>`;
+  } else {
+    html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶:</span><span class="ov-value">暂无记录</span></div>`;
+  }
+  html += `<div class="overview-item"><span class="ov-label">水+奶量:</span><span class="ov-value">${Math.round(totalMilk * 1.12)} ml</span></div>`;
+  html += '</div>';
+
+  const achArr = computeAchievements(records);
+  if (achArr.length > 0) {
+    html += `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> ${achArr.join(' | ')}</span></div>`;
+  } else {
+    html += `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> 无</span></div>`;
+  }
+
+  bar.innerHTML = html;
+  // 推送检查改为脏位标记，由统一调度器延迟合并执行
+  // 这消除了"一次操作触发多次 updateOverview → 多次独立推送检查"的并发根因
+  if (!skipPush && achArr.length > 0) _markPushDirty();
+}
+
+let milkRemindShown = false; // 页面级变量：本次页面生命周期内只弹一次，刷新后自然重置
+function checkMilkReminder(attempt) {
+  if (milkRemindShown) return;
+  // 若有其他 toast 正在显示（如操作反馈），等待其结束后再弹，避免覆盖（最多等 5 秒）
+  const toastEl = document.getElementById('toast');
+  if (toastEl && toastEl.classList.contains('show') && (attempt || 0) < 10) {
+    setTimeout(() => checkMilkReminder((attempt || 0) + 1), 500);
+    return;
+  }
+  const lastMilkRec = getLastMilkRecord();
+  if (!lastMilkRec) return;
+  const [h, m] = (lastMilkRec.milkTime || lastMilkRec.recTime || '00:00').split(':').map(Number);
+  const intv = getMilkInterval();
+  const ld = lastMilkRec.timestamp ? new Date(lastMilkRec.timestamp) : new Date();
+  ld.setHours(h, m, 0, 0);
+  const nd = new Date(ld.getTime() + intv * 3600000);
+  const nh = String(nd.getHours()).padStart(2, '0'), nm = String(nd.getMinutes()).padStart(2, '0');
+  const diff = nd - new Date();
+  milkRemindShown = true;
+  if (diff > 0) {
+    const dm = Math.floor(diff / 60000);
+    showToast(`⏰ 距下次喝奶（${nh}:${nm}）还有 ${Math.floor(dm/60)}h ${dm%60}min`, 3000);
+  } else {
+    showToast(`⏰ 下次喝奶时间到了（${nh}:${nm}）！`, 3000);
+  }
+}
+
+/* ==================== 分类侧边栏 ==================== */
+function renderCategoryBar() {
+  const bar = document.getElementById('categoryBar');
+  let html = `<div class="cat-tag${currentCategory==='all'?' active':''}" onclick="setCategory('all')"><span class="cat-icon">&#127968;</span><span class="cat-label">全部</span></div>`;
+  CATEGORIES.forEach(c => { html += `<div class="cat-tag${currentCategory===c.id?' active':''}" onclick="setCategory('${c.id}')"><span class="cat-icon">${c.icon}</span><span class="cat-label">${c.name}</span></div>`; });
+  bar.innerHTML = html;
+}
+function setCategory(cid) { currentCategory = cid; renderCategoryBar(); renderCards(); }
+
+/* ==================== 渲染卡片 ==================== */
+function renderCards(newestIds) {
+  newestIds = newestIds || [];
+  const grid = document.getElementById('cardsGrid');
+  grid.innerHTML = '';
+  const records = getTodayRecords();
+
+  ACTIVITIES.forEach(act => {
+    if (hiddenActivities.includes(act.id)) return;
+    if (currentCategory !== 'all' && act.category !== currentCategory) return;
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.id = act.id;
+    if (newestIds.includes(act.id)) card.classList.add('highlight');
+
+    const actRecords = records.filter(r => r.type === act.id).reverse();
+    const count = actRecords.length;
+
+    let bodyHtml = '';
+    if (actRecords.length === 0) {
+      bodyHtml = '<div class="card-empty">今日暂无记录</div>';
+    } else {
+      bodyHtml = '<div class="card-records">';
+      actRecords.forEach((r, i) => {
+        const isNewest = i === 0 && newestIds.includes(act.id);
+        const time = r.recTime || r.time;
+        const readOnly = isReadOnlyMode();
+        const editDeleteHtml = readOnly ? '' : `<span class="rec-edit" onclick="event.stopPropagation();openEditRecord('${r.type}',${r.timestamp})"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><span class="rec-delete" onclick="event.stopPropagation();deleteRecord('${r.type}',${r.timestamp})"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6"/><path d="M14 10v6"/></svg></span>`;
+        bodyHtml += `<div class="record-tag${isNewest ? ' newest' : ''}" data-timestamp="${r.timestamp}" data-type="${r.type}">
+          <div class="rec-left"><span class="rec-time">${time}</span><span class="rec-detail">${formatRecordBrief(r)}</span></div>
+          ${editDeleteHtml}
+        </div>`;
+      });
+      bodyHtml += '</div>';
+    }
+
+    card.innerHTML = `<div class="card-header"><div class="card-name"><span class="icon">${act.icon}</span>${act.name}</div>${count>0?`<div class="card-count">${count}次</div>`:''}</div>${bodyHtml}`;
+    grid.appendChild(card);
+  });
+}
+
+function formatRecordBrief(r) {
+  let base = '';
+  if (r.type === 'milk') { if (r.milkAmount > 0) base = r.milkAmount + 'ml'; }
+  else if (r.type === 'poop') { base = r.poopStatus || ''; }
+  else if (r.type === 'supplement') { base = (r.supplementTypes||[]).join('/'); if (r.supplementAmount > 0) base += ' ' + r.supplementAmount + '粒'; }
+  else if (r.type === 'solidFood') { base = (r.solidFoods||[]).join('、'); if (r.solidFoodAmount > 0) base += ' ' + r.solidFoodAmount + 'g'; if (r.afterMeal) base += ' · 饭后' + r.afterMeal; }
+  else if (r.type === 'vaccine') { base = (r.vaccineTypes||[]).join('/'); if (r.vaccineDose > 0) base += ' 第' + r.vaccineDose + '剂'; }
+  else if (r.type === 'listenStory') { base = (r.storyLangs||[]).join('/'); }
+  else if (r.type === 'grossMotor') { base = (r.grossMotorItems||[]).join(', '); }
+  else if (r.type === 'fineMotor') { base = (r.fineMotorItems||[]).join(', '); }
+  else if (r.type === 'sleep') {
+    if (r.duration && r.duration > 0) {
+      const h = Math.floor(r.duration / 60); const m = Math.round(r.duration % 60);
+      let s = ''; if (h > 0) s += h + 'h'; if (m > 0) s += (s ? ' ' : '') + m + 'min';
+      base = s;
+    }
+  }
+  else if (r.type === 'drinkWater') { base = '已喝水'; }
+  else if (r.duration !== undefined && r.duration > 0) { base = r.duration + '分钟'; if (r.level) base += ' · 屁股状态:' + r.level; }
+  else if (r.level) { base = '屁股状态:' + r.level; }
+  else if (r.shampoo && r.shampoo !== '无') { base = '使用沐浴露:' + r.shampoo; }
+  else if (r.temperature) { base = r.temperature + '℃ <span class="' + (r.tempStatus === 'high' ? 'temp-high' : 'temp-normal') + '">' + (r.tempStatus === 'high' ? '⚠️' : '●') + '</span>'; }
+  // 所有类型统一追加备注（多行以<br>显示）
+  const note = (r.note || '').trim();
+  if (note) {
+    const noteHtml = note.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    return base ? base + ' · ' + noteHtml : noteHtml;
+  }
+  return base || '已记录';
+}
+
+function deleteRecord(type, timestamp, ds) {
+  const target = ds || getTodayDateStr();
+  const label = target === getTodayDateStr() ? '这条记录' : `${target} 的这条记录`;
+  if (!confirm(`删除${label}？`)) return;
+  let records = getRecordsByDate(target);
+  // 先登记墓碑，再删除：否则合并同步时这条记录会从家人设备"复活"
+  const doomed = records.filter(r => r.type === type && r.timestamp === timestamp);
+  if (doomed.length) addTombstones(target, doomed.map(recKey));
+  records = records.filter(r => !(r.type === type && r.timestamp === timestamp));
+  persistRecords(records, target);
+  afterRecordChange(target);
+  showToast('已删除');
+}
+
+/* ==================== 编辑记录 ==================== */
+let _editingType = null, _editingTimestamp = null, _editingDateStr = null;
+
+// ds 省略为今天；历史页传入所选日期，编辑后写回该日期
+function openEditRecord(type, timestamp, ds) {
+  const target = ds || getTodayDateStr();
+  const records = getRecordsByDate(target);
+  const rec = records.find(r => r.type === type && r.timestamp === timestamp);
+  if (!rec) { showToast('记录不存在'); return; }
+  _editingType = type; _editingTimestamp = timestamp; _editingDateStr = target;
+  const act = ACTIVITIES.find(a => a.id === type);
+  const container = document.getElementById('editFormContent');
+  let editPendingSf = null;   // v3.5.74 辅食下拉需在 innerHTML 落盘后回填
+
+  const titleEl = document.getElementById('editFormTitle');
+  if (titleEl) titleEl.textContent = target === getTodayDateStr()
+    ? '✏️ 编辑记录'
+    : `✏️ 编辑记录 · ${target}`;
+  let html = `<div style="margin-bottom:12px;font-size:15px;color:#dfe6e9;">${act.icon} ${act.name}</div>`;
+  html += `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group">`;
+  const [hh, mm] = (rec.recTime || rec.time || '00:00').split(':').map(Number);
+  html += `<input type="number" id="edt_h" min="0" max="23" value="${String(hh).padStart(2,'0')}"><span>:</span><input type="number" id="edt_m" min="0" max="59" value="${String(mm).padStart(2,'0')}">`;
+  html += `</div></div>`;
+
+  if (act.type === 'milk') {
+    html += `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">奶量:</label><input type="number" id="edt_val" value="${rec.milkAmount||120}"><span class="unit">ml</span></div>`;
+  } else if (act.type === 'sleep') {
+    const dur = rec.duration || 0; const dh = Math.floor(dur / 60); const dm = Math.round(dur % 60);
+    html += `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">时长:</label><input type="number" min="0" id="edt_dur_h" value="${dh}" style="width:50px;"><span class="unit">h</span><input type="number" min="0" max="59" id="edt_dur_m" value="${dm}" style="width:50px;margin-left:8px;"><span class="unit">min</span></div>`;
+  } else if (act.type === 'poop') {
+    let po = ''; POOP_STATUS.forEach(ps => { po += `<label><input type="radio" name="edt_poop" value="${ps.value}" ${(rec.poopStatus||'正常')===ps.value?'checked':''}> <span class="poop-icon ${ps.cls}">${ps.icon}</span>${ps.label}</label>`; });
+    html += `<div class="input-row radio-group">${po}</div>`;
+  } else if (act.type === 'supplement') {
+    const sel = rec.supplementTypes || ['AD'];
+    html += `<div class="input-row checkbox-group"><label><input type="checkbox" name="edt_sup" value="AD" ${sel.includes('AD')?'checked':''}> AD</label><label><input type="checkbox" name="edt_sup" value="D3" ${sel.includes('D3')?'checked':''}> D3</label></div>`;
+    html += `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">用量:</label><input type="number" id="edt_val" value="${rec.supplementAmount||1}"><span class="unit">粒</span></div>`;
+  } else if (act.type === 'solidFood') {
+    // v3.5.74 辅食：食物（可搜索多选）+ 克数 + 饭后正常/异常
+    editPendingSf = { p: 'edt', id: act.id, sel: rec.solidFoods || [] };
+    html += `<div class="input-row sf-row"><label class="sf-label">食物:</label>${sfPickerHtml('edt', act.id)}<input type="number" step="1" min="0" id="edt_sfamt" class="sf-amt" placeholder="0" value="${rec.solidFoodAmount > 0 ? rec.solidFoodAmount : ''}"><span class="unit">g</span></div>`;
+    html += `<div class="input-row sf-row sf-meal-row radio-group"><label class="sf-label">饭后:</label><label><input type="radio" name="edt_meal" value="正常" ${(rec.afterMeal||'正常')==='正常'?'checked':''}> 正常</label><label><input type="radio" name="edt_meal" value="异常" ${rec.afterMeal==='异常'?'checked':''}> 异常</label></div>`;
+  } else if (act.type === 'vaccine') {
+    const sel = rec.vaccineTypes || [];
+    let vh = ''; VACCINE_OPTIONS.forEach(v => { vh += `<label><input type="checkbox" name="edt_vac" value="${v}" ${sel.includes(v)?'checked':''}> ${v}</label>`; });
+    html += `<div class="input-row checkbox-group">${vh}</div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">第几剂:</label><input type="number" id="edt_val" value="${rec.vaccineDose||1}"><span class="unit">剂</span></div>`;
+  } else if (act.type === 'listenStory') {
+    const sel = rec.storyLangs || ['中文'];
+    html += `<div class="input-row checkbox-group"><label><input type="checkbox" name="edt_story" value="中文" ${sel.includes('中文')?'checked':''}> 中文</label><label><input type="checkbox" name="edt_story" value="英文" ${sel.includes('英文')?'checked':''}> 英文</label></div>`;
+  } else if (act.type === 'grossMotor') {
+    const sel = rec.grossMotorItems || [];
+    let gh = ''; grossMotorOptions.forEach(o => { gh += `<label><input type="checkbox" name="edt_gm" value="${o}" ${sel.includes(o)?'checked':''}> ${o}</label>`; });
+    html += `<div class="input-row checkbox-group">${gh}</div>`;
+  } else if (act.type === 'fineMotor') {
+    const sel = rec.fineMotorItems || [];
+    let fh = ''; fineMotorOptions.forEach(o => { fh += `<label><input type="checkbox" name="edt_fm" value="${o}" ${sel.includes(o)?'checked':''}> ${o}</label>`; });
+    html += `<div class="input-row checkbox-group">${fh}</div>`;
+  } else if (act.type === 'duration') {
+    html += `<div class="input-row"><input type="number" step="0.1" id="edt_val" value="${rec.duration||0}"><span class="unit">${act.unit}</span></div>`;
+  } else if (act.type === 'airButt') {
+    html += `<div class="input-row"><input type="number" step="0.1" id="edt_val" value="${rec.duration||0}"><span class="unit">分钟</span></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">屁股状态:</label><select id="edt_sel"><option value="正常" ${rec.level==='正常'?'selected':''}>正常</option><option value="发红" ${rec.level==='发红'?'selected':''}>发红</option><option value="红疹" ${rec.level==='红疹'?'selected':''}>红疹</option><option value="溃烂" ${rec.level==='溃烂'?'selected':''}>溃烂</option></select></div>`;
+  } else if (act.type === 'bath') {
+    html += `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">使用沐浴露:</label><select id="edt_sel"><option value="无" ${(rec.shampoo||'无')==='无'?'selected':''}>无</option><option value="头发" ${rec.shampoo==='头发'?'selected':''}>头发</option><option value="身体" ${rec.shampoo==='身体'?'selected':''}>身体</option><option value="头发和身体" ${rec.shampoo==='头发和身体'?'selected':''}>头发和身体</option></select></div>`;
+  } else if (act.type === 'note') {
+    // 备注即内容，由统一备注框编辑
+  } else if (act.type === 'temperature') {
+    html += `<div class="input-row"><input type="number" step="0.1" id="edt_val" value="${rec.temperature||36.5}"><span class="unit">℃</span></div>`;
+  }
+
+  // 所有活动统一附带多行备注编辑框
+  const notePh2 = act.type === 'note' ? '记录内容（支持多行）' : '备注（可选，支持多行）';
+  const noteEsc = (rec.note || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  html += `<div class="input-row add-note-row"><textarea id="edt_note" rows="2" placeholder="${notePh2}">${noteEsc}</textarea></div>`;
+
+  container.innerHTML = html;
+  if (editPendingSf) sfInit(editPendingSf.p, editPendingSf.id, editPendingSf.sel);
+  showModal('editModal');
+}
+
+function saveEditRecord() {
+  const target = _editingDateStr || getTodayDateStr();
+  const records = getRecordsByDate(target);
+  const idx = records.findIndex(r => r.type === _editingType && r.timestamp === _editingTimestamp);
+  if (idx === -1) { showToast('记录不存在'); return; }
+  const rec = records[idx];
+  const act = ACTIVITIES.find(a => a.id === _editingType);
+
+  // 更新时刻
+  const hh = String(parseInt(document.getElementById('edt_h').value) || 0).padStart(2, '0');
+  const mm = String(parseInt(document.getElementById('edt_m').value) || 0).padStart(2, '0');
+  rec.recTime = hh + ':' + mm;
+
+  if (act.type === 'milk') {
+    rec.milkTime = rec.recTime;
+    const a = parseInt(document.getElementById('edt_val').value); rec.milkAmount = isNaN(a) || a < 1 ? 120 : a;
+  } else if (act.type === 'sleep') {
+    rec.sleepStartTime = rec.recTime;
+    const dh = parseInt(document.getElementById('edt_dur_h').value) || 0;
+    const dm = parseInt(document.getElementById('edt_dur_m').value) || 0;
+    rec.duration = dh * 60 + dm;
+  } else if (act.type === 'drinkWater') {
+    rec.drinkTime = rec.recTime;
+  } else if (act.type === 'poop') {
+    rec.poopTime = rec.recTime;
+    const rds = document.getElementsByName('edt_poop'); for (const r of rds) { if (r.checked) { rec.poopStatus = r.value; break; } }
+  } else if (act.type === 'supplement') {
+    rec.supplementTime = rec.recTime;
+    const cbs = document.getElementsByName('edt_sup'); const types = []; for (const cb of cbs) { if (cb.checked) types.push(cb.value); }
+    rec.supplementTypes = types.length > 0 ? types : ['AD'];
+    const a = parseInt(document.getElementById('edt_val').value); rec.supplementAmount = isNaN(a) || a < 1 ? 1 : a;
+  } else if (act.type === 'solidFood') {
+    rec.solidFoodTime = rec.recTime;
+    rec.solidFoods = sfGetSelection('edt', _editingType);
+    const el = document.getElementById('edt_sfamt'); const v = el ? parseFloat(String(el.value).trim()) : NaN;
+    rec.solidFoodAmount = (!isNaN(v) && v > 0) ? Math.round(v) : 0;
+    const rds = document.getElementsByName('edt_meal'); let _m = '正常'; for (const r of rds) { if (r.checked) { _m = r.value; break; } }
+    rec.afterMeal = _m;
+  } else if (act.type === 'vaccine') {
+    rec.vaccineTime = rec.recTime;
+    const cbs = document.getElementsByName('edt_vac'); const types = []; for (const cb of cbs) { if (cb.checked) types.push(cb.value); }
+    rec.vaccineTypes = types;
+    const d = parseInt(document.getElementById('edt_val').value); rec.vaccineDose = isNaN(d) || d < 1 ? 1 : d;
+  } else if (act.type === 'listenStory') {
+    rec.storyTime = rec.recTime;
+    const cbs = document.getElementsByName('edt_story'); const langs = []; for (const cb of cbs) { if (cb.checked) langs.push(cb.value); }
+    rec.storyLangs = langs.length > 0 ? langs : ['中文'];
+  } else if (act.type === 'grossMotor') {
+    rec.grossMotorTime = rec.recTime;
+    const cbs = document.getElementsByName('edt_gm'); const items = []; for (const cb of cbs) { if (cb.checked) items.push(cb.value); }
+    rec.grossMotorItems = items;
+  } else if (act.type === 'fineMotor') {
+    rec.fineMotorTime = rec.recTime;
+    const cbs = document.getElementsByName('edt_fm'); const items = []; for (const cb of cbs) { if (cb.checked) items.push(cb.value); }
+    rec.fineMotorItems = items;
+  } else if (act.type === 'duration') {
+    rec.durationTime = rec.recTime;
+    const v = parseFloat(document.getElementById('edt_val').value); rec.duration = isNaN(v) ? 0 : v;
+  } else if (act.type === 'airButt') {
+    rec.airButtTime = rec.recTime;
+    const v = parseFloat(document.getElementById('edt_val').value); rec.duration = isNaN(v) ? 0 : v;
+    rec.level = document.getElementById('edt_sel').value;
+  } else if (act.type === 'bath') {
+    rec.bathTime = rec.recTime;
+    rec.shampoo = document.getElementById('edt_sel').value;
+  } else if (act.type === 'note') {
+    rec.noteTime = rec.recTime;
+  } else if (act.type === 'temperature') {
+    rec.tempTime = rec.recTime;
+    const v = parseFloat(document.getElementById('edt_val').value); rec.temperature = isNaN(v) ? 0 : v;
+    rec.tempStatus = v <= 37.5 ? 'normal' : 'high';
+  }
+
+  // 统一读取备注（所有活动类型均支持）
+  const noteEl = document.getElementById('edt_note');
+  if (noteEl) rec.note = noteEl.value.trim();
+
+  // 标记修改时间：跨设备合并时，同一条记录取 updatedAt 较新的版本
+  rec.updatedAt = Date.now();
+
+  persistRecords(records, target);
+  hideModal('editModal');
+  afterRecordChange(target);
+  showToast('已更新');
+}
+
+/* ==================== 添加记录弹窗 ==================== */
+const APP_VERSION = 'v3.5.77 1340-1410'; // 性能优化(B+): 内联图片外链压缩(删重复favicon/日间背景/默认照片/PWA图标, HTML 672KB->81KB)+主JS外链app.js+删no-store meta; 同步启动改近3天优先+4s后台补全全量, 记录拉取改分批并发(Promise.all), 合并/墓碑/双向收敛语义不变
+let _addModalOpening = false;
+let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
+function openAddModal(ds) {
+  if (_addModalOpening) return;
+  _addModalOpening = true;
+  setTimeout(() => { _addModalOpening = false; }, 400);
+  _addTargetDate = ds || null;
+  addModalCategory = 'all';
+  addSelectedSet = new Set();
+  document.getElementById('addSearchInput').value = '';
+  const addTitleEl = document.getElementById('addModalTitle');
+  if (addTitleEl) addTitleEl.textContent = ds ? `添加记录 · ${ds}` : '添加记录';
+  showModal('addModal'); // 先弹窗再渲染：即使渲染出错，弹窗也必定打开
+  try {
+    renderAddModal();
+  } catch (e) {
+    console.error('renderAddModal error:', e);
+    showToast('活动列表加载异常：' + (e && e.message ? e.message : e));
+  }
+}
+
+function getNowTimeStr() { const n = new Date(); return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0'); }
+
+/* ==================== 辅食：食物多选下拉（关键字搜索 + 滚动条） ====================
+   p = 前缀（'ad' 添加弹窗 / 'edt' 编辑弹窗），id = 活动 id
+   选中态存在内存 SF_PICKER 中，渲染后由 sfInit 回填，避免重渲染丢失勾选
+================================================================================ */
+const SF_PICKER = {};
+function sfKey(p, id) { return p + '|' + id; }
+function sfEsc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function sfJsStr(s) { return sfEsc(s).replace(/'/g, "\\'").replace(/\\/g, '\\\\'); }
+function sfState(p, id) {
+  const key = sfKey(p, id);
+  if (!SF_PICKER[key]) SF_PICKER[key] = { sel: new Set(), kw: '' };
+  return SF_PICKER[key];
+}
+function sfInit(p, id, selected) {
+  const key = sfKey(p, id);
+  SF_PICKER[key] = { sel: new Set(Array.isArray(selected) ? selected : []), kw: '' };
+  const sEl = document.getElementById(`${p}search_${id}`); if (sEl) sEl.value = '';
+  const pn = document.getElementById(`${p}panel_${id}`); if (pn) pn.style.display = 'none';
+  sfRenderList(p, id);
+  sfRenderTrigger(p, id);
+}
+function sfPickerHtml(p, id) {
+  return `<div class="sf-select" id="${p}sel_${id}">`
+    + `<div class="sf-trigger" onclick="sfTogglePanel('${p}','${id}')">`
+    + `<span class="sf-ph sf-ph-empty" id="${p}ph_${id}">请选择食物</span><span class="sf-arrow">&#9662;</span></div>`
+    + `<div class="sf-panel" id="${p}panel_${id}" style="display:none;">`
+    + `<div class="sf-search"><input type="text" id="${p}search_${id}" placeholder="输入关键字查找" oninput="sfFilter('${p}','${id}',this.value)"></div>`
+    + `<div class="sf-list" id="${p}list_${id}"></div>`
+    + `</div></div>`;
+}
+function sfRenderList(p, id) {
+  const st = sfState(p, id);
+  const box = document.getElementById(`${p}list_${id}`);
+  if (!box) return;
+  const kw = String(st.kw || '').trim();
+  const kwL = kw.toLowerCase();
+  const opts = getSolidFoodOptions();
+  const shown = kwL ? opts.filter(o => String(o).toLowerCase().includes(kwL)) : opts;
+  let h = '';
+  shown.forEach(o => {
+    const e = sfEsc(o);
+    h += `<label class="sf-opt"><input type="checkbox" name="${p}sfopt_${id}" value="${e}" ${st.sel.has(o) ? 'checked' : ''} onchange="sfOnCheck('${p}','${id}','${sfJsStr(o)}',this.checked)"><span class="sf-opt-t">${e}</span></label>`;
+  });
+  if (shown.length === 0) {
+    if (kw) h += `<div class="sf-addnew" onclick="sfAddNew('${p}','${id}','${sfJsStr(kw)}')">＋ 添加「${sfEsc(kw)}」为新食物</div>`;
+    else h += `<div class="sf-empty">暂无食物选项，可在管理弹窗添加</div>`;
+  } else if (kw && !shown.some(o => String(o) === kw)) {
+    h += `<div class="sf-addnew" onclick="sfAddNew('${p}','${id}','${sfJsStr(kw)}')">＋ 添加「${sfEsc(kw)}」为新食物</div>`;
+  }
+  box.innerHTML = h;
+}
+function sfOnCheck(p, id, val, checked) {
+  const st = sfState(p, id);
+  if (checked) st.sel.add(val); else st.sel.delete(val);
+  sfRenderTrigger(p, id);
+  if (p === 'vi') { try { sfSyncVoiceItem(id); } catch (e) {} }
+}
+function sfRenderTrigger(p, id) {
+  const el = document.getElementById(`${p}ph_${id}`);
+  if (!el) return;
+  const arr = Array.from(sfState(p, id).sel);
+  if (arr.length === 0) { el.textContent = '请选择食物'; el.classList.add('sf-ph-empty'); }
+  else { el.textContent = arr.join('、'); el.classList.remove('sf-ph-empty'); }
+}
+function sfCloseAllPanels() {
+  const ps = document.querySelectorAll('.sf-panel');
+  for (let i = 0; i < ps.length; i++) ps[i].style.display = 'none';
+}
+function sfTogglePanel(p, id) {
+  const panel = document.getElementById(`${p}panel_${id}`);
+  if (!panel) return;
+  const willOpen = panel.style.display === 'none';
+  sfCloseAllPanels();
+  if (!willOpen) return;
+  panel.style.display = '';
+  sfRenderList(p, id);
+  // 下方空间不足时向上展开，避免被弹窗容器裁剪
+  try {
+    const sel = document.getElementById(`${p}sel_${id}`);
+    const rect = (sel && sel.getBoundingClientRect) ? sel.getBoundingClientRect() : null;
+    const vh = (typeof window !== 'undefined' && window.innerHeight) || 0;
+    const need = 240;   // 面板大致高度
+    if (rect && vh && (vh - rect.bottom) < need && rect.top > need) {
+      panel.style.top = 'auto'; panel.style.bottom = 'calc(100% + 4px)';
+    } else {
+      panel.style.top = 'calc(100% + 4px)'; panel.style.bottom = 'auto';
+    }
+  } catch (e) {
+    panel.style.top = 'calc(100% + 4px)'; panel.style.bottom = 'auto';
+  }
+}
+function sfFilter(p, id, val) {
+  sfState(p, id).kw = (val == null ? '' : String(val));
+  sfRenderList(p, id);
+}
+function sfGetSelection(p, id) { return Array.from(sfState(p, id).sel); }
+function sfAddNew(p, id, name) {
+  name = String(name || '').trim();
+  if (!name) return;
+  if (!Array.isArray(solidFoodOptions)) solidFoodOptions = [];
+  if (!solidFoodOptions.includes(name)) {
+    solidFoodOptions.push(name);
+    saveCustomOptions();
+    markOptDeleted('solidFoodDeleted', name, false);
+    showToast('已添加食物「' + name + '」，长期有效');
+  }
+  const st = sfState(p, id);
+  st.sel.add(name); st.kw = '';
+  const sEl = document.getElementById(`${p}search_${id}`); if (sEl) sEl.value = '';
+  sfRenderList(p, id); sfRenderTrigger(p, id);
+}
+// 点击下拉以外的任何区域都关闭面板（面板内部点击不关闭，方便多选）
+// iOS Safari 对 div/span 等"不可点击元素"不派发 click，故同时监听 touchstart
+function _sfOutsideClose(e) {
+  if (!e) return;
+  const t = e.target;
+  if (t && t.closest && t.closest('.sf-select')) return;   // 下拉内部：不关
+  sfCloseAllPanels();
+}
+document.addEventListener('click', _sfOutsideClose);
+document.addEventListener('touchstart', _sfOutsideClose, { passive: true });
+// iOS 事件委托兜底：让 body 具备可点击性，click 才会冒泡到 document
+if (document.body && !document.body.hasAttribute('onclick')) {
+  document.body.setAttribute('onclick', 'void(0)');
+}
+
+function renderAddModal() {
+  // 分类栏高亮
+  const catBar = document.getElementById('addCatBar');
+  let ch = `<div class="add-cat-tag${addModalCategory==='all'?' active':''}" data-cat="all" onclick="setAddCat('all')"><span class="add-ci">&#127968;</span><span class="add-cl">全部</span></div>`;
+  CATEGORIES.forEach(c => {
+    ch += `<div class="add-cat-tag${addModalCategory===c.id?' active':''}" data-cat="${c.id}" onclick="setAddCat('${c.id}')"><span class="add-ci">${c.icon}</span><span class="add-cl">${c.name}</span></div>`;
+  });
+  catBar.innerHTML = ch;
+  renderAddList();
+}
+
+function renderAddList(filterText) {
+  filterText = (filterText || '').trim().toLowerCase();
+  const list = document.getElementById('addList');
+  let html = '';
+  const sfPending = [];   // v3.5.74 辅食下拉需在 innerHTML 落盘后回填选项与已选态
+
+  ACTIVITIES.forEach(act => {
+    if (hiddenActivities.includes(act.id)) return;
+    if (addModalCategory !== 'all' && act.category !== addModalCategory) return;
+    if (filterText && !act.name.toLowerCase().includes(filterText) && !act.icon.includes(filterText)) return;
+
+    let inputsHtml = '';
+    if (act.type === 'milk') {
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">奶量:</label><input type="number" step="1" min="1" id="adinp_${act.id}" value="${getDefaultMilkAmount()}"><span class="unit">ml</span></div>`;
+    } else if (act.type === 'sleep') {
+      // 睡眠：开始时间 + 时长（X h Y min）
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">时长:</label><input type="number" min="0" id="adinp_${act.id}_dur_h" placeholder="0" style="width:50px;"><span class="unit">h</span><input type="number" min="0" max="59" id="adinp_${act.id}_dur_m" placeholder="0" style="width:50px;margin-left:8px;"><span class="unit">min</span></div>`;
+    } else if (act.type === 'drinkWater') {
+      // 喝水：时间
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div>`;
+    } else if (act.type === 'poop') {
+      let po = ''; POOP_STATUS.forEach(ps => { po += `<label><input type="radio" name="adpoop_${act.id}" value="${ps.value}" ${ps.value==='正常'?'checked':''}> <span class="poop-icon ${ps.cls}">${ps.icon}</span>${ps.label}</label>`; });
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row radio-group">${po}</div>`;
+    } else if (act.type === 'supplement') {
+      const sug = getSupplementSuggestion();
+      const dow = new Date().getDay(), isMWF = (dow===1||dow===3||dow===5);
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group"><label><input type="checkbox" name="adsup_${act.id}" value="AD" ${isMWF?'checked':''}> AD</label><label><input type="checkbox" name="adsup_${act.id}" value="D3"> D3</label></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">用量:</label><input type="number" step="1" min="1" id="adinp_${act.id}" value="1"><span class="unit">粒</span></div><div class="hint-text">建议选${sug}（与上次不同）</div>`;
+    } else if (act.type === 'solidFood') {
+      // v3.5.74 辅食：开始时间 + 食物（可搜索多选下拉）+ 克数 + 饭后正常/异常
+      const _sh = String(new Date().getHours()).padStart(2,'0'), _sm = String(new Date().getMinutes()).padStart(2,'0');
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${_sh}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${_sm}"></div></div>`;
+      inputsHtml += `<div class="input-row sf-row"><label class="sf-label">食物:</label>${sfPickerHtml('ad', act.id)}<input type="number" step="1" min="0" id="adinp_${act.id}" placeholder="0" class="sf-amt"><span class="unit">g</span></div>`;
+      inputsHtml += `<div class="input-row sf-row sf-meal-row radio-group"><label class="sf-label">饭后:</label><label><input type="radio" name="admeal_${act.id}" value="正常" checked> 正常</label><label><input type="radio" name="admeal_${act.id}" value="异常"> 异常</label></div>`;
+      sfPending.push({ p: 'ad', id: act.id, sel: [] });
+    } else if (act.type === 'vaccine') {
+      let vh = ''; VACCINE_OPTIONS.forEach(v => { vh += `<label><input type="checkbox" name="advac_${act.id}" value="${v}"> ${v}</label>`; });
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group">${vh}</div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">第几剂:</label><input type="number" step="1" min="1" id="adinp_${act.id}" value="1"><span class="unit">剂</span></div>`;
+    } else if (act.type === 'listenStory') {
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group"><label><input type="checkbox" name="adstory_${act.id}" value="中文"> 中文</label><label><input type="checkbox" name="adstory_${act.id}" value="英文"> 英文</label></div>`;
+    } else if (act.type === 'grossMotor') {
+      let gh = ''; grossMotorOptions.forEach(o => { gh += `<label><input type="checkbox" name="adgm_${act.id}" value="${o}"> ${o}</label>`; });
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group">${gh}</div>`;
+    } else if (act.type === 'fineMotor') {
+      let fh = ''; fineMotorOptions.forEach(o => { fh += `<label><input type="checkbox" name="adfm_${act.id}" value="${o}"> ${o}</label>`; });
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group">${fh}</div>`;
+    } else if (act.type === 'duration') {
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><input type="number" step="0.1" id="adinp_${act.id}" placeholder="0"><span class="unit">${act.unit}</span></div>`;
+    } else if (act.type === 'airButt') {
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><input type="number" step="0.1" id="adinp_${act.id}" placeholder="0"><span class="unit">分钟</span></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">屁股状态:</label><select id="adsel_${act.id}"><option value="正常">正常</option><option value="发红">发红</option><option value="红疹">红疹</option><option value="溃烂">溃烂</option></select></div>`;
+    } else if (act.type === 'bath') {
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">使用沐浴露:</label><select id="adsel_${act.id}"><option value="无">无</option><option value="头发">头发</option><option value="身体">身体</option><option value="头发和身体">头发和身体</option></select></div>`;
+    } else if (act.type === 'note') {
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div>`;
+    } else if (act.type === 'temperature') {
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><input type="number" step="0.1" id="adinp_${act.id}" placeholder="36.5" oninput="addTempIndicator('${act.id}')"><span class="unit">℃</span><span class="temp-indicator-inline" id="adtemp_${act.id}"></span></div>`;
+    } else if (act.type === 'simple') {
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div>`;
+    }
+
+    // 每项活动统一附带多行备注输入框
+    const notePh = act.type === 'note' ? '记录内容（支持多行）' : '备注（可选，支持多行）';
+    inputsHtml += `<div class="input-row add-note-row"><textarea id="adnote_${act.id}" rows="2" placeholder="${notePh}"></textarea></div>`;
+
+    const isChecked = addSelectedSet.has(act.id);
+    html += `<div class="add-item"><div class="add-check${isChecked?' checked':''}" data-id="${act.id}" onclick="toggleAddSelect('${act.id}')">${isChecked?'\u2713':''}</div><div class="add-body"><div class="add-name">${act.icon} ${act.name}</div><div class="add-inputs${isChecked?' show':''}" id="adinputs_${act.id}">${inputsHtml}</div></div></div>`;
+  });
+
+  if (!html) html = '<div style="text-align:center;color:#636e72;padding:24px 0;font-size:15px;">没有匹配的活动</div>';
+  list.innerHTML = html;
+  // 辅食食物下拉：落盘后再填充选项列表并回填已选
+  sfPending.forEach(x => sfInit(x.p, x.id, x.sel));
+}
+
+function filterAddList() {
+  const val = document.getElementById('addSearchInput').value;
+  renderAddList(val);
+}
+
+function setAddCat(cid) {
+  addModalCategory = cid;
+  // 只更新分类栏高亮和列表，不重新渲染整个弹窗
+  const catBar = document.getElementById('addCatBar');
+  const tags = catBar.querySelectorAll('.add-cat-tag');
+  tags.forEach(t => t.classList.toggle('active', t.dataset.cat === cid));
+  renderAddList();
+}
+function toggleAddSelect(id) {
+  const ck = document.querySelector(`.add-check[data-id="${id}"]`);
+  const inp = document.getElementById(`adinputs_${id}`);
+  if (ck.classList.contains('checked')) {
+    ck.classList.remove('checked'); ck.textContent = '';
+    if (inp) inp.classList.remove('show');
+    addSelectedSet.delete(id);
+  } else {
+    ck.classList.add('checked'); ck.textContent = '\u2713';
+    if (inp) inp.classList.add('show');
+    addSelectedSet.add(id);
+  }
+}
+function addTempIndicator(id) {
+  const inp = document.getElementById(`adinp_${id}`), ind = document.getElementById(`adtemp_${id}`);
+  if (!inp || !ind) return; const v = parseFloat(inp.value);
+  if (isNaN(v)) { ind.innerHTML = ''; return; }
+  ind.innerHTML = v <= 37.5 ? '<span class="temp-normal">&#9679;</span>' : '<span class="temp-high">&#9888;</span>';
+}
+
+/* ==================== 确定添加 ==================== */
+function confirmAdd() {
+  if (addSelectedSet.size === 0) { showToast('请至少选择一项活动'); return; }
+  const target = _addTargetDate || getTodayDateStr();
+  const records = getRecordsByDate(target);
+  const now = new Date(), timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), ts = Date.now();
+  const newestIds = [];
+
+  addSelectedSet.forEach(id => {
+    const act = ACTIVITIES.find(a => a.id === id); if (!act) return;
+
+    // 获取时刻（DOM中可能不存在，使用默认值）
+    let recTime = timeStr;
+    const hEl = document.getElementById(`adinp_${id}_h`);
+    const mEl = document.getElementById(`adinp_${id}_m`);
+    if (hEl && mEl) {
+      const hh = String(parseInt(hEl.value) || 0).padStart(2, '0');
+      const mm = String(parseInt(mEl.value) || 0).padStart(2, '0');
+      recTime = hh + ':' + mm;
+    }
+
+    const record = { type: id, name: act.name, time: timeStr, recTime: recTime, timestamp: ts, updatedAt: Date.now() };
+
+    if (act.type === 'milk') {
+      record.milkTime = recTime;
+      const el = document.getElementById(`adinp_${id}`); const _mv = el ? parseFloat(String(el.value).trim()) : NaN; record.milkAmount = (!isNaN(_mv) && Math.round(_mv) > 0) ? Math.max(1, Math.round(_mv)) : getDefaultMilkAmount();
+    } else if (act.type === 'sleep') {
+      record.sleepStartTime = recTime;
+      const dhEl = document.getElementById(`adinp_${id}_dur_h`); const dmEl = document.getElementById(`adinp_${id}_dur_m`);
+      const dh = (dhEl && !isNaN(parseInt(dhEl.value))) ? parseInt(dhEl.value) : 0;
+      const dm = (dmEl && !isNaN(parseInt(dmEl.value))) ? parseInt(dmEl.value) : 0;
+      record.duration = dh * 60 + dm;
+    } else if (act.type === 'drinkWater') {
+      record.drinkTime = recTime;
+    } else if (act.type === 'poop') {
+      record.poopTime = recTime;
+      const rds = document.getElementsByName(`adpoop_${id}`); for (const r of rds) { if (r.checked) { record.poopStatus = r.value; break; } }
+    } else if (act.type === 'supplement') {
+      const cbs = document.getElementsByName(`adsup_${id}`); const types = []; for (const cb of cbs) { if (cb.checked) types.push(cb.value); }
+      record.supplementTypes = types.length > 0 ? types : ['AD'];
+      record.supplementTime = recTime;
+      const el = document.getElementById(`adinp_${id}`); record.supplementAmount = (el && !isNaN(parseInt(el.value))) ? Math.max(1, parseInt(el.value)) : 1;
+    } else if (act.type === 'solidFood') {
+      record.solidFoodTime = recTime;
+      record.solidFoods = sfGetSelection('ad', id);
+      const el = document.getElementById(`adinp_${id}`); const _sv = el ? parseFloat(String(el.value).trim()) : NaN;
+      record.solidFoodAmount = (!isNaN(_sv) && _sv > 0) ? Math.round(_sv) : 0;
+      const rds = document.getElementsByName(`admeal_${id}`); let _meal = '正常'; for (const r of rds) { if (r.checked) { _meal = r.value; break; } }
+      record.afterMeal = _meal;
+    } else if (act.type === 'vaccine') {
+      const cbs = document.getElementsByName(`advac_${id}`); const types = []; for (const cb of cbs) { if (cb.checked) types.push(cb.value); }
+      record.vaccineTypes = types; record.vaccineTime = recTime;
+      const el = document.getElementById(`adinp_${id}`); record.vaccineDose = (el && !isNaN(parseInt(el.value))) ? Math.max(1, parseInt(el.value)) : 1;
+    } else if (act.type === 'listenStory') {
+      const cbs = document.getElementsByName(`adstory_${id}`); const langs = []; for (const cb of cbs) { if (cb.checked) langs.push(cb.value); }
+      record.storyLangs = langs.length > 0 ? langs : ['中文'];
+      record.storyTime = recTime;
+    } else if (act.type === 'grossMotor') {
+      const cbs = document.getElementsByName(`adgm_${id}`); const items = []; for (const cb of cbs) { if (cb.checked) items.push(cb.value); }
+      record.grossMotorItems = items; record.grossMotorTime = recTime;
+    } else if (act.type === 'fineMotor') {
+      const cbs = document.getElementsByName(`adfm_${id}`); const items = []; for (const cb of cbs) { if (cb.checked) items.push(cb.value); }
+      record.fineMotorItems = items; record.fineMotorTime = recTime;
+    } else if (act.type === 'duration') { const el = document.getElementById(`adinp_${id}`); record.duration = (el && !isNaN(parseFloat(el.value))) ? parseFloat(el.value) : 0; record.durationTime = recTime; }
+    else if (act.type === 'airButt') { const el = document.getElementById(`adinp_${id}`); record.duration = (el && !isNaN(parseFloat(el.value))) ? parseFloat(el.value) : 0; const sel = document.getElementById(`adsel_${id}`); record.level = sel ? sel.value : '正常'; record.airButtTime = recTime; }
+    else if (act.type === 'bath') { const sel = document.getElementById(`adsel_${id}`); record.shampoo = sel ? sel.value : '无'; record.bathTime = recTime; }
+    else if (act.type === 'note') { record.noteTime = recTime; }
+    else if (act.type === 'temperature') { const el = document.getElementById(`adinp_${id}`); const v = (el && !isNaN(parseFloat(el.value))) ? parseFloat(el.value) : 0; record.temperature = v; record.tempStatus = v <= 37.5 ? 'normal' : 'high'; record.tempTime = recTime; }
+    else if (act.type === 'simple') { record.simpleTime = recTime; }
+
+    // 统一读取备注（所有活动类型均支持）
+    const noteEl = document.getElementById(`adnote_${id}`);
+    record.note = (noteEl && noteEl.value.trim()) ? noteEl.value.trim() : '';
+
+    records.push(record); newestIds.push(id);
+  });
+
+  persistRecords(records, target);
+  addSelectedSet = new Set();
+  hideModal('addModal');
+  // 只有添加到今天时才渲染今日卡片（否则历史日期的记录不该出现在今日列表）
+  if (target === getTodayDateStr()) { try { renderCards(newestIds); } catch (e) {} }
+  afterRecordChange(target);
+  showToast(`已添加 ${newestIds.length} 条记录到 ${target}`);
+}
+
+/* ==================== 语音速记 ==================== */
+// 中文数字转数值（支持 一百三十 / 两百五 / 三十八点五 / 三十八度五）
+function cnNum(s) {
+  if (s === null || s === undefined) return null;
+  s = String(s).trim();
+  if (!s) return null;
+  if (/^\d+(?:\.\d+)?$/.test(s)) return parseFloat(s);
+  s = s.replace(/度/g, '点');
+  if (!/^[零一二两三四五六七八九十百千万点]+$/.test(s)) return null;
+  const D = { '零':0,'一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9 };
+  const parts = s.split('点');
+  function intOf(p) {
+    if (!p) return 0;
+    let total = 0, num = 0;
+    for (const ch of p) {
+      if (D[ch] !== undefined && ch !== '零') { num = D[ch]; }
+      else if (ch === '十') { total += (num || 1) * 10; num = 0; }
+      else if (ch === '百') { total += (num || 1) * 100; num = 0; }
+      else if (ch === '千') { total += (num || 1) * 1000; num = 0; }
+      else if (ch === '万') { total = (total + num) * 10000; num = 0; }
+    }
+    return total + num;
+  }
+  let r = intOf(parts[0]);
+  if (parts[1]) { let dec = 0, sc = 0.1; for (const ch of parts[1]) { if (D[ch] === undefined) break; dec += D[ch] * sc; sc /= 10; } r += dec; }
+  return r;
+}
+// 时长解析 → 分钟（"一小时二十分钟"→80 "半小时"→30 "两小时"→120 "90分钟"→90
+//             "7小时3"→423 [口语省略"分"字，数字 <60 视为分钟，仅对时长型规则宽松匹配]）
+function parseDurationMin(seg) {
+  const N = '(\\d+(?:\\.\\d+)?|[零一二两三四五六七八九十百千]+)';
+  const re = new RegExp(N + '(个半)?(小时|钟头|分钟|分)(?![钟])|半小时', 'g');
+  let total = 0, found = false, m;
+  while ((m = re.exec(seg)) !== null) {
+    found = true;
+    if (m[0] === '半小时') { total += 30; continue; }
+    const n = cnNum(m[1]); if (n === null) { continue; }
+    if (m[2] === '个半') { total += n * 60 + 30; }
+    else if (m[3] === '小时' || m[3] === '钟头') {
+      total += n * 60;
+      if (/^\s*半/.test(seg.slice(m.index + m[0].length))) total += 30;
+    } else { total += n; }
+  }
+  // 回退：若 seg 含"X小时"且后面紧跟 < 60 的纯数字（口语省略"分"字），将该数字计入分钟
+  if (!found) return null;
+  const hbMatch = seg.match(new RegExp(N + '\\s*(?:小时|钟头)(?!分钟|钟头)'));
+  if (hbMatch) {
+    const after = seg.slice(hbMatch.index + hbMatch[0].length);
+    const minMatch = after.match(/^\s*(\d+|[零一二两三四五六七八九十]+)/);
+    if (minMatch) {
+      const minN = cnNum(minMatch[1]);
+      if (minN !== null && minN < 60 && minN >= 0) {
+        total += minN;
+      }
+    }
+  }
+  return Math.round(total);
+}
+// 时长型活动(sleep/outdoor/airButt)的"裸数字时长"解析：口语常省略单位（"户外活动40"→40分钟）
+// 必须先剔除时刻表达（15:30 / 下午3点半 / 三点十五），避免把开始时刻误当时长
+function parseBareDurationMin(zone) {
+  let s = String(zone || '');
+  s = s.replace(/(凌晨|早上|上午|中午|下午|傍晚|晚上)?\s*\d{1,2}\s*[:：]\s*\d{1,2}/g, ' ');                       // 15:30
+  s = s.replace(/(凌晨|早上|上午|中午|下午|傍晚|晚上)\s*\d{1,2}\s*(?:[点时]\s*(?:半|一刻|\d{1,2}|[零一二三四五六七八九十]+)?)?/g, ' '); // 下午3点半
+  s = s.replace(/\d{1,2}\s*[点时]\s*(?:半|一刻|\d{1,2}|[零一二三四五六七八九十]+)?/g, ' ');                        // 3点半/3点15/3点
+  s = s.replace(/[零一二两三四五六七八九十]+\s*[点时]\s*(?:半|一刻|[零一二三四五六七八九十]+)?/g, ' ');            // 三点半/三点十五
+  const N = '(\\d+(?:\\.\\d+)?|[零一二两三四五六七八九十百千]+)';
+  const m = s.match(new RegExp(N));
+  if (!m) return null;
+  const n = cnNum(m[1]);
+  if (n === null || n <= 0 || n > 720) return null;   // 裸数字合理性：1~720分钟(12h)
+  return n;
+}
+function parseDurationLoose(zone) {                      // 带单位优先，裸数字兜底
+  const d = parseDurationMin(zone);
+  return d !== null ? d : parseBareDurationMin(zone);
+}
+// 体温解析（"38度5"/"三十八度五"/"38.5度" → 38.5）
+function parseTempNum(seg) {
+  const N = '(\\d+(?:\\.\\d+)?|[零一二两三四五六七八九十百]+)';
+  let v = null, m;
+  if ((m = seg.match(new RegExp(N + '\\s*[度]\\s*' + N + '(?!\\s*(?:分钟|小时|粒|针|ml|毫升))')))) {
+    const a = cnNum(m[1]), b = cnNum(m[2]);
+    if (a !== null && b !== null && b < 10) v = a + b / 10;
+  }
+  if (v === null && (m = seg.match(new RegExp(N + '\\s*[点]\\s*' + N)))) {
+    const a = cnNum(m[1]), b = cnNum(m[2]);
+    if (a !== null && b !== null && b < 10) v = a + b / 10;
+  }
+  if (v === null && (m = seg.match(new RegExp(N + '\\s*[度℃]')))) v = cnNum(m[1]);
+  if (v === null && (m = seg.match(/(3\d\.\d)/))) v = parseFloat(m[1]);
+  if (v === null || isNaN(v) || v < 34 || v > 43) return null;
+  return Math.round(v * 10) / 10;
+}
+// 相对/绝对时刻解析 → {h, m} 或 null（"半小时前"/"两点半"/"下午3点15分"）
+function parseVoiceTimeHint(seg) {
+  const N = '(\\d{1,2}|[零一二两三四五六七八九十]+)';
+  let m, min = null;
+  if (/半小时前/.test(seg)) min = 30;
+  if (min === null) {
+    if ((m = seg.match(new RegExp(N + '\\s*个?小时(?:钟头)?(?:之|以)?前')))) { const n = cnNum(m[1]); if (n !== null) min = n * 60; }
+    else if ((m = seg.match(new RegExp(N + '\\s*分钟(?:之|以)?前|' + N + '\\s*分前')))) { const n = cnNum(m[1]); if (n !== null) min = n; }
+    else if (/刚才|刚刚/.test(seg)) min = 0;
+  }
+  const now = new Date();
+  if (min !== null) {
+    const t = new Date(now.getTime() - min * 60000);
+    return { h: t.getHours(), m: t.getMinutes() };
+  }
+  // 绝对时刻："下午三点半"/"晚上8点"/"两点半"/"15:20"
+  const AMPM = '(凌晨|早上|上午|中午|下午|傍晚|晚上)?';
+  let T_RE;
+  try { T_RE = new RegExp(AMPM + N + '\\s*(?:点|:|(?<!小)时)\\s*(半|三|一刻|右|\\d{1,2}|[一二三四五六十]+)?\\s*分?', ''); }
+  catch (e) { T_RE = new RegExp(AMPM + N + '\\s*(?:点|:)\\s*(半|三|一刻|右|\\d{1,2}|[一二三四五六十]+)?\\s*分?', ''); }
+  if ((m = seg.match(T_RE))) {
+    let h = cnNum(m[2]); if (h === null) return null;
+    let mm = 0;
+    if (m[3] === '半') mm = 30; else if (m[3] === '三') mm = 15; else if (m[3] === '一刻') mm = 15;
+    else if (m[3]) { const x = cnNum(m[3]); mm = (x !== null && x < 60) ? x : 0; }
+    const ap = m[1];
+    if (ap === '下午' || ap === '傍晚' || ap === '晚上') { if (h < 12) h += 12; }
+    else if (ap === '中午') { if (h < 11) h += 12; }
+    else if (ap === '凌晨' || ap === '早上' || ap === '上午') { if (h === 12) h = 0; }
+    else {
+      // 无上下午前缀：取不超过当前时刻且最近的解释（录的是刚发生的事）
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const c1 = h * 60 + mm, c2 = (h + 12) * 60 + mm;
+      const cands = [c1, c2].filter(c => c <= nowMin + 1);
+      const pick = cands.length ? Math.max(...cands) : Math.min(c1, c2);
+      return { h: Math.floor(pick / 60), m: pick % 60 };
+    }
+    if (h > 23 || mm > 59) return null;
+    return { h, m: mm };
+  }
+  return null;
+}
+function voiceNowHM() { const n = new Date(); return String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0'); }
+
+// 语音规则表（顺序即优先级；每条返回 record 就绪的参数字段，与 confirmAdd 字段一一对应）
+const VOICE_RULES = [
+  { id: 'vaccine', re: /疫苗|接种|打了?(?:一针|加强针)|乙肝|五联|轮状|肺炎|流脑|麻塞风|麻腮风|水痘|甲肝|手足口/,
+    parse: (zone) => {
+      const types = [];
+      [['乙肝','乙肝'],['五联','五联'],['轮状','轮状病毒'],['肺炎','肺炎'],['流脑','流脑'],['麻塞风','麻塞风'],['麻腮风','麻塞风'],['水痘','水痘'],['甲肝','甲肝'],['手足口','手足口']]
+        .forEach(([kw, val]) => { if (zone.includes(kw) && !types.includes(val)) types.push(val); });
+      let dose = 1; const dm = zone.match(/([一二两三四五六七八九十]|\d+)\s*[针剂]/); if (dm) { const n = cnNum(dm[1]); if (n !== null && n >= 1 && n <= 10) dose = n; }
+      return { params: { vaccineTypes: types, vaccineDose: dose }, warn: types.length === 0 };
+    } },
+  { id: 'supplement', re: /AD|ad|Ad|维D|维生素\s*[ADad]|D3|d3|鱼肝油|补剂/,
+    parse: (zone) => {
+      const types = [];
+      if (/AD|ad|Ad|维生素\s*[ADad]|鱼肝油/.test(zone)) types.push('AD');
+      if (/D3|d3|维D/.test(zone) && !types.includes('D3')) types.push('D3');
+      let amount = 1; const am = zone.match(/([一二两三四五六七八九十]|\d+)\s*[粒颗滴]/); if (am) { const n = cnNum(am[1]); if (n !== null && n >= 1 && n <= 10) amount = n; }
+      return { params: { supplementTypes: types.length ? types : ['AD'], supplementAmount: amount } };
+    } },
+  { id: 'solidFood', re: /辅食|米粉|米糊|果泥|肉泥|菜泥|蛋黄|米饼|磨牙棒|添加\s*辅食|(?:吃了?|喂了?|给的?)\s*(?:米糊|米粉|果泥|肉泥|菜泥|蛋黄|高铁|南瓜|土豆|红薯|紫薯|山药|胡萝卜|西兰花|白菜|油菜|苹果|香蕉|梨|牛油果|猕猴桃|西瓜|冬瓜|黄瓜|莴苣|西红柿|茄子|香菇|玉米|小米|豆腐|猪肝|鸡蛋|猪肉|牛肉|羊肉|鸡肉|鱼|虾)/,
+    parse: (zone) => {
+      const foods = [];
+      getSolidFoodOptions().forEach(f => { if (zone.includes(f) && !foods.includes(f)) foods.push(f); });
+      [['米糊','高铁米粉'],['米粉','高铁米粉'],['蛋黄','鸡蛋'],['鸡肉泥','鸡肉'],['猪肉泥','猪肉']]
+        .forEach(([kw, val]) => { if (zone.includes(kw) && !foods.includes(val)) foods.push(val); });
+      let amount = 0;
+      const am = zone.match(/(\d+(?:\.\d+)?)\s*(?:g|克)(?![0-9])/);
+      if (am) { const n = parseFloat(am[1]); if (!isNaN(n) && n >= 0) amount = Math.round(n); }
+      let meal = '正常';
+      if (/异常|过敏|起疹|红疹|吐了|呕吐|不舒服|拉肚|腹泻/.test(zone)) meal = '异常';
+      return { params: { solidFoods: foods, solidFoodAmount: amount, afterMeal: meal }, warn: foods.length === 0 };
+    } },
+  { id: 'temperature', re: /体温|发烧|额温|耳温|烧到|发低烧|低烧|高烧|有点烧/,
+    parse: (zone) => {
+      const v = parseTempNum(zone);
+      return v === null ? { params: {}, warn: true } : { params: { temperature: v, tempStatus: v <= 37.5 ? 'normal' : 'high' } };
+    } },
+  { id: 'poop', re: /拉肚子|腹泻|大便|拉屎|拉臭|臭臭|便便|粑粑|排便|便血|青屎|拉了|拉粑/,
+    parse: (zone) => {
+      let st = '正常';
+      if (/拉肚|腹泻|稀/.test(zone)) st = '拉肚子';
+      else if (/青|绿/.test(zone)) st = '青屎';
+      else if (/血/.test(zone)) st = '便血';
+      return { params: { poopStatus: st } };
+    } },
+  { id: 'milk', re: /喂奶|喝[了完]?奶|吃[了完]?奶|毫升奶|奶粉|奶喝完|亲喂/,
+    parse: (zone) => {
+      let amount = null;
+      const re = /(\d+(?:\.\d+)?|[零一二两三四五六七八九十百千]+)/g; let m;
+      while ((m = re.exec(zone)) !== null) {
+        const after = zone.slice(m.index + m[0].length, m.index + m[0].length + 3);
+        const before = zone.slice(Math.max(0, m.index - 1), m.index);
+        // 时间/体温数字不算奶量：数字后跟 点/时/冒号/度(16:50的"16"、16点50的"16"、38.5度)、
+        // 数字前是 冒号/点/时(16:50的"50"、16点50的"50")、前是"度"
+        if (/^[点时:度]/.test(after) || /[:点时]/.test(before) || /度/.test(before)) continue;
+        const n = cnNum(m[0]);
+        if (n !== null && n >= 20 && n <= 400) { amount = Math.round(n); break; }
+      }
+      return amount === null ? { params: { milkAmount: getDefaultMilkAmount() }, warn: true } : { params: { milkAmount: amount } };
+    } },
+  { id: 'sleep', re: /睡着了|睡觉了?|睡了|小睡|午睡|睡了一|睡眠|哄睡|补觉/,
+    parse: (zone, ctx) => {
+      let d = parseDurationLoose(zone);
+      // 跨段回填：本段没找到时长时，从未匹配段池子里找一段带时长的附加进来
+      if (d === null && ctx && Array.isArray(ctx.pool) && ctx.pool.length) {
+        for (let i = 0; i < ctx.pool.length; i++) {
+          const ex = parseDurationMin(ctx.pool[i]);
+          if (ex !== null) { const consumedSeg = ctx.pool.splice(i, 1)[0]; if (ctx.consumed) ctx.consumed.add(consumedSeg); d = ex; break; }
+        }
+      }
+      return d === null ? { params: { duration: 0 }, warn: true } : { params: { duration: d } };
+    } },
+  { id: 'outdoor', re: /户外|出门|出去了?玩?|遛弯|散步|晒太阳|外面[耍玩]/,
+    parse: (zone, ctx) => {
+      let d = parseDurationLoose(zone);
+      if (d === null && ctx && Array.isArray(ctx.pool) && ctx.pool.length) {
+        for (let i = 0; i < ctx.pool.length; i++) {
+          const ex = parseDurationMin(ctx.pool[i]);
+          if (ex !== null) { const consumedSeg = ctx.pool.splice(i, 1)[0]; if (ctx.consumed) ctx.consumed.add(consumedSeg); d = ex; break; }
+        }
+      }
+      return d === null ? { params: { duration: 0 }, warn: true } : { params: { duration: d } };
+    } },
+  { id: 'bath', re: /洗澡|沐浴|洗了?个澡/,
+    parse: (zone) => ({ params: { shampoo: /沐浴露|洗发|洗头|香波/.test(zone) ? '头发和身体' : '无' } }) },
+  { id: 'listenStory', re: /听故事|讲故事|故事/,
+    parse: (zone) => {
+      const langs = [];
+      if (/英文|英语/.test(zone)) langs.push('英文');
+      if (/中文|国语|普通话/.test(zone) || langs.length === 0) langs.push('中文');
+      return { params: { storyLangs: langs } };
+    } },
+  { id: 'readBook', re: /读书|看书|绘本|亲子阅读|讲书/, parse: () => ({ params: {} }) },
+  { id: 'listenMusic', re: /听歌|听音乐|音乐|儿歌/, parse: () => ({ params: {} }) },
+  { id: 'drinkWater', re: /喝水|喂水|喝了?点水/, parse: () => ({ params: {} }) },
+  { id: 'airButt', re: /晾屁/,
+    parse: (zone, ctx) => {
+      let d = parseDurationLoose(zone);
+      if (d === null && ctx && Array.isArray(ctx.pool) && ctx.pool.length) {
+        for (let i = 0; i < ctx.pool.length; i++) {
+          const ex = parseDurationMin(ctx.pool[i]);
+          if (ex !== null) { const consumedSeg = ctx.pool.splice(i, 1)[0]; if (ctx.consumed) ctx.consumed.add(consumedSeg); d = ex; break; }
+        }
+      }
+      let level = '正常';
+      if (/发红/.test(zone)) level = '发红'; else if (/红疹|疹/.test(zone)) level = '红疹'; else if (/溃烂|破/.test(zone)) level = '溃烂';
+      return { params: { duration: d === null ? 0 : d, level } };
+    } },
+  { id: 'wash', re: /洗手|洗脸|洗了?手脸/, parse: () => ({ params: {} }) },
+  { id: 'cleanNose', re: /鼻涕|擤鼻|清理鼻子?/, parse: () => ({ params: {} }) },
+  { id: 'cutNails', re: /剪指甲|指甲/, parse: (zone) => ({ params: { note: zone } }) },
+  { id: 'grossMotor', re: /大运动|抬头|翻身|会爬|练爬|爬了|爬行|会坐|坐稳|练坐|会站|扶站|站起|练站|走路|学步|会走|跑步|会跑/,
+    parse: (zone) => {
+      const items = [];
+      grossMotorOptions.forEach(o => { if (zone.includes(o) && !items.includes(o)) items.push(o); });
+      const map = { '抬头':'会抬头','翻身':'会翻身','爬':'会爬','坐':'会坐','站':'会站','走路':'会走路','跑':'会跑步' };
+      Object.keys(map).forEach(k => { if (new RegExp('(?:会|练|在|刚)?' + k).test(zone) && !items.includes(map[k])) items.push(map[k]); });
+      return { params: { grossMotorItems: items }, warn: items.length === 0 };
+    } },
+  { id: 'fineMotor', re: /精细动作|抓握|摇头|点头|挥手|放东西|捏|戳|对拍/,
+    parse: (zone) => {
+      const items = [];
+      fineMotorOptions.forEach(o => { if (zone.includes(o) && !items.includes(o)) items.push(o); });
+      return { params: { fineMotorItems: items }, warn: items.length === 0 };
+    } },
+  { id: 'learnLanguage', re: /学语言|学说话/, parse: (zone) => ({ params: { note: zone } }) },
+  { id: 'learnLogic', re: /学逻辑/, parse: (zone) => ({ params: { note: zone } }) },
+];
+
+function parseVoiceText(text) {
+  const items = []; const unmatched = [];
+  // 跨段回填池：把"无规则命中但有语义的段"（如"7小时3"）暂存，供 sleep/outdoor/airButt 等时长型规则在自身没找到时长时回填
+  const crossSegPool = [];
+  // 已消费的段：被跨段回填用掉的段不应再 unmatched（避免误报"未识别"）
+  const consumedSegs = new Set();
+  const segs = [];
+  String(text || '').split(/[\n，,。；;！!？?、]+/).forEach(s => {
+    s.split(/然后|接着|再然后/).forEach(x => { x = x.trim(); if (x) segs.push(x); });
+  });
+  // 先预扫描：把所有 seg 中"无规则命中但有可解析时长"的段提前入池（这样 seg 1 处理时也能看到 seg 2+ 的候选项）
+  segs.forEach(seg => {
+    let hitCount = 0;
+    VOICE_RULES.forEach(r => { const re = new RegExp(r.re.source); if (re.test(seg)) hitCount++; });
+    if (hitCount === 0 && parseDurationMin(seg) !== null) crossSegPool.push(seg);
+  });
+  segs.forEach(seg => {
+    const hits = [];
+    VOICE_RULES.forEach(r => {
+      const re = new RegExp(r.re.source, 'g'); let mm;
+      while ((mm = re.exec(seg)) !== null) { hits.push({ rule: r, idx: mm.index }); if (mm.index === re.lastIndex) re.lastIndex++; }
+    });
+    const seen = new Set(); const uniq = [];
+    hits.sort((a, b) => a.idx - b.idx).forEach(h => { if (!seen.has(h.rule.id)) { seen.add(h.rule.id); uniq.push(h); } });
+    // 只对"完全无规则命中且未被跨段回填消费"的段进 unmatched
+    if (uniq.length === 0) { if (!consumedSegs.has(seg)) unmatched.push(seg); return; }
+    let segOk = false;
+    uniq.forEach((h, i) => {
+      const zone = seg.slice(h.idx, i + 1 < uniq.length ? uniq[i + 1].idx : seg.length);
+      // 单活动时整段解析（关键词前的参数如"听英文故事"的"英文"不丢失）；多活动时仅本区间
+      const parseZone = uniq.length === 1 ? seg : zone;
+      // 时长型规则（sleep / outdoor / airButt）传入 ctx 用于跨段时长回填与消费追踪
+      const needsDuration = (h.rule.id === 'sleep' || h.rule.id === 'outdoor' || h.rule.id === 'airButt');
+      const parsed = h.rule.parse(parseZone, needsDuration ? { pool: crossSegPool, consumed: consumedSegs } : undefined);
+      if (!parsed) return;
+      segOk = true;
+      const act = ACTIVITIES.find(a => a.id === h.rule.id);
+      // 单活动时时间提示可在整段任意位置；多活动时仅限本活动区间
+      const th = parseVoiceTimeHint(uniq.length === 1 ? seg : zone);
+      let recTime = th ? (String(th.h).padStart(2, '0') + ':' + String(th.m).padStart(2, '0')) : null;
+      // 时长类活动（睡眠/户外/晾屁股）说了时长没说时刻 → 开始时刻回推
+      if (!recTime && parsed.params && parsed.params.duration > 0 && (act.type === 'sleep' || act.type === 'duration' || act.type === 'airButt')) {
+        const t = new Date(Date.now() - parsed.params.duration * 60000);
+        recTime = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
+      }
+      if (!recTime) recTime = voiceNowHM();
+      items.push({ actId: h.rule.id, icon: act.icon, name: act.name, params: parsed.params || {}, recTime, warn: !!parsed.warn, zone });
+    });
+    if (!segOk) unmatched.push(seg);
+  });
+
+  // ===== v3.5.21 数值参数回填：语音被标点切分后，纯数值段(如"36.5""130")无法被任何规则命中 =====
+  // 但它很可能是前一个活动的参数（体温值/奶量/时长），尝试回填到前一个 item 的 params 里
+  if (unmatched.length > 0 && items.length > 0) {
+    const backfillIdx = [];
+    unmatched.forEach((seg, ui) => {
+      const trimmed = seg.trim();
+      if (!trimmed) return;
+      const last = items[items.length - 1];
+      let filled = false;
+
+      // 体温回填：parseTempNum 能识别 "36.5" / "38度5" / "38点5" 等
+      if (last.actId === 'temperature' && last.params.temperature === undefined) {
+        const tv = parseTempNum(trimmed);
+        if (tv !== null) {
+          last.params.temperature = tv;
+          last.params.tempStatus = tv <= 37.5 ? 'normal' : 'high';
+          if (last.warn) last.warn = false; // 原本 warn=true(缺体温)，现已补全
+          filled = true;
+        }
+      }
+
+      // 奶量回填：纯数字 20-400
+      if (!filled && last.actId === 'milk' && last.params.milkAmount === undefined) {
+        const mn = cnNum(trimmed);
+        if (mn !== null && mn >= 20 && mn <= 400) {
+          last.params.milkAmount = Math.round(mn);
+          if (last.warn) last.warn = false;
+          filled = true;
+        }
+      }
+
+      // 时长回填：sleep / outdoor / airButt 缺 duration 时
+      if (!filled && (last.actId === 'sleep' || last.actId === 'outdoor' || last.actId === 'airButt')
+          && last.params.duration !== undefined && last.params.duration === 0) {
+        const dv = parseDurationLoose(trimmed);
+        if (dv !== null && dv > 0) {
+          last.params.duration = dv;
+          if (last.warn) last.warn = false;
+          filled = true;
+        }
+      }
+
+      if (filled) backfillIdx.push(ui);
+    });
+    // 从 unmatched 中移除已成功回填的段（倒序删除避免索引偏移）
+    backfillIdx.sort((a, b) => b - a).forEach(ui => unmatched.splice(ui, 1));
+  }
+
+  return { items, unmatched: unmatched.join('；') };
+}
+
+// ---- 语音 UI 与识别（按住说话） ----
+let voiceRecog = null, voiceRecActive = false, voiceFinalText = '', voiceItems = [];
+
+// ========== 讯飞语音听写（流式版 WebAPI，浏览器 WebSocket 直连，国内可用） ==========
+function getXfyunConfig() {
+  const appid = localStorage.getItem('xfyun_appid');
+  const apiKey = localStorage.getItem('xfyun_api_key');
+  const apiSecret = localStorage.getItem('xfyun_api_secret');
+  // 本地有自定义配置则优先；否则回退到 app-config.js 的默认值（无需每次填写）
+  if (appid && apiKey && apiSecret) return { appid: appid, apiKey: apiKey, apiSecret: apiSecret };
+  if (_DEFAULT_XFYUN && _DEFAULT_XFYUN.appid && _DEFAULT_XFYUN.apiKey && _DEFAULT_XFYUN.apiSecret) {
+    return { appid: _DEFAULT_XFYUN.appid, apiKey: _DEFAULT_XFYUN.apiKey, apiSecret: _DEFAULT_XFYUN.apiSecret };
+  }
+  return null;
+}
+function saveXfyunConfig() {
+  const appid = document.getElementById('xfAppidInput').value.trim();
+  const apiKey = document.getElementById('xfApiKeyInput').value.trim();
+  const apiSecret = document.getElementById('xfApiSecretInput').value.trim();
+  // 三个都留空/保持掩码原样 = 使用 app-config.js 默认值，清除本地自定义
+  const untouched = (!appid && !apiKey && !apiSecret) || (appid === XF_MASK && apiKey === XF_MASK && apiSecret === XF_MASK);
+  if (untouched) { clearXfyunConfig(); return; }
+  if (!appid || !apiKey || !apiSecret) { showToast('请填写完整的 APPID / API Key / API Secret（或全部留空使用默认）'); return; }
+  localStorage.setItem('xfyun_appid', appid);
+  localStorage.setItem('xfyun_api_key', apiKey);
+  localStorage.setItem('xfyun_api_secret', apiSecret);
+  loadXfyunConfigUI();
+  showToast('语音配置已保存，语音将使用讯飞识别');
+}
+function clearXfyunConfig() {
+  localStorage.removeItem('xfyun_appid');
+  localStorage.removeItem('xfyun_api_key');
+  localStorage.removeItem('xfyun_api_secret');
+  loadXfyunConfigUI();
+  showToast('已恢复默认语音配置');
+}
+// 显示/隐藏明文切换
+function toggleXfyunSee() {
+  const show = document.getElementById('xfSeeToggle').checked;
+  ['xfAppidInput', 'xfApiKeyInput', 'xfApiSecretInput'].forEach(id => {
+    const el = document.getElementById(id);
+    el.type = show ? 'text' : 'password';
+  });
+}
+// 回填 UI：星号掩码表示已配置（默认或自定义），点输入框自动清空便于修改
+const XF_MASK = '********';
+const XF_INPUT_IDS = ['xfAppidInput', 'xfApiKeyInput', 'xfApiSecretInput'];
+function loadXfyunConfigUI() {
+  const appid = localStorage.getItem('xfyun_appid');
+  const apiKey = localStorage.getItem('xfyun_api_key');
+  const apiSecret = localStorage.getItem('xfyun_api_secret');
+  const el = id => document.getElementById(id);
+  const see = document.getElementById('xfSeeToggle');
+  if (see) see.checked = false;
+  XF_INPUT_IDS.forEach(id => { if (el(id)) el(id).type = 'password'; });
+  // 全部填星号掩码：有默认配置或本地自定义时均表示"已配置"
+  const hasCustom = !!(appid && apiKey && apiSecret);
+  XF_INPUT_IDS.forEach(id => { if (el(id)) el(id).value = (hasCustom || _DEFAULT_XFYUN) ? XF_MASK : ''; });
+  bindXfMaskEvents();
+  const hint = document.getElementById('xfDefaultHint');
+  if (hint) hint.textContent = hasCustom
+    ? '已启用自定义语音配置。点输入框可修改，「清除」恢复默认。'
+    : (_DEFAULT_XFYUN ? '已使用默认语音配置（星号表示已配置，无需填写）。点输入框可覆盖自定义。' : '未配置语音，请填写讯飞三要素。');
+}
+// 星号掩码交互：focus 清空便于输入，blur 空值时恢复星号
+function bindXfMaskEvents() {
+  XF_INPUT_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.maskBound) return;
+    el.dataset.maskBound = '1';
+    el.addEventListener('focus', () => { if (el.value === XF_MASK) el.value = ''; el.type = 'text'; });
+    el.addEventListener('blur', () => { if (!el.value.trim()) { el.value = XF_MASK; el.type = 'password'; } });
+  });
+}
+// 构建带鉴权的 WebSocket URL（HMAC-SHA256 签名，讯飞 WebAPI 标准）
+async function buildXfyunUrl(cfg) {
+  const host = 'iat-api.xfyun.cn';
+  const path = '/v2/iat';
+  const date = new Date().toUTCString();
+  const origin = 'host: ' + host + '\ndate: ' + date + '\nGET ' + path + ' HTTP/1.1';
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(cfg.apiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(origin));
+  const signature = btoa(String.fromCharCode.apply(null, new Uint8Array(sig)));
+  const authOrigin = 'api_key="' + cfg.apiKey + '", algorithm="hmac-sha256", headers="host date request-line", signature="' + signature + '"';
+  const authorization = btoa(authOrigin);
+  return 'wss://' + host + path + '?authorization=' + encodeURIComponent(authorization) + '&date=' + encodeURIComponent(date) + '&host=' + encodeURIComponent(host);
+}
+// 浏览器采样率 → 16k（线性插值）
+function downsampleTo16k(input, inputRate) {
+  if (inputRate === 16000) return input;
+  const ratio = inputRate / 16000;
+  const outLen = Math.floor(input.length / ratio);
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const pos = i * ratio;
+    const i0 = Math.floor(pos);
+    const i1 = Math.min(i0 + 1, input.length - 1);
+    out[i] = input[i0] + (input[i1] - input[i0]) * (pos - i0);
+  }
+  return out;
+}
+function float32ToInt16(f32) {
+  const out = new Int16Array(f32.length);
+  for (let i = 0; i < f32.length; i++) {
+    const s = Math.max(-1, Math.min(1, f32[i]));
+    out[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  }
+  return out;
+}
+function pcmToBase64(u8) {
+  let bin = '';
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+// 解析讯飞识别结果（含 wpgs 动态修正：rpl 时按 rg 范围替换旧句），返回当前完整文本
+function parseXfyunResult(sentences, r) {
+  if (!r) return null;
+  const text = (r.ws || []).map(w => (w.cw || []).map(c => c.w || '').join('')).join('');
+  if (r.pgs === 'rpl' && Array.isArray(r.rg)) {
+    const from = r.rg[0], to = r.rg[r.rg.length - 1];
+    for (let sn = from; sn <= to; sn++) sentences.delete(sn);
+  }
+  if (r.sn != null) sentences.set(r.sn, text);
+  return [...sentences.keys()].sort((a, b) => a - b).map(k => sentences.get(k)).join('');
+}
+let xfSession = null;
+async function startXfyunDictation() {
+  const cfg = getXfyunConfig();
+  if (!cfg) return false;
+  let url;
+  try { url = await buildXfyunUrl(cfg); } catch (e) { showToast('语音配置无效'); return false; }
+  const sess = { sentences: new Map(), queue: [], endSent: false, finalized: false };
+  xfSession = sess;
+  let ws;
+  try { ws = new WebSocket(url); } catch (e) { xfSession = null; showToast('无法连接语音服务'); return false; }
+  sess.ws = ws;
+  ws.onopen = async () => {
+    try {
+      sess.ws.send(JSON.stringify({
+        common: { app_id: cfg.appid },
+        business: { language: 'zh_cn', domain: 'iat', accent: 'mandarin', vad_eos: 5000, dwa: 'wpgs' },
+        data: { status: 0, format: 'audio/L16;rate=16000', encoding: 'raw', audio: '' }
+      }));
+      await startXfyunMic(sess);
+      // 讯飞识别已激活 → 切换到"录音中"态（状态3）
+      if (!_voiceHoldCanceled && voiceRecActive) setVoiceState('recording');
+    } catch (e) {
+      disarmVoiceTimeout();
+      showToast('无法访问麦克风：请检查浏览器录音权限');
+      sess.endSent = true;
+      finalizeXfyun(sess);
+    }
+  };
+  ws.onmessage = ev => {
+    let res; try { res = JSON.parse(ev.data); } catch (e) { return; }
+    if (res.code !== 0) {
+      showToast('语音识别失败：' + (res.message || res.code));
+      sess.endSent = true;
+      finalizeXfyun(sess);
+      return;
+    }
+    const d = res.data;
+    if (d && d.result) {
+      const text = parseXfyunResult(sess.sentences, d.result);
+      if (text != null) voiceFinalText = text;
+    }
+    if (d && d.status === 2) finalizeXfyun(sess);
+  };
+  ws.onerror = () => {
+    if (!sess.finalized) showToast('语音服务连接失败');
+    sess.endSent = true;
+    finalizeXfyun(sess);
+  };
+  ws.onclose = () => finalizeXfyun(sess);
+  return true;
+}
+async function startXfyunMic(sess) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+  sess.stream = stream;
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  sess.audioCtx = audioCtx;
+  const source = audioCtx.createMediaStreamSource(stream);
+  sess.source = source;
+  const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+  sess.processor = processor;
+  const inputRate = audioCtx.sampleRate;
+  const pcmBuf = [];
+  processor.onaudioprocess = e => {
+    e.outputBuffer.getChannelData(0).fill(0); // 静音输出，防止回声
+    if (sess.endSent || xfSession !== sess) return;
+    const down = downsampleTo16k(e.inputBuffer.getChannelData(0), inputRate);
+    const int16 = float32ToInt16(down);
+    for (let i = 0; i < int16.length; i++) pcmBuf.push(int16[i]);
+    while (pcmBuf.length >= 640) { // 640样本=1280字节=40ms，讯飞标准帧
+      const frame = new Int16Array(pcmBuf.splice(0, 640));
+      sess.queue.push(JSON.stringify({ data: { status: 1, format: 'audio/L16;rate=16000', encoding: 'raw', audio: pcmToBase64(new Uint8Array(frame.buffer)) } }));
+    }
+  };
+  source.connect(processor);
+  processor.connect(audioCtx.destination);
+  sess.sendTimer = setInterval(() => {
+    if (sess.ws && sess.ws.readyState === 1 && sess.queue.length) sess.ws.send(sess.queue.shift());
+  }, 40);
+}
+// 会话收尾：关连接、释放录音、进入统一的识别完成处理
+function finalizeXfyun(sess) {
+  if (sess.finalized) return;
+  sess.finalized = true;
+  clearTimeout(sess.timeoutTimer);
+  clearInterval(sess.sendTimer);
+  sess.queue.length = 0;
+  try { sess.ws && sess.ws.close(); } catch (e) {}
+  try { sess.source && sess.source.disconnect(); } catch (e) {}
+  try { sess.processor && sess.processor.disconnect(); } catch (e) {}
+  try { if (sess.audioCtx && sess.audioCtx.state !== 'closed') { const cp = sess.audioCtx.close(); if (cp && cp.catch) cp.catch(() => {}); } } catch (e) {}
+  try { sess.stream && sess.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+  if (xfSession === sess) xfSession = null;
+  finishVoiceRecognition();
+}
+// 用户松开按钮：停录音并发送结束帧，等讯飞返回最终结果（3秒超时兜底）
+function stopXfyunDictation() {
+  const sess = xfSession;
+  if (!sess) return;
+  try { sess.source && sess.source.disconnect(); } catch (e) {}
+  try { sess.processor && sess.processor.disconnect(); } catch (e) {}
+  try { if (sess.audioCtx && sess.audioCtx.state !== 'closed') { const cp = sess.audioCtx.close(); if (cp && cp.catch) cp.catch(() => {}); } } catch (e) {}
+  try { sess.stream && sess.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+  clearInterval(sess.sendTimer);
+  sess.queue.length = 0;
+  if (!sess.endSent) {
+    sess.endSent = true;
+    if (sess.ws && sess.ws.readyState === 1) {
+      try { sess.ws.send(JSON.stringify({ data: { status: 2, format: 'audio/L16;rate=16000', encoding: 'raw', audio: '' } })); } catch (e) {}
+      sess.timeoutTimer = setTimeout(() => finalizeXfyun(sess), 3000);
+    } else {
+      finalizeXfyun(sess);
+    }
+  }
+}
+// 识别完成统一入口（Web Speech API 与讯飞共用）
+// 语音按钮三态切换：idle(默认) / holding(按住) / recording(录音中)
+let _voiceHoldCanceled = false;      // 本次按住是否被上滑取消
+let _voiceTimeoutTimer = null;       // 录音超时定时器
+const VOICE_MAX_SEC = 60;            // 单次录音上限（秒），超时自动结束
+const VOICE_LABEL = { idle: '语音', recording: '录音中' };
+function setVoiceState(state) {
+  const btn = document.getElementById('voiceHoldBtn');
+  if (!btn) return;
+  btn.classList.toggle('holding', state === 'holding');
+  btn.classList.toggle('recording', state === 'recording');
+  const label = btn.querySelector('.voice-label');
+  if (label) label.textContent = (state === 'holding') ? '语音' : (VOICE_LABEL[state] || '语音');
+  if (state === 'idle') { if (label) label.textContent = '语音'; }
+}
+// 开始录音超时倒计时（到点自动结束录音）
+function armVoiceTimeout() {
+  clearTimeout(_voiceTimeoutTimer);
+  _voiceTimeoutTimer = setTimeout(() => { stopVoiceHold(); }, VOICE_MAX_SEC * 1000);
+}
+function disarmVoiceTimeout() { clearTimeout(_voiceTimeoutTimer); _voiceTimeoutTimer = null; }
+// 取消录音（上滑移出按钮或 touchcancel）：丢弃本次识别结果
+function cancelVoiceHold() {
+  disarmVoiceTimeout();
+  _voiceHoldCanceled = true;
+  const btn = document.getElementById('voiceHoldBtn');
+  if (btn) btn.classList.remove('holding', 'recording');
+  if (btn) { const l = btn.querySelector('.voice-label'); if (l) l.textContent = '语音'; }
+  voiceRecActive = false;
+  voiceFinalText = ''; voiceItems = [];
+  // 中止讯飞会话
+  if (xfSession) { try { xfSession.endSent = true; xfSession.finalized = true; try { xfSession.ws && xfSession.ws.close(); } catch(e){} try { xfSession.stream && xfSession.stream.getTracks().forEach(t=>t.stop()); } catch(e){} xfSession = null; } catch(e){} }
+  // 中止 Web Speech
+  if (voiceRecog) { try { voiceRecog.onend = null; voiceRecog.stop(); } catch (e) {} }
+  showToast('已取消录音');
+}
+
+function finishVoiceRecognition() {
+  disarmVoiceTimeout();
+  voiceRecActive = false;
+  setVoiceState('idle');
+  if (_voiceHoldCanceled) { _voiceHoldCanceled = false; return; }
+  if (voiceFinalText) {
+    const r = parseVoiceText(voiceFinalText);
+    voiceItems = r.items;
+    showVoiceModal(voiceFinalText, r.unmatched);
+  } else {
+    showToast('未识别到语音，请靠近一点再试试');
+  }
+}
+
+function startVoiceHold() {
+  if (isReadOnlyMode()) return;
+  if (voiceRecActive) return;
+  _voiceHoldCanceled = false;
+  voiceFinalText = '';
+  voiceItems = [];
+  const btn = document.getElementById('voiceHoldBtn');
+  setVoiceState('holding'); // 状态2：先进入按住态（高亮边 + tip），等识别真正激活再切录音中
+  armVoiceTimeout();
+  // 优先讯飞（国内直连可用）；未配置则回退浏览器自带 Web Speech API（海外可用）
+  if (getXfyunConfig()) {
+    voiceRecActive = true;
+    startXfyunDictation().then(started => {
+      if (!started) { disarmVoiceTimeout(); voiceRecActive = false; setVoiceState('idle'); }
+    });
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { disarmVoiceTimeout(); showToast('当前浏览器不支持语音识别：请到「管理」页配置讯飞语音'); if (btn) btn.classList.remove('holding', 'recording'); return; }
+  try {
+    voiceRecog = new SR();
+    voiceRecog.lang = 'zh-CN'; voiceRecog.interimResults = true; voiceRecog.continuous = false; voiceRecog.maxAlternatives = 1;
+    voiceRecog.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) voiceFinalText += t; else interim += t;
+      }
+      voiceFinalText = (voiceFinalText + interim).trim();
+    };
+    voiceRecog.onerror = (e) => {
+      disarmVoiceTimeout();
+      voiceRecActive = false;
+      setVoiceState('idle');
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') showToast('麦克风权限被拒：点地址栏左侧🔒→权限→麦克风→允许');
+      else if (e.error === 'no-speech') showToast('没有听到声音');
+      else if (e.error === 'network') showToast('语音服务连接失败：国内请在「管理」页配置讯飞语音');
+      else if (e.error === 'audio-capture') showToast('无法访问麦克风：请确认浏览器有录音权限');
+      else showToast('语音识别出错(' + e.error + ')：国内可在「管理」页配置讯飞语音');
+    };
+    voiceRecog.onend = finishVoiceRecognition;
+    voiceRecog.start();
+    voiceRecActive = true;
+    setVoiceState('recording'); // 状态3：录音中
+  } catch (err) {
+    disarmVoiceTimeout();
+    showToast('语音识别启动失败');
+    setVoiceState('idle');
+  }
+}
+function stopVoiceHold() {
+  disarmVoiceTimeout();
+  if (_voiceHoldCanceled) return;
+  if (xfSession) { stopXfyunDictation(); return; }
+  if (voiceRecog && voiceRecActive) { try { voiceRecog.stop(); } catch (e) {} }
+}
+// 语音按钮触摸事件绑定（仅 touch，不支持 click；上滑移出=取消）
+function bindVoiceTouch() {
+  const btn = document.getElementById('voiceHoldBtn');
+  if (!btn) return;
+  let startY = 0, startX = 0, movedOut = false;
+  btn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const t = e.touches[0];
+    startX = t.clientX; startY = t.clientY; movedOut = false;
+    startVoiceHold();
+  }, { passive: false });
+  btn.addEventListener('touchmove', (e) => {
+    if (!voiceRecActive && !btn.classList.contains('holding') && !btn.classList.contains('recording')) return;
+    const t = e.touches[0];
+    const dx = t.clientX - startX, dy = t.clientY - startY;
+    // 判定是否滑出按钮区域（向上滑出或移出边界视为取消）
+    const r = btn.getBoundingClientRect();
+    const outX = t.clientX < r.left - 6 || t.clientX > r.right + 6;
+    const outY = t.clientY < r.top - 6 || t.clientY > r.bottom + 6;
+    if ((dy < -30) || outX || outY) { // 上滑>30px 或移出边界 → 取消
+      if (!movedOut) { movedOut = true; cancelVoiceHold(); }
+    } else { movedOut = false; }
+    e.preventDefault();
+  }, { passive: false });
+  const endVoice = (e) => { e.preventDefault(); if (voiceRecActive || btn.classList.contains('holding') || btn.classList.contains('recording')) { if (!_voiceHoldCanceled) stopVoiceHold(); } };
+  btn.addEventListener('touchend', endVoice, { passive: false });
+  btn.addEventListener('touchcancel', (e) => { e.preventDefault(); cancelVoiceHold(); }, { passive: false });
+}
+
+// 触摸直发兜底：部分手机浏览器 click 合成可能失效（尤其语音按钮 preventDefault 之后），
+// 对底部栏关键按钮直接用 touchend 触发，确保点击必定响应；桌面端仍走 onclick
+function enableFastTap(el, handler) {
+  if (!el) return;
+  let sx = 0, sy = 0, moved = false;
+  el.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    sx = t.clientX; sy = t.clientY; moved = false;
+  }, { passive: true });
+  el.addEventListener('touchmove', (e) => {
+    const t = e.touches[0];
+    if (Math.abs(t.clientX - sx) > 10 || Math.abs(t.clientY - sy) > 10) moved = true; // 滑动不触发
+  }, { passive: true });
+  el.addEventListener('touchend', (e) => {
+    if (moved) return;
+    e.preventDefault(); // 阻止本次合成 click，避免与 onclick 重复触发
+    handler();
+  }, { passive: false });
+}
+function bindFastTaps() {
+  // 底部导航：日报 / 历史 / 分析 / 管理（添加按钮已在 HTML 内联 ontouchstart 兜底）
+  const navs = { openReport: openReport, openHistory: openHistory, openAnalysis: openAnalysis, openManage: openManage };
+  document.querySelectorAll('.nav-item').forEach(el => {
+    const fn = el.getAttribute('onclick') || '';
+    const m = fn.match(/(\w+)\s*\(\)/);
+    if (m && navs[m[1]]) enableFastTap(el, navs[m[1]]);
+  });
+}
+
+function showVoiceModal(rawText, unmatched) {
+  showModal('voiceModal');
+  const rawEl = document.getElementById('voiceRawText');
+  if (rawEl) rawEl.textContent = rawText || '（无）';
+  renderVoiceItems(unmatched);
+}
+function clearVoiceModal() {
+  voiceFinalText = ''; voiceItems = [];
+  const rawEl = document.getElementById('voiceRawText');
+  if (rawEl) rawEl.textContent = '（无）';
+  renderVoiceItems();
+}
+
+function voiceItemParamDef(item) {
+  const p = item.params;
+  if (p.milkAmount !== undefined) return { key: 'milkAmount', label: '奶量', value: p.milkAmount, unit: 'ml', min: 1, step: 1 };
+  if (p.duration !== undefined && (item.actId === 'sleep' || item.actId === 'outdoor' || item.actId === 'airButt')) return { key: 'duration', label: '时长', value: p.duration, unit: '分钟', min: 0, step: 1 };
+  if (p.temperature !== undefined) return { key: 'temperature', label: '体温', value: p.temperature, unit: '℃', min: 30, step: 0.1 };
+  if (p.supplementAmount !== undefined) return { key: 'supplementAmount', label: '用量', value: p.supplementAmount, unit: '粒', min: 1, step: 1 };
+  if (p.solidFoodAmount !== undefined) return { key: 'solidFoodAmount', label: '克数', value: p.solidFoodAmount, unit: 'g', min: 0, step: 1 };
+  if (p.vaccineDose !== undefined) return { key: 'vaccineDose', label: '第几剂', value: p.vaccineDose, unit: '剂', min: 1, step: 1 };
+  return null;
+}
+function renderVoiceItems(unmatched) {
+  const box = document.getElementById('voiceResultList');
+  const btn = document.getElementById('voiceConfirmBtn');
+  let html = '';
+  const viPending = [];   // v3.5.75 辅食：食物下拉需在 innerHTML 落盘后回填
+  if (voiceItems.length === 0) {
+    html = '<div class="voice-empty-tip">未识别到活动。试试：喂奶130 · 睡了一小时 · 洗澡了 · 大便拉肚子 · 体温38度5</div>';
+  } else {
+    voiceItems.forEach((it, i) => {
+      const pd = voiceItemParamDef(it);
+      const extra = [];
+      if (it.params.poopStatus) extra.push(it.params.poopStatus);
+      if (it.params.shampoo && it.params.shampoo !== '无') extra.push('沐浴露');
+      if (it.params.storyLangs) extra.push(it.params.storyLangs.join('+'));
+      if (it.params.supplementTypes) extra.push(it.params.supplementTypes.join('+'));
+      if (it.params.vaccineTypes && it.params.vaccineTypes.length) extra.push(it.params.vaccineTypes.join('+'));
+      if (it.params.grossMotorItems && it.params.grossMotorItems.length) extra.push(it.params.grossMotorItems.join('+'));
+      if (it.params.fineMotorItems && it.params.fineMotorItems.length) extra.push(it.params.fineMotorItems.join('+'));
+      if (it.params.solidFoods && it.params.solidFoods.length) extra.push(it.params.solidFoods.join('+'));
+      if (it.params.afterMeal === '异常') extra.push('饭后异常');
+      // 时间与数值输入同添加弹窗：HH:MM 数字直填 + 参数行（时长类拆 h/min）
+      const [vhh, vmm] = (it.recTime || getNowTimeStr()).split(':').map(x => String(parseInt(x) || 0).padStart(2, '0'));
+      const isDur = pd && pd.key === 'duration';
+      const dh = isDur ? Math.floor((pd.value || 0) / 60) : 0;
+      const dm = isDur ? Math.round((pd.value || 0) % 60) : 0;
+      // v3.5.75 辅食：语音确认界面也能直接选食物 / 改饭后状态（听不清时手动补）
+      const isSf = it.actId === 'solidFood';
+      if (isSf) viPending.push({ p: 'vi', id: String(i), sel: it.params.solidFoods || [] });
+      const sfBlock = isSf
+        ? `<div class="input-row sf-row"><label class="sf-label">食物:</label>${sfPickerHtml('vi', String(i))}</div>`
+          + `<div class="input-row sf-row sf-meal-row radio-group"><label class="sf-label">饭后:</label>`
+          + `<label><input type="radio" name="vimeal_${i}" value="正常" ${(it.params.afterMeal||'正常')==='正常'?'checked':''}> 正常</label>`
+          + `<label><input type="radio" name="vimeal_${i}" value="异常" ${it.params.afterMeal==='异常'?'checked':''}> 异常</label></div>`
+        : '';
+      html += `<div class="voice-record-item${it.warn ? ' vri-warn' : ''}" id="vri_${i}">
+        <div class="vri-head">
+          <span class="vri-name">${it.icon} ${it.name}${extra.length ? '<span class="vri-unit"> · ' + extra.join(' · ') + '</span>' : ''}</span>
+          <span class="vri-unit" id="viwarn_${i}" style="color:#fd79a8;${it.warn ? '' : 'display:none;'}">待补</span>
+          <span class="vri-del" onclick="voiceItems.splice(${i},1);renderVoiceItems();">&#10005;</span>
+        </div>
+        <div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" min="0" max="23" value="${vhh}" id="vit_h_${i}"><span>:</span><input type="number" min="0" max="59" value="${vmm}" id="vit_m_${i}"></div></div>
+        ${isDur
+          ? `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">${pd.label}:</label><input type="number" min="0" id="vinh_${i}" value="${dh}" style="width:50px;"><span class="unit">h</span><input type="number" min="0" max="59" id="vinm_${i}" value="${dm}" style="width:50px;margin-left:8px;"><span class="unit">min</span></div>`
+          : (pd ? `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">${pd.label}:</label><input type="number" min="${pd.min}" step="${pd.step}" value="${pd.value != null ? pd.value : ''}" id="vin_${i}"><span class="unit">${pd.unit}</span></div>` : '')}
+        ${sfBlock}
+      </div>`;
+    });
+  }
+  if (unmatched) html += `<div class="voice-empty-tip" style="color:#fab1a0;">未识别：${unmatched}（已忽略）</div>`;
+  const warnCount = voiceItems.filter(x => x.warn).length;
+  if (warnCount > 0) html += `<div class="voice-empty-tip" style="color:#fd79a8;">${warnCount} 条参数未听清（粉框），请补充后确认</div>`;
+  box.innerHTML = html;
+  viPending.forEach(x => sfInit(x.p, x.id, x.sel));
+  btn.style.display = voiceItems.length ? '' : 'none';
+  btn.textContent = `确认添加 ${voiceItems.length} 条`;
+}
+// v3.5.75 语音里选了食物后，同步回该条记录并撤下「待补」标记
+function sfSyncVoiceItem(idx) {
+  const i = parseInt(idx, 10);
+  const it = (typeof voiceItems !== 'undefined' && voiceItems[i]) || null;
+  if (!it || it.actId !== 'solidFood') return;
+  it.params.solidFoods = sfGetSelection('vi', String(i));
+  it.warn = it.params.solidFoods.length === 0;
+  const badge = document.getElementById('viwarn_' + i);
+  if (badge) badge.style.display = it.warn ? '' : 'none';
+  const card = document.getElementById('vri_' + i);
+  if (card && card.classList) card.classList.toggle('vri-warn', !!it.warn);
+}
+function confirmVoiceAdd() {
+  if (voiceItems.length === 0) return;
+  if (isReadOnlyMode()) { showToast('只读模式下无法添加记录'); return; }
+  const records = getTodayRecords();
+  const now = new Date(), ts = Date.now(), timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  const newestIds = [];
+  // 读取卡片上可能被手动修改的值（时间 HH:MM 直填 + 数值/时长 h·min）
+  voiceItems.forEach((it, i) => {
+    const pd = voiceItemParamDef(it);
+    const hEl = document.getElementById('vit_h_' + i);
+    const mEl = document.getElementById('vit_m_' + i);
+    if (hEl && mEl) {
+      const hh = String(parseInt(hEl.value) || 0).padStart(2, '0');
+      const mm = String(parseInt(mEl.value) || 0).padStart(2, '0');
+      it.recTime = hh + ':' + mm;
+    }
+    if (pd && pd.key === 'duration') {
+      const dhEl = document.getElementById('vinh_' + i);
+      const dmEl = document.getElementById('vinm_' + i);
+      if (dhEl && dmEl) it.params.duration = (parseInt(dhEl.value) || 0) * 60 + (parseInt(dmEl.value) || 0);
+    } else if (pd) {
+      const nEl = document.getElementById('vin_' + i);
+      if (nEl && nEl.value !== '' && !isNaN(parseFloat(nEl.value))) it.params[pd.key] = parseFloat(nEl.value);
+    }
+  });
+  voiceItems.forEach((it, viIdx) => {
+    const act = ACTIVITIES.find(a => a.id === it.actId); if (!act) return;
+    const p = it.params;
+    const record = { type: it.actId, name: act.name, time: timeStr, recTime: it.recTime, timestamp: ts, note: p.note || '', updatedAt: Date.now() };
+    if (act.type === 'milk') { record.milkTime = it.recTime; record.milkAmount = Math.max(1, Math.round(p.milkAmount || getDefaultMilkAmount())); }
+    else if (act.type === 'sleep') { record.sleepStartTime = it.recTime; record.duration = Math.max(0, Math.round(p.duration || 0)); }
+    else if (act.type === 'drinkWater') { record.drinkTime = it.recTime; }
+    else if (act.type === 'poop') { record.poopTime = it.recTime; record.poopStatus = p.poopStatus || '正常'; }
+    else if (act.type === 'supplement') { record.supplementTypes = (p.supplementTypes && p.supplementTypes.length) ? p.supplementTypes : ['AD']; record.supplementTime = it.recTime; record.supplementAmount = Math.max(1, Math.round(p.supplementAmount || 1)); }
+    else if (act.type === 'solidFood') {
+      // v3.5.75 优先取语音面板里手动勾选的食物（听不清时用户会自己补）
+      const picked = (typeof sfGetSelection === 'function') ? sfGetSelection('vi', String(viIdx)) : [];
+      record.solidFoods = picked.length ? picked : (p.solidFoods || []);
+      record.solidFoodTime = it.recTime;
+      record.solidFoodAmount = Math.max(0, Math.round(p.solidFoodAmount || 0));
+      const rds2 = document.getElementsByName(`vimeal_${viIdx}`); let _vm = p.afterMeal || '正常';
+      for (const r of rds2) { if (r.checked) { _vm = r.value; break; } }
+      record.afterMeal = _vm;
+      if (p.note) record.note = p.note;
+    }
+    else if (act.type === 'vaccine') { record.vaccineTypes = p.vaccineTypes || []; record.vaccineTime = it.recTime; record.vaccineDose = Math.max(1, Math.round(p.vaccineDose || 1)); }
+    else if (act.type === 'listenStory') { record.storyLangs = (p.storyLangs && p.storyLangs.length) ? p.storyLangs : ['中文']; record.storyTime = it.recTime; }
+    else if (act.type === 'grossMotor') { record.grossMotorItems = p.grossMotorItems || []; record.grossMotorTime = it.recTime; }
+    else if (act.type === 'fineMotor') { record.fineMotorItems = p.fineMotorItems || []; record.fineMotorTime = it.recTime; }
+    else if (act.type === 'duration') { record.duration = Math.max(0, parseFloat(p.duration || 0)); record.durationTime = it.recTime; }
+    else if (act.type === 'airButt') { record.duration = Math.max(0, parseFloat(p.duration || 0)); record.level = p.level || '正常'; record.airButtTime = it.recTime; }
+    else if (act.type === 'bath') { record.shampoo = p.shampoo || '无'; record.bathTime = it.recTime; }
+    else if (act.type === 'note') { record.noteTime = it.recTime; if (p.note) record.note = p.note; }
+    else if (act.type === 'temperature') { const v = parseFloat(p.temperature); if (!(v >= 34 && v <= 43)) { showToast(act.name + '体温异常，请检查'); return; } record.temperature = v; record.tempStatus = v <= 37.5 ? 'normal' : 'high'; record.tempTime = it.recTime; }
+    else if (act.type === 'simple') { record.simpleTime = it.recTime; }
+    records.push(record); newestIds.push(it.actId);
+  });
+  persistRecords(records);
+  syncUpload('records', getTodayDateStr());
+  hideModal('voiceModal');
+  voiceFinalText = ''; voiceItems = [];
+  const rawEl = document.getElementById('voiceRawText');
+  if (rawEl) rawEl.textContent = '（无）';
+  renderVoiceItems();
+  renderCards(newestIds); updateOverview();
+  showToast(`语音速记已添加 ${newestIds.length} 条记录`);
+}
+
+/* ==================== 日报 ==================== */
+function openReport() {
+  const records = getTodayRecords(); const content = document.getElementById('reportContent');
+  const stats = {};
+  const noteRecords = []; // 带备注的记录（用于备注区块）
+  records.forEach(r => {
+    if (!stats[r.type]) stats[r.type] = { name: r.name, count: 0, duration: 0, totalCount: 0, details: [], totalMilk: 0, totalSuppl: 0, totalSolid: 0, solidFoods: [] };
+    stats[r.type].count++;
+    if (r.duration !== undefined) stats[r.type].duration += r.duration;
+    if (r.count !== undefined) stats[r.type].totalCount += r.count;
+    if (r.milkAmount !== undefined) stats[r.type].totalMilk += r.milkAmount;
+    if (r.supplementAmount !== undefined) stats[r.type].totalSuppl += r.supplementAmount;
+    if (r.solidFoodAmount !== undefined) stats[r.type].totalSolid += r.solidFoodAmount;
+    if (r.type === 'solidFood') {
+      (r.solidFoods || []).forEach(f => { if (!stats[r.type].solidFoods.includes(f)) stats[r.type].solidFoods.push(f); });
+      if (r.afterMeal === '异常') stats[r.type].solidAbnormal = (stats[r.type].solidAbnormal || 0) + 1;
+    }
+    let detail = '';
+    if (r.level) detail = '程度:' + r.level;
+    else if (r.shampoo && r.shampoo !== '无') detail = '使用沐浴露:' + r.shampoo;
+    else if (r.temperature) detail = r.temperature + '℃' + (r.tempStatus === 'high' ? '⚠️' : '');
+    else if (r.note) detail = r.note;
+    if (detail) stats[r.type].details.push(detail);
+    if (r.note && r.note.trim()) noteRecords.push({ time: r.recTime || r.time || '', name: r.name, note: r.note.trim() });
+  });
+  const height = localStorage.getItem('babyHeight') || '';
+  const weight = localStorage.getItem('babyWeight') || '';
+  let html = '';
+  if (height || weight) {
+    html += `<div class="report-item"><span class="report-label">高</span><span class="report-value">${height||'-'} cm</span></div>`;
+    html += `<div class="report-item"><span class="report-label">重</span><span class="report-value">${weight||'-'} kg</span></div>`;
+    html += '<div style="height:8px;"></div>';
+  }
+  CATEGORIES.forEach(cat => {
+    const ca = ACTIVITIES.filter(a => a.category === cat.id && !hiddenActivities.includes(a.id));
+    if (ca.length === 0) return;
+    html += `<div class="report-section"><div class="report-section-title">${cat.icon} ${cat.name}</div>`;
+    ca.forEach(act => {
+      const s = stats[act.id]; let val = '', isZero = false;
+      if (!s) { val = act.type==='milk'?'0次 · 0ml':act.type==='sleep'?'0次 · 0h 0min':'0次'; isZero = true; }
+      else {
+        if (act.type === 'sleep') { const h = Math.floor(s.duration / 60); const m = Math.round(s.duration % 60); val = s.count + '次 · ' + h + 'h ' + m + 'min'; }
+        else if (act.type === 'supplement') val = s.count + '次 · ' + s.totalSuppl + '粒';
+        else if (act.type === 'solidFood') val = s.count + '次 · ' + s.totalSolid + 'g';
+        else if (act.type === 'milk') val = s.count + '次 · ' + s.totalMilk + 'ml';
+        else if (s.duration > 0) val = s.count + '次 · ' + s.duration.toFixed(1) + '分钟';
+        else val = s.count + '次';
+      }
+      html += `<div class="report-item"><span class="report-label">${act.icon} ${act.name}</span><span class="report-value${isZero?' zero':''}">${val}</span></div>`;
+      // 辅食下一行展示当天吃过的食物清单（饭后异常标红提示）
+      if (act.type === 'solidFood' && s && s.solidFoods && s.solidFoods.length) {
+        const escF = s.solidFoods.map(f => String(f).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+        const abn = s.solidAbnormal ? `<span style="color:#e17055;"> · 饭后异常${s.solidAbnormal}次</span>` : '';
+        html += `<div class="report-item"><span class="report-label">${act.icon} 吃了什么</span><span class="report-value">${escF.join('、')}${abn}</span></div>`;
+      }
+      // 喝奶（水量）下一行展示 水+奶 总量（奶量*1.12）
+      if (act.type === 'milk') {
+        const base = s ? s.totalMilk : 0;
+        const mixed = Math.round(base * 1.12);
+        html += `<div class="report-item"><span class="report-label">${act.icon} 喝奶（水+奶）</span><span class="report-value${isZero?' zero':''}">${mixed}ml</span></div>`;
+      }
+    });
+    html += '</div>';
+  });
+  // 备注区块：按时间正序列出所有备注
+  if (noteRecords.length > 0) {
+    noteRecords.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    html += `<div class="report-section"><div class="report-section-title">📝 备注记录</div>`;
+    noteRecords.forEach(n => {
+      const noteHtml = n.note.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      html += `<div class="report-item note-item"><span class="report-label">${n.time} ${n.name}</span><span class="report-value note-text">${noteHtml}</span></div>`;
+    });
+    html += '</div>';
+  }
+  html += `<div class="report-item" style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.15); padding-top:10px;"><span class="report-label">总记录数</span><span class="report-value">${records.length}条</span></div>`;
+  content.innerHTML = html || '<div class="report-empty">今天还没有记录哦~</div>';
+  showModal('reportModal');
+}
+
+/* ==================== 历史 ==================== */
+function openHistory() {
+  // 历史默认打开昨天（今天及以后禁止查看）
+  const t = new Date(); t.setDate(t.getDate() - 1);
+  document.getElementById('historyDate').value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  loadHistory(); showModal('historyModal');
+}
+function loadHistory() {
+  const ds = document.getElementById('historyDate').value; if (!ds) return;
+  loadHistoryBody(ds);   // 回填该日期已记录的身高/体重
+  let records = []; try { records = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
+  if (!Array.isArray(records)) records = [];
+  const list = document.getElementById('historyList');
+  const summary = document.getElementById('historySummary');
+  const dateLabel = document.getElementById('historyDateLabel');
+  if (dateLabel) dateLabel.textContent = ds;   // 列表下方显示当前查看的日期
+  if (records.length === 0) {
+    if (summary) { summary.innerHTML = ''; summary.style.display = 'none'; }
+    list.innerHTML = '<div class="report-empty">该日期暂无记录</div>';
+    return;
+  }
+  // 顶部统计: 所选日期总奶量 + 成就
+  let totalMilk = 0;
+  records.forEach(r => { if (r.type === 'milk' && r.milkAmount) totalMilk += r.milkAmount; });
+  const achArr = computeAchievements(records);
+  let sHtml = `<div class="history-sum-row"><span class="hs-label">🍼 水+奶量</span><span class="hs-value">${Math.round(totalMilk * 1.12)} ml</span></div>`;
+  sHtml += `<div class="history-sum-row"><span class="hs-label">🏆 今日成就</span><span class="hs-value">${achArr.length > 0 ? achArr.join(' | ') : '无'}</span></div>`;
+  if (summary) { summary.innerHTML = sHtml; summary.style.display = 'flex'; }
+  // 按活动开始时间正序排列
+  const sorted = [...records].sort((a, b) => {
+    const ta = (a.recTime || a.time || '00:00');
+    const tb = (b.recTime || b.time || '00:00');
+    return ta.localeCompare(tb);
+  });
+  let html = '';
+  sorted.forEach(r => {
+    // 记录定位键：type + timestamp（编辑/删除据此找到记录；日期从当前历史日期取）
+    const t = String(r.type || '').replace(/'/g, "\\'");
+    const ts = Number(r.timestamp) || 0;
+    html += `<div class="history-record">` +
+      `<div class="history-rec-main">` +
+        `<div class="rec-time">${r.recTime || r.time}</div>` +
+        `<div class="rec-detail">${r.name}: ${formatRecordBrief(r)}</div>` +
+      `</div>` +
+      `<div class="history-rec-ops">` +
+        `<span class="rec-edit" onclick="openEditRecord('${t}', ${ts}, '${ds}')" title="编辑"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>` +
+        `<span class="rec-delete" onclick="deleteRecord('${t}', ${ts}, '${ds}')" title="删除"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6"/><path d="M14 10v6"/></svg></span>` +
+      `</div>` +
+    `</div>`;
+  });
+  list.innerHTML = html;
+}
+// ---------- 历史页：所选日期的身高/体重（v3.5.73） ----------
+// 回填：bodyHistory 里该日期有值就显示，没有则留空
+function loadHistoryBody(ds) {
+  const el = document.getElementById('historyHeightInput');
+  const ew = document.getElementById('historyWeightInput');
+  if (!el && !ew) return;
+  const rec = getBodyHistory().find(x => x.d === ds);
+  if (el) el.value = (rec && rec.h != null) ? rec.h : '';
+  if (ew) ew.value = (rec && rec.w != null) ? rec.w : '';
+}
+// 保存：留空表示清除该项；写入后即时同步云端，并刷新体重/身高趋势曲线
+function saveHistoryBody(field) {
+  const dsEl = document.getElementById('historyDate');
+  const ds = dsEl ? dsEl.value : '';
+  if (!ds) { showToast('请先选择日期'); return; }
+  const el = document.getElementById(field === 'h' ? 'historyHeightInput' : 'historyWeightInput');
+  if (!el) return;
+  const raw = String(el.value == null ? '' : el.value).trim();
+  const name = field === 'h' ? '身高' : '体重';
+  let v = null;
+  if (raw !== '') {
+    v = parseFloat(raw);
+    if (isNaN(v) || v <= 0) { showToast(name + '需为大于 0 的数字'); loadHistoryBody(ds); return; }
+    v = Math.round(v * 10) / 10;   // 统一保留 1 位小数
+  }
+  // 与上次值相同则不重复写盘/同步（onchange 与 onblur 会各触发一次）
+  const prev = getBodyHistory().find(x => x.d === ds);
+  const oldV = prev ? prev[field] : null;
+  if ((oldV == null && v == null) || (oldV != null && v != null && Math.abs(oldV - v) < 1e-9)) { loadHistoryBody(ds); return; }
+  recordBodyMeasurement(field, v, ds);
+  loadHistoryBody(ds);
+  showToast(v == null ? ('已清除该日' + name) : (name + '已记录 ' + v + (field === 'h' ? 'cm' : 'kg')));
+}
+// 历史页：向所选日期添加记录
+function addHistoryRecord() {
+  const ds = document.getElementById('historyDate').value;
+  if (!ds) { showToast('请先选择日期'); return; }
+  openAddModal(ds);
+}
+// ---------- 自绘日期选择器（替代系统 picker：蓝色"确定"按钮 + 蓝色头部） ----------
+let _dpViewYear = 0, _dpViewMonth = 0, _dpSelected = '';
+function openHistoryDatePicker() {
+  const cur = document.getElementById('historyDate').value;
+  // 若当前值是今天或未来（异常状态），回退到昨天
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  const validCur = (cur && cur < todayKey) ? cur : '';
+  let d = validCur ? new Date(validCur + 'T00:00:00') : new Date(now.getTime() - 86400000);
+  _dpViewYear = d.getFullYear();
+  _dpViewMonth = d.getMonth();
+  _dpSelected = validCur || `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  renderHistoryDatePicker();
+  showModal('historyDatePickerModal');
+}
+function renderHistoryDatePicker() {
+  const label = document.getElementById('dpMonthLabel');
+  if (label) label.textContent = `${_dpViewYear} 年 ${_dpViewMonth + 1} 月`;
+  const grid = document.getElementById('dpGrid');
+  if (!grid) return;
+  const first = new Date(_dpViewYear, _dpViewMonth, 1);
+  // 周一开头：(getDay()+6)%7
+  const startOffset = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(_dpViewYear, _dpViewMonth + 1, 0).getDate();
+  const prevMonthDays = new Date(_dpViewYear, _dpViewMonth, 0).getDate();
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  let html = '';
+  // 上月尾部
+  for (let i = startOffset - 1; i >= 0; i--) {
+    const d = prevMonthDays - i;
+    html += `<div class="dp-cell outside" data-d="${d}" data-prev="1">${d}</div>`;
+  }
+  // 本月
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = `${_dpViewYear}-${String(_dpViewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const cls = ['dp-cell'];
+    // 历史记录只能看过去，禁止选当天及以后的日期
+    const isFuture = key >= todayKey;
+    if (key === todayKey) cls.push('today');
+    if (key === _dpSelected && !isFuture) cls.push('selected');
+    if (isFuture) cls.push('disabled');
+    if (isFuture) {
+      html += `<div class="${cls.join(' ')}" data-d="${d}">${d}</div>`;
+    } else {
+      html += `<div class="${cls.join(' ')}" data-d="${d}" onclick="dpSelectDay('${key}')">${d}</div>`;
+    }
+  }
+  // 下月头部补齐到 42 格（6 行 × 7）
+  const totalCells = startOffset + daysInMonth;
+  const fill = (7 - (totalCells % 7)) % 7;
+  for (let d = 1; d <= fill; d++) {
+    html += `<div class="dp-cell outside" data-d="${d}" data-next="1">${d}</div>`;
+  }
+  grid.innerHTML = html;
+}
+function dpSelectDay(key) {
+  // 禁止选择当天及以后
+  const t = new Date();
+  const todayKey = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  if (key >= todayKey) return;
+  _dpSelected = key;
+  renderHistoryDatePicker();
+}
+function dpNavMonth(delta) {
+  _dpViewMonth += delta;
+  if (_dpViewMonth < 0) { _dpViewMonth = 11; _dpViewYear--; }
+  if (_dpViewMonth > 11) { _dpViewMonth = 0; _dpViewYear++; }
+  renderHistoryDatePicker();
+}
+function dpPickQuick(deltaDays) {
+  if (deltaDays <= 0) return; // 禁止选今天及以后
+  const d = new Date();
+  d.setDate(d.getDate() - deltaDays);
+  const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  _dpSelected = key;
+  _dpViewYear = d.getFullYear();
+  _dpViewMonth = d.getMonth();
+  renderHistoryDatePicker();
+}
+function confirmHistoryDatePicker() {
+  if (!_dpSelected) { showToast('请先选择日期'); return; }
+  // 最终守卫：禁止确定今天及以后的日期
+  const t = new Date();
+  const todayKey = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  if (_dpSelected >= todayKey) { showToast('历史记录只能查看过去的日期'); return; }
+  document.getElementById('historyDate').value = _dpSelected;
+  loadHistory();
+  hideModal('historyDatePickerModal');
+}
+
+/* ==================== 管理 ==================== */
+// 奶量默认值（水量）：添加弹窗中喝奶的预填数值，可在管理弹窗修改，必须大于 0
+const MILK_DEFAULT_KEY = 'milkDefaultAmount';
+const MILK_DEFAULT_FALLBACK = 140;
+function getDefaultMilkAmount() {
+  const v = parseInt(localStorage.getItem(MILK_DEFAULT_KEY), 10);
+  return (!isNaN(v) && v > 0) ? v : MILK_DEFAULT_FALLBACK;
+}
+function setDefaultMilkAmount(v) { localStorage.setItem(MILK_DEFAULT_KEY, String(v)); }
+// 输入框失焦/回车时保存：必须大于 0，非法值恢复上次有效值并提示
+function saveMilkDefault() {
+  const el = document.getElementById('milkDefaultInput');
+  if (!el) return;
+  const raw = String(el.value || '').trim();
+  const v = parseFloat(raw);            // 用 parseFloat 而非 parseInt，避免 155.6 被截成 155
+  const r = Math.round(v);              // 四舍五入到整数毫升
+  if (!raw || isNaN(v) || r <= 0) {
+    el.value = getDefaultMilkAmount();
+    showToast('奶量默认值必须大于 0');
+    return;
+  }
+  if (r === Number(localStorage.getItem(MILK_DEFAULT_KEY))) { el.value = r; return; }
+  setDefaultMilkAmount(r);
+  el.value = r;
+  try { syncUpload('config'); } catch (e) {}   // 同步给家人设备
+  showToast('奶量默认值已设为 ' + r + 'ml');
+}
+function openManage() {
+  // 每次打开都从 localStorage 重新加载，保证显示最新值（包括上次关闭时即时修改的内容）
+  loadHiddenActivities();
+  loadCustomOptions();
+  const list = document.getElementById('manageList');
+  let html = '';
+  ACTIVITIES.forEach(act => {
+    const visible = !hiddenActivities.includes(act.id);
+    html += `<div class="manage-item"><span class="manage-name">${act.icon} ${act.name}</span><div class="toggle-switch ${visible?'on':''}" data-id="${act.id}" onclick="toggleManage('${act.id}')"></div></div>`;
+    // 喝奶开关下方紧跟「奶量默认值」输入框
+    if (act.id === 'milk') {
+      html += `<div class="manage-item"><span class="manage-name" style="font-size:14px;">🍼 奶量默认值（水量）</span>` +
+        `<span class="mi-value"><input type="number" inputmode="numeric" min="1" step="1" id="milkDefaultInput" ` +
+        `value="${getDefaultMilkAmount()}" onchange="saveMilkDefault()" onblur="saveMilkDefault()" ` +
+        `onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"><span class="mi-unit">ml</span></span></div>`;
+    }
+  });
+  list.innerHTML = html;
+  renderCustomOptionsSection();
+  document.getElementById('readOnlyToggle').checked = isReadOnlyMode();
+  loadPushTokenUI();
+  loadPushTopicUI();
+  loadPushSenderUI();
+  loadXfyunConfigUI();
+  updateReadOnlySlider();
+  showModal('manageModal');
+}
+function isReadOnlyMode() { const v = localStorage.getItem('readonly_mode'); return v === 'yes'; }
+function updateReadOnlySlider() {
+  const slider = document.getElementById('readOnlySlider');
+  if (!slider) return;
+  if (isReadOnlyMode()) slider.style.background = '#2ecc71';
+  else slider.style.background = 'rgba(255,255,255,0.1)';
+}
+function toggleReadOnly() {
+  const ck = document.getElementById('readOnlyToggle').checked;
+  localStorage.setItem('readonly_mode', ck ? 'yes' : 'no');
+  updateReadOnlySlider();
+  renderCards(); updateAddButtonVisibility();
+}
+function updateAddButtonVisibility() {
+  const fab = document.getElementById('fabBtn');
+  const mic = document.getElementById('voiceHoldBtn');
+  const hide = isReadOnlyMode() ? 'none' : '';
+  if (fab) fab.style.display = hide;
+  if (mic) mic.style.display = hide;
+}
+function toggleManage(id) {
+  const idx = hiddenActivities.indexOf(id);
+  if (idx >= 0) hiddenActivities.splice(idx, 1); else hiddenActivities.push(id);
+  const el = document.querySelector(`.toggle-switch[data-id="${id}"]`);
+  if (el) el.classList.toggle('on');
+  // 即时生效：保存到 localStorage + 重新渲染首页分类与卡片
+  saveHiddenActivities();
+  renderCategoryBar();
+  renderCards();
+}
+function renderCustomOptionsSection() {
+  const section = document.getElementById('customOptionsSection');
+  let html = '';
+  // v3.5.69 明确告知：选项即改即存（本地 + 云端），不会因为换天/刷新而丢失
+  const savedTip = `<span class="cos-saved">✓ 已永久保存</span>`;
+  const esc = o => String(o).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const tag = (o, fn) => `<span class="custom-tag">${esc(o)}<span class="tag-remove" onclick="${fn}('${esc(o).replace(/'/g,"\\'")}')">×</span></span>`;
+  html += `<div class="cos-title-row"><div class="cos-title">🤸 大运动选项</div>${savedTip}</div>`;
+  html += `<div class="custom-options-tags">`;
+  grossMotorOptions.forEach(o => { html += tag(o, 'removeGrossMotorOpt'); });
+  html += `</div>`;
+  html += `<div class="custom-add-row"><input type="text" id="newGrossMotorOpt" placeholder="新增选项" onkeydown="if(event.key==='Enter'){event.preventDefault();addGrossMotorOpt();}"><button class="btn btn-primary" onclick="addGrossMotorOpt()">添加</button></div>`;
+  html += '<div style="height:14px;"></div>';
+  html += `<div class="cos-title-row"><div class="cos-title">✋ 精细动作选项</div>${savedTip}</div>`;
+  html += `<div class="custom-options-tags">`;
+  fineMotorOptions.forEach(o => { html += tag(o, 'removeFineMotorOpt'); });
+  html += `</div>`;
+  html += `<div class="custom-add-row"><input type="text" id="newFineMotorOpt" placeholder="新增选项" onkeydown="if(event.key==='Enter'){event.preventDefault();addFineMotorOpt();}"><button class="btn btn-primary" onclick="addFineMotorOpt()">添加</button></div>`;
+  html += '<div style="height:14px;"></div>';
+  // v3.5.74 辅食食物选项（条目较多，容器限高可滚动）
+  html += `<div class="cos-title-row"><div class="cos-title">🥣 辅食食物选项</div>${savedTip}</div>`;
+  html += `<div class="custom-options-tags sf-tags">`;
+  solidFoodOptions.forEach(o => { html += tag(o, 'removeSolidFoodOpt'); });
+  html += `</div>`;
+  html += `<div class="custom-add-row"><input type="text" id="newSolidFoodOpt" placeholder="新增食物" onkeydown="if(event.key==='Enter'){event.preventDefault();addSolidFoodOpt();}"><button class="btn btn-primary" onclick="addSolidFoodOpt()">添加</button></div>`;
+  html += `<div style="height:12px;"></div>`;
+  html += `<div class="custom-add-row"><button class="btn" style="flex:1;font-size:13px;" onclick="openResetOptionsConfirm()">🔄 恢复默认选项</button></div>`;
+  section.innerHTML = html;
+}
+function _optLenLimit(val) {
+  if (val.length > 12) { showToast('选项名最多 12 个字'); return false; }
+  if (/^\d+$/.test(val)) { showToast('选项名不能纯数字'); return false; }
+  return true;
+}
+function addGrossMotorOpt() {
+  const inp = document.getElementById('newGrossMotorOpt'); const val = inp.value.trim();
+  if (!val) return; if (grossMotorOptions.includes(val)) { showToast('已存在'); return; }
+  if (!_optLenLimit(val)) return;
+  grossMotorOptions.push(val); saveCustomOptions(); renderCustomOptionsSection();
+  markOptDeleted('grossMotorDeleted', val, false);
+  showToast('已添加「' + val + '」，长期有效');
+}
+function removeGrossMotorOpt(opt) {
+  if (!confirm(`删除大运动选项「${opt}」？\n已记录的条目不会受影响。`)) return;
+  grossMotorOptions = grossMotorOptions.filter(o => o !== opt); saveCustomOptions(); renderCustomOptionsSection();
+  markOptDeleted('grossMotorDeleted', opt, true);
+  showToast('已删除「' + opt + '」');
+}
+function addFineMotorOpt() {
+  const inp = document.getElementById('newFineMotorOpt'); const val = inp.value.trim();
+  if (!val) return; if (fineMotorOptions.includes(val)) { showToast('已存在'); return; }
+  if (!_optLenLimit(val)) return;
+  fineMotorOptions.push(val); saveCustomOptions(); renderCustomOptionsSection();
+  markOptDeleted('fineMotorDeleted', val, false);
+  showToast('已添加「' + val + '」，长期有效');
+}
+function removeFineMotorOpt(opt) {
+  if (!confirm(`删除精细动作选项「${opt}」？\n已记录的条目不会受影响。`)) return;
+  fineMotorOptions = fineMotorOptions.filter(o => o !== opt); saveCustomOptions(); renderCustomOptionsSection();
+  markOptDeleted('fineMotorDeleted', opt, true);
+  showToast('已删除「' + opt + '」');
+}
+// v3.5.74 辅食食物选项增删
+function addSolidFoodOpt() {
+  const inp = document.getElementById('newSolidFoodOpt'); const val = (inp && inp.value ? inp.value : '').trim();
+  if (!val) return; if (solidFoodOptions.includes(val)) { showToast('已存在'); return; }
+  if (!_optLenLimit(val)) return;
+  solidFoodOptions.push(val); saveCustomOptions(); renderCustomOptionsSection();
+  markOptDeleted('solidFoodDeleted', val, false);
+  showToast('已添加「' + val + '」，长期有效');
+}
+function removeSolidFoodOpt(opt) {
+  if (!confirm(`删除辅食食物「${opt}」？\n已记录的条目不会受影响。`)) return;
+  solidFoodOptions = solidFoodOptions.filter(o => o !== opt); saveCustomOptions(); renderCustomOptionsSection();
+  markOptDeleted('solidFoodDeleted', opt, true);
+  showToast('已删除「' + opt + '」');
+}
+// 删除记录：防止"出厂默认项"在下次加载时被自动补回（用户主动删掉的要保持删除）
+function markOptDeleted(key, val, del) {
+  let arr = safeParseArr(localStorage.getItem(key));
+  if (del) { if (!arr.includes(val)) arr.push(val); }
+  else { arr = arr.filter(o => o !== val); }
+  localStorage.setItem(key, JSON.stringify(arr));
+}
+function resetCustomOptions() { grossMotorOptions = [...DEFAULT_GROSS_MOTOR]; fineMotorOptions = [...DEFAULT_FINE_MOTOR]; solidFoodOptions = [...DEFAULT_SOLID_FOODS]; saveCustomOptions(); renderCustomOptionsSection(); }
+function openResetOptionsConfirm() {
+  const removedG = grossMotorOptions.filter(o => !DEFAULT_GROSS_MOTOR.includes(o));
+  const removedF = fineMotorOptions.filter(o => !DEFAULT_FINE_MOTOR.includes(o));
+  const removedS = solidFoodOptions.filter(o => !DEFAULT_SOLID_FOODS.includes(o));
+  const el = document.getElementById('optionsResetPreview');
+  if (el) {
+    const all = [...removedG, ...removedF, ...removedS];
+    el.innerHTML = all.length
+      ? `将移除你添加的 ${all.length} 个选项：<span style="color:#e17055;">${all.join('、')}</span>`
+      : '当前没有自定义选项，恢复后与现状一致。';
+  }
+  showModal('optionsResetModal');
+}
+function doResetCustomOptions() {
+  resetCustomOptions();
+  localStorage.setItem('grossMotorDeleted', '[]');
+  localStorage.setItem('fineMotorDeleted', '[]');
+  localStorage.setItem('solidFoodDeleted', '[]');
+  hideModal('optionsResetModal');
+  showToast('已恢复默认选项');
+}
+function saveManage() { saveHiddenActivities(); renderCategoryBar(); renderCards(); hideModal('manageModal'); showToast('已保存'); }
+
+/* ==================== 日报复制 ==================== */
+function buildReportText() {
+  const t = new Date(); const ds = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  const records = getTodayRecords();
+  let text = `${BABY_NAME}的日常 (${ds})\n${document.getElementById('ageInfo').textContent}\n`;
+  const h = localStorage.getItem('babyHeight'), w = localStorage.getItem('babyWeight');
+  if (h || w) text += `高${h||'-'}cm 重${w||'-'}kg\n`;
+  text += '\u2500'.repeat(20) + '\n';
+  const noteRecords = [];
+  if (records.length === 0) { text += '今天还没有记录哦~\n'; } else {
+    const stats = {};
+    records.forEach(r => {
+      if (!stats[r.type]) stats[r.type] = { name: r.name, count: 0, duration: 0, totalMilk: 0 };
+      stats[r.type].count++;
+      if (r.duration !== undefined) stats[r.type].duration += r.duration;
+      if (r.milkAmount !== undefined) stats[r.type].totalMilk += r.milkAmount;
+      if (r.note && r.note.trim()) noteRecords.push({ time: r.recTime || r.time || '', name: r.name, note: r.note.trim() });
+    });
+    CATEGORIES.forEach(cat => { ACTIVITIES.filter(a => a.category === cat.id && !hiddenActivities.includes(a.id)).forEach(act => { const s = stats[act.id]; if (!s) return; let line = `${act.name}: `; if (act.type === 'milk') line += `${s.count}次 ${s.totalMilk}ml`; else if (act.type === 'sleep') { const hh = Math.floor(s.duration / 60); const mm = Math.round(s.duration % 60); line += `${s.count}次 ${hh}h ${mm}min`; } else if (s.duration > 0) line += `${s.duration.toFixed(1)}分钟`; else line += `${s.count}次`; text += line + '\n'; if (act.type === 'milk') text += `喝奶（水+奶）: ${Math.round(s.totalMilk * 1.12)}ml\n`; }); });
+    if (noteRecords.length > 0) {
+      noteRecords.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+      text += '\n📝 备注:\n';
+      noteRecords.forEach(n => { text += `${n.time} ${n.name}: ${n.note.replace(/\n/g, ' / ')}\n`; });
+    }
+    text += `总记录数: ${records.length}条\n`;
+  }
+  text += '\u2500'.repeat(20) + '\n记录于 小咕噜的日常';
+  return text;
+}
+function copyReport() { copyTextToClipboard(buildReportText()); }
+function copyTextToClipboard(text) {
+  if (navigator.clipboard) { navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板')).catch(() => fallbackCopyText(text)); }
+  else fallbackCopyText(text);
+}
+function fallbackCopyText(text) { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); showToast('已复制到剪贴板'); } catch { showToast('复制失败'); } document.body.removeChild(ta); }
+
+/* ==================== 数据分析 ==================== */
+function getBodyHistory() {
+  try { const a = JSON.parse(localStorage.getItem('bodyHistory') || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+// field: 'h' | 'w'；dateStr 省略时记到今天。val 传 null 表示清除该字段
+// （历史弹窗用来补录/修改过去某一天的高重）
+function recordBodyMeasurement(field, val, dateStr) {
+  let hist = getBodyHistory();
+  const ds = dateStr || getTodayDateStr();
+  if (hist.length === 0) {
+    // 首次记录：以当前已有值作为曲线起点
+    const h = parseFloat(localStorage.getItem('babyHeight')) || null;
+    const w = parseFloat(localStorage.getItem('babyWeight')) || null;
+    if (h || w) hist.push({ d: ds, h: h, w: w });
+  }
+  let rec = hist.find(x => x.d === ds);
+  if (!rec) {
+    if (val == null) return;                 // 本来就没有记录，无需清除
+    rec = { d: ds, h: null, w: null }; hist.push(rec);
+  }
+  rec[field] = val;
+  // 高和重都被清空 → 整条记录移除，避免曲线上留下空白点
+  if (rec.h == null && rec.w == null) hist = hist.filter(x => x.d !== ds);
+  hist.sort((a, b) => a.d.localeCompare(b.d));
+  const serialized = JSON.stringify(hist);
+  // v3.5.76 幂等：内容没变就不重复写盘/上传（oninput/onchange/onblur 可能多次触发）
+  if (localStorage.getItem('bodyHistory') === serialized) return;
+  localStorage.setItem('bodyHistory', serialized);
+  bumpConfigTs('bodyHistory');   // 打上本地时间戳，避免同步拉取把刚记录的曲线点覆盖掉
+  syncUpload('config');
+  // 如果分析弹窗正打开，实时刷新图表
+  if (document.getElementById('analysisModal') && document.getElementById('analysisModal').classList.contains('show')) {
+    openAnalysis();
+  }
+}
+// 补充历史身高体重数据（幂等，仅首次或缺失时填入）
+function seedBodyHistory() {
+  let hist = getBodyHistory();
+  const seedData = [
+    // 2026-04 ~ 2026-07 历史体重
+    { d: '2026-04-25', h: 50,   w: 3.34 },
+    { d: '2026-05-10', h: null, w: 3.54 },
+    { d: '2026-05-11', h: null, w: 3.60 },
+    { d: '2026-05-12', h: null, w: 3.62 },
+    { d: '2026-05-14', h: null, w: 3.70 },
+    { d: '2026-05-15', h: null, w: 3.70 },
+    { d: '2026-05-16', h: null, w: 3.73 },
+    { d: '2026-05-17', h: null, w: 3.76 },
+    { d: '2026-05-18', h: null, w: 3.76 },
+    { d: '2026-05-19', h: null, w: 3.79 },
+    { d: '2026-05-21', h: null, w: 3.86 },
+    { d: '2026-05-22', h: 54,   w: 3.89 },
+    { d: '2026-05-23', h: null, w: 3.92 },
+    { d: '2026-05-24', h: null, w: 3.92 },
+    { d: '2026-05-26', h: null, w: 3.96 },
+    { d: '2026-05-28', h: null, w: 4.04 },
+    { d: '2026-05-29', h: null, w: 4.11 },
+    { d: '2026-05-30', h: null, w: 4.12 },
+    { d: '2026-05-31', h: null, w: 4.15 },
+    { d: '2026-06-01', h: null, w: 4.15 },
+    { d: '2026-06-02', h: null, w: 4.24 },
+    { d: '2026-06-03', h: null, w: 4.27 },
+    { d: '2026-06-04', h: null, w: 4.27 },
+    { d: '2026-06-05', h: null, w: 4.32 },
+    { d: '2026-06-06', h: null, w: 4.35 },
+    { d: '2026-06-07', h: 56.5, w: 4.42 },
+    { d: '2026-06-08', h: null, w: 4.43 },
+    { d: '2026-06-09', h: null, w: 4.48 },
+    { d: '2026-06-10', h: null, w: 4.48 },
+    { d: '2026-06-11', h: null, w: 4.49 },
+    { d: '2026-06-12', h: null, w: 4.55 },
+    { d: '2026-06-13', h: 57,   w: 4.60 },
+    { d: '2026-06-14', h: null, w: 4.60 },
+    { d: '2026-06-15', h: null, w: 4.65 },
+    { d: '2026-06-20', h: 59.1, w: 4.75 },
+    { d: '2026-06-22', h: null, w: 4.80 },
+    { d: '2026-07-01', h: null, w: 5.20 },
+    { d: '2026-07-09', h: null, w: 5.45 },
+    { d: '2026-07-17', h: null, w: 5.55 },
+    // 现有数据（保留）
+    { d: '2026-08-10', h: 61.0, w: 5.70 },
+    { d: '2026-08-18', h: 62.5, w: 5.87 },
+    { d: '2026-08-20', h: 62.5, w: 6.10 }
+  ];
+  let changed = false;
+  seedData.forEach(s => {
+    const existing = hist.find(x => x.d === s.d);
+    if (!existing) {
+      hist.push({ d: s.d, h: s.h, w: s.w });
+      if (s.h != null || s.w != null) changed = true;
+    }
+    else {
+      const hadH = existing.h != null, hadW = existing.w != null;
+      if (s.h != null && !hadH) { existing.h = s.h; changed = true; }
+      if (s.w != null && !hadW) { existing.w = s.w; changed = true; }
+    }
+  });
+  if (changed) {
+    hist.sort((a, b) => a.d.localeCompare(b.d));
+    localStorage.setItem('bodyHistory', JSON.stringify(hist));
+    syncUpload('config');
+  }
+}
+// 相同数值只保留最早日期（按日期升序遍历去重）
+function dedupeBodySeries(points) {
+  // v3.5.9 修复：按"日期"去重（同一天只保留一条），而不是按"数值"去重
+  // 旧逻辑按值去重会导致：当天体重/身高与历史某天相同时，当天的数据点从曲线上消失
+  const seen = new Set(); const out = [];
+  for (const p of points) {
+    if (p.v == null) continue;
+    if (!seen.has(p.d)) { seen.add(p.d); out.push(p); }
+  }
+  return out;
+}
+function dailyMilkTotal(ds) {
+  let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
+  if (!Array.isArray(recs)) recs = [];
+  let total = 0;
+  recs.forEach(r => { if (r.type === 'milk' && r.milkAmount) total += r.milkAmount; });
+  return total > 0 ? total : null;
+}
+function dailySleepHours(ds) {
+  let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
+  if (!Array.isArray(recs)) recs = [];
+  let total = 0;
+  recs.forEach(r => { if (r.type === 'sleep' && r.duration) total += r.duration; });
+  return total > 0 ? total / 60 : null;
+}
+function dailyMilkCount(ds) {
+  let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
+  if (!Array.isArray(recs)) recs = [];
+  let count = 0;
+  recs.forEach(r => { if (r.type === 'milk') count++; });
+  return count > 0 ? count : null;
+}
+function dailyPoopInfo(ds) {
+  // 返回 { count, statuses: [状态文字] }，无记录返回 null
+  let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
+  if (!Array.isArray(recs)) recs = [];
+  const statuses = [];
+  recs.forEach(r => { if (r.type === 'poop') statuses.push(r.poopStatus || '正常'); });
+  return statuses.length > 0 ? { count: statuses.length, statuses: statuses } : null;
+}
+/* ==================== v3.5.70 大便与喝奶时间间隔 ==================== */
+// 干预时间点：在间隔趋势图上以竖线分隔标注，方便对比「加乳糖酶」等措施前后的变化。
+// 想增减标记，直接改下面这行；也可在浏览器控制台执行（会一直生效）：
+//   localStorage.setItem('interventionMarks', JSON.stringify([{date:'2026-09-08',label:'加乳糖酶'}]))
+const DEFAULT_INTERVENTION_MARKS = [{ date: '2026-09-08', label: '加乳糖酶' }];
+function getInterventionMarks() {
+  try {
+    const raw = localStorage.getItem('interventionMarks');
+    if (raw) {
+      const a = JSON.parse(raw);
+      if (Array.isArray(a)) return a.filter(m => m && typeof m.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(m.date));
+    }
+  } catch {}
+  return DEFAULT_INTERVENTION_MARKS;
+}
+// 截止「昨天」的全部历史：只保留当天确实有大便、且能算出间隔的日期（其余不画点）
+function collectPoopGapSeries() {
+  const cache = {};
+  const load = d => {
+    if (!(d in cache)) {
+      try { const a = JSON.parse(localStorage.getItem(getDateKey(d)) || '[]'); cache[d] = Array.isArray(a) ? a : []; }
+      catch { cache[d] = []; }
+    }
+    return cache[d];
+  };
+  const todayDs = getTodayDateStr();
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    const m = /^records_(\d{4}-\d{2}-\d{2})$/.exec(k || '');
+    if (m) keys.push(m[1]);
+  }
+  keys.sort();
+  const out = [];
+  keys.forEach(ds => {
+    if (ds >= todayDs) return;              // 截止昨天：今天及以后不参与（当天还没过完）
+    const g = dailyPoopMilkGap(ds, load);
+    if (!g) return;                         // 当天没大便（或没有可参照的喝奶）→ 排除该数据点
+    const p = ds.split('-');
+    out.push({
+      label: `${parseInt(p[1], 10)}/${parseInt(p[2], 10)}`,
+      value: g.avg,
+      count: g.count,
+      t: Date.parse(ds)                     // 与体重/身高图一致：按 UTC 日期，横轴按真实日期间隔等分
+    });
+  });
+  return out;
+}
+// 口径（v3.5.72）：对当天每一次大便，找到「早于它、且离它最近」的那次喝奶，
+//      间隔 = 大便时间 − 那次喝奶时间（分钟，非负）；再把当天所有大便的间隔求平均，作为这天的数据点。
+//      喝奶只在「当天 + 往前回溯 3 天」里找：凌晨的大便能匹配到前一天夜奶；
+//      若某次大便之前回溯范围内都没有喂奶记录，则该次大便不参与当天的平均。
+function _hmToMin(hm) {
+  const m = /^(\d{1,2}):(\d{1,2})$/.exec(String(hm == null ? '' : hm).trim());
+  if (!m) return null;
+  const h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+  if (isNaN(h) || isNaN(mi) || h > 23 || mi > 59) return null;
+  return h * 60 + mi;
+}
+function _dsToBaseMs(ds) {
+  const p = String(ds == null ? '' : ds).split('-').map(Number);
+  if (p.length !== 3 || p.some(isNaN)) return null;
+  return new Date(p[0], p[1] - 1, p[2], 0, 0, 0, 0).getTime();
+}
+function _shiftDs(ds, days) {
+  const b = _dsToBaseMs(ds); if (b == null) return null;
+  const d = new Date(b); d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+// 返回 { avg: 平均间隔分钟, count: 参与平均的大便次数, min, max } 或 null（当天无大便/无喝奶记录）
+// loader: 可选的取记录函数（全历史扫描时传入带缓存的版本，避免同一天被反复解析）
+function dailyPoopMilkGap(ds, loader) {
+  const load = loader || function (d) {
+    try { const a = JSON.parse(localStorage.getItem(getDateKey(d)) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+  };
+  const base = _dsToBaseMs(ds); if (base == null) return null;
+  const recs = load(ds);
+  if (!Array.isArray(recs)) return null;
+  const poopAbs = [];
+  recs.forEach(r => {
+    if (!r || r.type !== 'poop') return;
+    const t = _hmToMin(r.poopTime || r.recTime || r.time);
+    if (t != null) poopAbs.push(base + t * 60000);
+  });
+  if (poopAbs.length === 0) return null;   // 当天没大便 → 该天无数据点
+  // v3.5.72 只收集「当天 + 往前回溯数天」的喝奶时间点：取早于大便的那一次（喂奶 → 排便的方向）
+  const milkAbs = [];
+  [0, -1, -2, -3].forEach(off => {
+    const d2 = _shiftDs(ds, off); if (!d2) return;
+    const b2 = _dsToBaseMs(d2);
+    const rs = load(d2);
+    if (!Array.isArray(rs)) return;
+    rs.forEach(r => {
+      if (!r || r.type !== 'milk') return;
+      const t = _hmToMin(r.milkTime || r.recTime || r.time);
+      if (t != null) milkAbs.push(b2 + t * 60000);
+    });
+  });
+  if (milkAbs.length === 0) return null;   // 回溯范围内没有喝奶记录 → 无法计算间隔
+  const gaps = [];
+  poopAbs.forEach(p => {
+    let best = null;
+    milkAbs.forEach(m => {
+      if (m > p) return;                   // 晚于大便的喝奶不算（只认"喂完奶之后拉"）
+      const g = (p - m) / 60000;           // 大便时间 − 之前最近一次喝奶时间
+      if (best === null || g < best) best = g;
+    });
+    if (best != null) gaps.push(best);     // 之前确实没有喂奶记录的样本直接跳过
+  });
+  if (gaps.length === 0) return null;
+  const sum = gaps.reduce((a, b) => a + b, 0);
+  return {
+    avg: Math.round(sum / gaps.length),
+    count: gaps.length,
+    min: Math.round(Math.min(...gaps)),
+    max: Math.round(Math.max(...gaps))
+  };
+}
+// 通用折线图（内联SVG，无外部依赖；点击数据点显示横纵坐标）
+let _chartTipSeq = 0;
+// v3.5.13 图表 Y 轴档位状态：compact/undefined=紧凑档（数据范围），full=全量档（含 WHO 参考线）
+let _chartZoomState = {};
+// v3.5.19 +/− 缩放：+ 放大到数据档（紧凑），− 缩小到全量档（含 WHO）
+function chartZoomIn(chartTitle) { if (_chartZoomState[chartTitle] !== 'compact') { _chartZoomState[chartTitle] = 'compact'; openAnalysis(); } }
+function chartZoomOut(chartTitle) { if (_chartZoomState[chartTitle] !== 'full') { _chartZoomState[chartTitle] = 'full'; openAnalysis(); } }
+function makeLineChart(data, opts) {
+  const title = opts.title, unit = opts.unit || '', color = opts.color || '#74b9ff';
+  const valid = data.filter(d => d.value != null);
+  const head = `<div class="chart-card"><div class="chart-title">${title}</div>`;
+  if (valid.length === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
+  const W = 360, H = 168, PL = 40, PR = 54, PT = 22, PB = 24;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  const n = data.length;
+  // 横轴：数据点带时间戳 t 时按日期间隔线性等分（间隔1天的图上距离是间隔2天的一半），否则按索引等分
+  const tArr = data.map(d => d.t).filter(t => t != null);
+  const hasT = tArr.length === n && n > 1 && Math.max(...tArr) > Math.min(...tArr);
+  const tMin = hasT ? Math.min(...tArr) : 0, tMax = hasT ? Math.max(...tArr) : 1;
+  // v3.5.18 WHO 图例移到标题行（HTML，不受 SVG 裁剪），SVG 内只保留 WHO 数据点+tooltip
+  const whoLegend = opts.who && hasT
+    ? `<span style="float:right;font-size:10px;color:#b2bec3;margin-right:4px;">` +
+      `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#e87878;margin-right:2px;vertical-align:middle;"></span>3% ` +
+      `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#8a90a6;margin-right:2px;vertical-align:middle;"></span>50% ` +
+      `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#d4a03a;margin-right:2px;vertical-align:middle;"></span>75%</span>`
+    : '';
+  // v3.5.19 +/− 缩放按钮行：WHO 图例下方、图上方、靠最右侧（当前档高亮）
+  const titleSafe = title.replace(/'/g, "\\'");
+  const zoomRow = opts.zoomTiers
+    ? `<div class="chart-zoom-row">` +
+      `<span class="chart-zoom-btn ${_chartZoomState[title] === 'full' ? 'active' : ''}" onclick="event.stopPropagation();chartZoomOut('${titleSafe}')">−</span>` +
+      `<span class="chart-zoom-btn ${_chartZoomState[title] !== 'full' ? 'active' : ''}" onclick="event.stopPropagation();chartZoomIn('${titleSafe}')">+</span>` +
+      `</div>`
+    : '';
+  const head2 = `<div class="chart-card"><div class="chart-title">${title}${whoLegend}</div>${zoomRow}`;
+  // WHO 参考曲线关键点：两端日期 + 范围内每月25号（月龄切换日），每点按该日期月龄取 p3/p50/p75
+  let whoPts = null;
+  if (opts.who && hasT) {
+    whoPts = [];
+    const addWhoPt = ts => {
+      const dt = new Date(ts);
+      const ds = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+      whoPts.push({ t: ts, row: getStdRow(opts.who.table, ds) });
+    };
+    addWhoPt(tMin);
+    let cur = new Date(tMin);
+    cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth(), 25));
+    if (cur.getTime() <= tMin) cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 25));
+    while (cur.getTime() < tMax) {
+      addWhoPt(cur.getTime());
+      cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 25));
+    }
+    addWhoPt(tMax);
+    whoPts = whoPts.filter((p, i) => i === 0 || p.t !== whoPts[i - 1].t); // 去重（末端恰为25号）
+  }
+  // 纵坐标：v3.5.13 紧凑档（zoomTiers，默认）只按数据范围取轴；全量档含 WHO 参考曲线值
+  const dataMax = Math.max(...valid.map(d => d.value));
+  const dataMin = Math.min(...valid.map(d => d.value));
+  const compactMode = opts.zoomTiers && _chartZoomState[title] !== 'full';
+  let min, max, ticks;
+  if (compactMode) {
+    // 紧凑档：从 zoomTiers.min 到数据最大值所在档位，间隔 zoomTiers.step；WHO 线超出部分由 clipPath 裁剪
+    min = opts.zoomTiers.min;
+    max = Math.ceil(dataMax / opts.zoomTiers.step) * opts.zoomTiers.step;
+    if (max <= min) max = min + opts.zoomTiers.step;
+    ticks = [];
+    for (let v = min; v <= max + 0.0001; v += opts.zoomTiers.step) ticks.push(Math.round(v * 100) / 100);
+  } else if (opts.yMin !== undefined && opts.yStep) {
+    min = opts.yMin;
+    max = Math.ceil(dataMax / opts.yStep) * opts.yStep;
+    if (max <= dataMax) max += opts.yStep;
+    if (whoPts && whoPts.length > 1) {
+      const refVals = whoPts.flatMap(p => [p.row.p3, p.row.p50, p.row.p75]);
+      const refMin = Math.min(...refVals), refMax = Math.max(...refVals);
+      min = Math.min(min, Math.floor(refMin / opts.yStep) * opts.yStep);
+      max = Math.max(max, Math.ceil(refMax / opts.yStep) * opts.yStep);
+    }
+    if (max <= min) max = min + opts.yStep;
+    ticks = [];
+    for (let v = min; v <= max + 0.0001; v += opts.yStep) ticks.push(Math.round(v * 100) / 100);
+  } else {
+    min = dataMin;
+    max = dataMax;
+    if (max === min) { const p = Math.abs(max) * 0.1 || 1; min = Math.max(0, min - p); max = max + p; }
+    else { const pad = (max - min) * 0.15; min = Math.max(0, min - pad); max = max + pad; }
+    ticks = [min, (min + max) / 2, max];
+  }
+  const xf = i => {
+    if (hasT) return PL + (iw * (data[i].t - tMin)) / (tMax - tMin);
+    return PL + (n <= 1 ? iw / 2 : (iw * i) / (n - 1));
+  };
+  const yf = v => PT + ih - ((v - min) / (max - min)) * ih;
+  const fmtV = opts.fmt ? opts.fmt : (v => v);
+  const labelColor = opts.labelColor || '#fff';
+  const tipId = 'ctip' + (++_chartTipSeq);
+  // 折线（无数据日断开）+ 可点击数据点（含透明命中区）
+  let path = '', dots = '', started = false;
+  data.forEach((d, i) => {
+    if (d.value == null) { started = false; return; }
+    const px = xf(i).toFixed(2), py = yf(d.value).toFixed(2);
+    path += (started ? 'L' : 'M') + px + ' ' + py + ' ';
+    started = true;
+    const valRaw = opts.tipText ? opts.tipText(d) : (fmtV(d.value) + unit);
+    const valText = String(valRaw).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const labelText = d.label.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    dots += `<circle class="chart-dot" cx="${px}" cy="${py}" r="3" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
+      `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" data-cx="${px}" data-cy="${py}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
+  });
+  // 点击提示浮层（默认隐藏）：白色加粗文字（tiptext 类：白天主题下不随 .chart-svg text 变深灰）
+  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.45)" stroke-width="0.5"/><text class="tiptext" font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  // 网格线 + y轴刻度（按 ticks；gridln 类：白天主题下网格线变浅蓝）
+  let grid = '', ylabels = '';
+  ticks.forEach(v => {
+    const gy = yf(v).toFixed(1);
+    grid += `<line class="gridln" x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${labelColor}" font-size="9" text-anchor="end">${fmtV(Math.round(v * 10) / 10)}</text>`;
+  });
+  if (unit) ylabels += `<text x="${PL - 5}" y="13" fill="#fff" font-size="8.5" font-weight="bold" text-anchor="end">${unit}</text>`;
+  // x轴标签：keyDates 模式显示首末日期 + 每月25号（按时间轴位置渲染，不依赖数据点）；默认按 step 抽稀
+  let xlabels = '';
+  if (opts.xTickMode === 'keyDates') {
+    if (hasT) {
+      // 按时间轴渲染：首末日期 + 范围内每月25号，即使该日期没有数据点也显示刻度
+      const keyMap = new Map(); // 时间戳 -> 标签（自动去重：首/末恰为25号时只显示一次）
+      const fmtTs = ts => { const dt = new Date(ts); return `${dt.getUTCMonth() + 1}/${dt.getUTCDate()}`; };
+      keyMap.set(tMin, fmtTs(tMin));
+      keyMap.set(tMax, fmtTs(tMax));
+      let cur = new Date(tMin);
+      cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth(), 25));
+      if (cur.getTime() <= tMin) cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 25));
+      while (cur.getTime() < tMax) {
+        keyMap.set(cur.getTime(), fmtTs(cur.getTime()));
+        cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 25));
+      }
+      Array.from(keyMap.keys()).sort((a, b) => a - b).forEach(ts => {
+        const x = (PL + (iw * (ts - tMin)) / (tMax - tMin)).toFixed(1);
+        xlabels += `<text x="${x}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${keyMap.get(ts)}</text>`;
+      });
+    } else {
+      // 无时间戳时退化为数据点判断（首/末/25号数据点）
+      data.forEach((d, i) => {
+        const dt = d.t != null ? new Date(d.t) : null;
+        const isKey = i === 0 || i === n - 1 || (dt && dt.getUTCDate() === 25);
+        if (!isKey) return;
+        xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${d.label}</text>`;
+      });
+    }
+  } else {
+    const step = Math.max(1, Math.ceil(n / 7));
+    data.forEach((d, i) => {
+      if (i % step !== 0 && i !== n - 1) return;
+      xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${d.label}</text>`;
+    });
+  }
+  // WHO 参考曲线渲染：p3~p75 半透明填充带（最底层）+ 3条虚线 + 右端标注
+  let whoBand = '', whoPaths = '', whoDots = '';
+  if (whoPts && whoPts.length > 1) {
+    const xfT = ts => PL + (iw * (ts - tMin)) / (tMax - tMin);
+    // 填充带：p3 正序 + p75 逆序闭合
+    const bandA = whoPts.map(p => `${xfT(p.t).toFixed(1)} ${yf(p.row.p3).toFixed(1)}`);
+    const bandB = [...whoPts].reverse().map(p => `${xfT(p.t).toFixed(1)} ${yf(p.row.p75).toFixed(1)}`);
+    whoBand = `<path class="whoband" d="M${bandA.join(' L')} L${bandB.join(' L')} Z" fill="rgba(255,255,255,0.04)" stroke="none"/>`;
+    // 3条参考虚线：p3 柔红 / p50 中性灰 / p75 琥珀；右端标注百分比（p50 标注放线下方避免与 p75 重叠）
+    const lineDefs = [
+      { key: 'p3', color: '#e87878', label: '3%', dy: -3 },
+      { key: 'p50', color: '#8a90a6', label: '50%', dy: 10 },
+      { key: 'p75', color: '#d4a03a', label: '75%', dy: -3 }
+    ];
+    lineDefs.forEach(def => {
+      const pts = whoPts.map(p => `${xfT(p.t).toFixed(1)} ${yf(p.row[def.key]).toFixed(1)}`);
+      whoPaths += `<path d="M${pts.join(' L')}" fill="none" stroke="${def.color}" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.8"/>`;
+      // v3.5.18：右端文字标注已移到标题行图例，SVG 内只保留 WHO 数据点+tooltip
+      // v3.5.12 WHO 参考值数据点：关键点（首末日+每月25号）渲染可见小圆点+透明命中区，点击显示该日标准值标注
+      whoPts.forEach(p => {
+        const x = xfT(p.t).toFixed(1), y = yf(p.row[def.key]).toFixed(1);
+        const dt = new Date(p.t);
+        const labelText = `${dt.getUTCMonth() + 1}/${dt.getUTCDate()}`;
+        const valText = `WHO ${def.label}: ${fmtV(p.row[def.key])}${unit}`;
+        whoDots += `<circle cx="${x}" cy="${y}" r="2.5" fill="${def.color}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
+          `<circle class="chart-hit" cx="${x}" cy="${y}" r="9" fill="transparent" data-cx="${x}" data-cy="${y}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
+      });
+    });
+  }
+  // v3.5.71 干预时间点竖线（如「加乳糖酶」）：把趋势按时间点分隔，便于对比前后变化
+  let markLines = '', markLabels = '';
+  if (opts.markers && opts.markers.length && hasT) {
+    const escXml = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    opts.markers.forEach(mk => {
+      const ts = mk.t;
+      if (!(ts > tMin && ts < tMax)) return;   // 落在数据范围之外就不画（避免画在边缘误导）
+      const x = PL + (iw * (ts - tMin)) / (tMax - tMin);
+      const c = mk.color || '#f39c12';
+      markLines += `<line x1="${x.toFixed(1)}" y1="${PT}" x2="${x.toFixed(1)}" y2="${(PT + ih).toFixed(1)}" stroke="${c}" stroke-width="1.6" stroke-dasharray="5,3" opacity="0.95"/>`;
+      // 标签默认放竖线右侧；靠右时改放左侧，避免文字出界
+      const toRight = x < PL + iw * 0.55;
+      const tx = toRight ? x + 4 : x - 4;
+      markLabels += `<text x="${tx.toFixed(1)}" y="${PT + 9}" fill="${c}" font-size="8.5" font-weight="bold" text-anchor="${toRight ? 'start' : 'end'}">${escXml(mk.text || mk.label || '')}</text>`;
+    });
+  }
+  // v3.5.13 clipPath：绘图区裁剪（紧凑档下 WHO 参考线超出 Y 轴范围的部分不溢出图表）
+  // v3.5.27/v3.5.31：dots(用户数据点)和whoDots(WHO数据点)移到clipPath外，避免最右侧被裁剪
+  const clipId = 'cclip' + (++_chartTipSeq);
+  return head2 + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
+    `<defs><clipPath id="${clipId}"><rect x="${PL}" y="${PT}" width="${iw}" height="${ih}"/></clipPath></defs>` +
+    grid + ylabels + xlabels +
+    `<g clip-path="url(#${clipId})">` + whoBand + whoPaths + markLines +
+    `<path class="dataline" d="${path.trim()}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g>` +
+    markLabels + dots + whoDots + tip + `</svg></div>`;
+}
+// 点击数据点显示/隐藏横纵坐标浮层（同一点再点隐藏）
+function chartTip(hitEl, tipId, label, valueText) {
+  const svg = hitEl.ownerSVGElement;
+  const g = svg.querySelector('#' + tipId);
+  if (!g) return;
+  const content = label + '：' + valueText;
+  const text = g.querySelector('text');
+  const rect = g.querySelector('rect');
+  if (g.style.display !== 'none' && text.textContent === content) { g.style.display = 'none'; return; } // 再点同一点隐藏
+  // 同一张图里同时只保留一个标注（点新的自动关掉旧的），与其它图表行为一致
+  svg.querySelectorAll('g[id^="ctip"], g[id^="mtip"]').forEach(o => { if (o !== g) o.style.display = 'none'; });
+  text.textContent = content;
+  const wChar = [...content].reduce((s, c) => s + (/[\u4e00-\u9fff\uff1a：]/.test(c) ? 11 : 7), 0);
+  const w = wChar + 14;
+  rect.setAttribute('width', w);
+  const cx = parseFloat(hitEl.getAttribute('data-cx')), cy = parseFloat(hitEl.getAttribute('data-cy'));
+  const W = parseFloat(svg.viewBox.baseVal.width);
+  const x = Math.max(2, Math.min(cx - w / 2, W - w - 2));
+  // tip 高度 20：若上方空间足够则显示在数据点上方，否则显示在下方
+  const y = cy - 36 >= 8 ? cy - 34 : Math.min(cy + 12, 168 - 24);
+  g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
+  g.style.display = '';
+}
+// 点击图表/弹窗其他区域（非柱形/数据点）自动取消所有标注
+// 注意：modal-box 有 onclick=event.stopPropagation() 拦截冒泡，必须用 capture 阶段监听才能收到弹窗内点击
+let _chartTipDismissBound = false;
+function bindChartTipDismiss() {
+  if (_chartTipDismissBound) return; _chartTipDismissBound = true;
+  const modal = document.getElementById('analysisModal');
+  if (!modal) return;
+  modal.addEventListener('click', e => {
+    const t = e.target;
+    if (t.classList && (t.classList.contains('bar-hit') || t.classList.contains('chart-hit'))) return;
+    // mtip = 奶量趋势图（双轴各自一个 tip），ctip = 其余图表
+    document.querySelectorAll('#analysisContent g[id^="ctip"], #analysisContent g[id^="mtip"]').forEach(g => { g.style.display = 'none'; });
+  }, true);
+}
+// 柱状图（内联SVG，无外部依赖；点击柱形显示横纵坐标）
+function makeBarChart(data, opts) {
+  const title = opts.title, unit = opts.unit || '', color = opts.color || '#74b9ff';
+  const valid = data.filter(d => d.value != null);
+  const head = `<div class="chart-card"><div class="chart-title">${title}</div>`;
+  if (valid.length === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
+  const W = 330, H = 168, PL = 40, PR = 12, PT = 22, PB = 24;
+  const minV = 0;
+  const dataMax = Math.max(...valid.map(d => d.value));
+  // 月龄标准范围线（opts.stdLines: [{values:[与data等长]}]）取值纳入纵轴范围
+  const stdVals = (opts.stdLines || []).flatMap(l => l.values.filter(v => v != null));
+  const stdMax = stdVals.length ? Math.max(...stdVals) : 0;
+  const rangeMax = Math.max(dataMax, stdMax);
+  // 纵坐标轴：自动计算 0 到"最大值向上取整"的 step 倍数
+  let ticks;
+  if (opts.fixedTicks) {
+    ticks = opts.fixedTicks;
+    var maxV = ticks[ticks.length - 1];
+  } else {
+    const step = opts.tickStep || 1;
+    // maxV = 向上取整到 step 的整数倍；至少留 step 余量
+    var maxV = Math.ceil(rangeMax / step) * step;
+    if (maxV <= rangeMax) maxV += step; // 确保柱子顶部不贴天花板
+    if (maxV <= 0) maxV = step;
+    // 在 0 和 maxV 之间按 step 生成所有刻度
+    ticks = [];
+    for (let v = 0; v <= maxV + 0.0001; v += step) ticks.push(Math.round(v * 100) / 100);
+  }
+  const iw = W - PL - PR, ih = H - PT - PB;
+  const n = data.length;
+  const slotW = iw / n;
+  const barW = Math.min(20, Math.max(4, slotW * 0.6));
+  const yf = v => PT + ih - ((v - minV) / (maxV - minV)) * ih;
+  const fmtV = opts.fmt ? opts.fmt : (v => v);
+  const tipId = 'ctip' + (++_chartTipSeq);
+  let bars = '';
+  data.forEach((d, i) => {
+    const cxBar = PL + slotW * i + slotW / 2;
+    if (d.value == null) return;
+    const barTop = yf(d.value);
+    const barBottom = yf(0);
+    const h = barBottom - barTop; // 柱子高度（正值：底部y - 顶部y）
+    const valRaw = opts.tipText ? opts.tipText(d) : (fmtV(d.value) + unit);
+    const valText = String(valRaw).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const labelText = d.label.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    bars += `<rect class="bar-rect" x="${(cxBar - barW / 2).toFixed(1)}" y="${barTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="${color}"/>` +
+      `<rect class="bar-hit" x="${(cxBar - slotW / 2).toFixed(1)}" y="${PT.toFixed(1)}" width="${slotW.toFixed(1)}" height="${ih.toFixed(1)}" fill="transparent" data-cx="${cxBar.toFixed(1)}" data-cy="${barTop.toFixed(1)}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
+  });
+  // 点击提示浮层：深色半透明背景 + 白色文字（tiptext 类：白天主题下保持绿底白字）
+  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.45)" stroke-width="0.5"/><text class="tiptext" font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  // 网格线 + y轴刻度（按 ticks；gridln 类：白天主题下网格线变浅蓝）
+  let grid = '', ylabels = '';
+  ticks.forEach(v => {
+    const gy = yf(v).toFixed(1);
+    grid += `<line class="gridln" x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#fff" font-size="9" text-anchor="end">${fmtV(Math.round(v * 10) / 10)}</text>`;
+  });
+  if (unit) ylabels += `<text x="${PL - 5}" y="13" fill="#fff" font-size="8.5" font-weight="bold" text-anchor="end">${unit}</text>`;
+  // x轴标签
+  const step = Math.max(1, Math.ceil(n / 7));
+  let xlabels = '';
+  data.forEach((d, i) => {
+    const cxBar = PL + slotW * i + slotW / 2;
+    if (i % step !== 0 && i !== n - 1) return;
+    xlabels += `<text x="${cxBar.toFixed(1)}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${d.label}</text>`;
+  });
+  // 月龄标准范围线：绿色虚线（每天按其月龄取标准值；跨月龄切换日（25号）标准值变化时呈阶梯状垂直跳变）
+  let stdSvg = '';
+  (opts.stdLines || []).forEach(line => {
+    const pts = [];
+    line.values.forEach((v, i) => {
+      if (v == null) return;
+      pts.push({ x: PL + slotW * i + slotW / 2, v });
+    });
+    if (!pts.length) return;
+    let p = `M${pts[0].x.toFixed(1)} ${yf(pts[0].v).toFixed(1)} `;
+    for (let k = 1; k < pts.length; k++) {
+      const prev = pts[k - 1], cur = pts[k];
+      if (prev.v === cur.v) {
+        p += `L${cur.x.toFixed(1)} ${yf(cur.v).toFixed(1)} `;
+      } else {
+        // 阶梯跳变：水平延伸至两柱中间 → 垂直跳到新值 → 水平到下一点
+        const mid = ((prev.x + cur.x) / 2).toFixed(1);
+        p += `L${mid} ${yf(prev.v).toFixed(1)} L${mid} ${yf(cur.v).toFixed(1)} L${cur.x.toFixed(1)} ${yf(cur.v).toFixed(1)} `;
+      }
+    }
+    stdSvg += `<path class="stdline" d="${p.trim()}" fill="none" stroke="#5eead4" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.9"/>`;
+  });
+  return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
+    grid + ylabels + xlabels + bars + stdSvg + tip + `</svg></div>`;
+}
+/* ==================== 成长里程碑时间轴（v3.5.56） ====================
+ * 数据来源：全部历史记录里的 note 字段（今日成就），跨日期扫描。
+ * 非结构化文本 → 展示层轻结构化：关键词自动归类到发展领域 + 自动识别"首次"。
+ * 不改变用户输入习惯（仍是自由文本），匹配不上归入「成长点滴」，绝不丢条目。
+ * ============================================================ */
+/* 领域词典（v3.5.65 重构）
+ * kw   = 强词：能体现"这条记录到底在说什么"的主题词（动作、物件、症状、事件）
+ * weak = 弱词：情绪/氛围修饰语（开心、好玩、兴奋…），几乎出现在任何句子里，
+ *        只作为"实在没有强词"时的兜底信号，权重仅 25%，避免句末情绪词盖过整句主题。
+ */
+const MILESTONE_DOMAINS = [
+  { id:'gross',  name:'大运动',   icon:'🏃', color:'#ff9f43',
+    kw:['健身架','手脚并用','翻身','抬头','趴','爬','站','走','独坐','坐稳','坐起来','坐得稳','蹬腿','踢腿','蹬','踢','扶站','翻滚','爬行','迈步','学步','跳','撑起','支撑','靠坐','拉坐','靠站','竖抱','俯卧','挥手','抬腿','侧翻','蹦','手舞足蹈','翻身练习','抬头练习','爬行垫'],
+    weak:[] },
+  { id:'fine',   name:'精细运动', icon:'✋', color:'#feca57',
+    kw:['抓握','抓住','换手','捏取','对敲','撕纸','翻书','按键','拍手','拍打','摇铃','积木','吃手','塞嘴里','攥','抠','捏','拿','抓','握','撕','够','拨弄','伸手','手绢','握持','拨','摸'],
+    weak:[] },
+  { id:'lang',   name:'语言',     icon:'💬', color:'#48dbfb',
+    kw:['咿咿呀呀','咿呀','学说话','发音','叫妈妈','叫爸爸','说话','咕咕','应答','模仿声','啊呜','尖叫','哼','学语','发声','对话','叫唤','儿歌','唱歌','元音'],
+    weak:[] },
+  { id:'cog',    name:'认知',     icon:'🧠', color:'#a29bfe',
+    kw:['认生','认人','追视','追听','寻声','找东西','镜子','好奇','明白','理解','懂','寻找','记住','认得','注视','反应','模仿','探索','发现','盯着','玩具','会玩','因果关系'],
+    weak:[] },
+  { id:'social', name:'社交情感', icon:'😊', color:'#ff6b9d',
+    kw:['微笑','笑出声','互动','回应','撒娇','依恋','黏人','认妈妈','打招呼','逗引','社交','不怕生','闹觉'],
+    weak:['开心','高兴','好玩','兴奋','激动','表情','笑','乐','配合','乖','勇敢','暖和','喜欢'] },
+  { id:'self',   name:'生活自理', icon:'💤', color:'#1dd1a1',
+    kw:['自主入睡','自己睡着','自己睡','入睡','抱奶瓶','自己吃','自己拿','咀嚼','吞咽','辅食','断夜奶','睡整觉','接觉','含着','奶睡','拍睡','自主','抓勺','用勺','学饮杯','洗手','刷牙'],
+    weak:[] },
+  { id:'health', name:'健康',     icon:'🏥', color:'#ff7675',
+    kw:['大便','便便','拉了','臭臭','便秘','腹泻','拉稀','医院','看病','就医','疫苗','打针','预防针','发烧','体温','感冒','咳嗽','打喷嚏','流鼻涕','吃药','用药','体检','黄疸','褪黄','晒黄疸','湿疹','热疹','痱子','皮疹','纽强','药膏','红屁屁','尿布疹','尿布','鼻涕','呕吐','吐奶','胀气','肠胀气','肚肚','乳糖酶','益生菌','厌奶'],
+    weak:[] }
+];
+const MILESTONE_OTHER = { id:'other', name:'成长点滴', icon:'🌟', color:'#74b9ff', kw:[], weak:[] };
+// 徽章行：三大关注类别（可合并多个领域）
+const MILESTONE_BADGE_GROUPS = [
+  { label: '大运动',   icon: '🏃', color: '#ff9f43', domains: ['gross'] },
+  { label: '语言社交', icon: '💬', color: '#48dbfb', domains: ['lang', 'social'] },
+  { label: '健康',     icon: '🏥', color: '#ff7675', domains: ['health'] }
+];
+// 简化描述（徽章用）：优先取前半句（主题位置）里命中的最长关键词，且至少 2 字
+// —— 只取 1 字的关键词（如「笑」「闹」）会语义不明，故设下限；
+//    强词命中优先，没有强词才看弱词；都没有则回退为截取原文。
+const MS_SIMPLIFY_MIN = 2;
+const MS_SIMPLIFY_MAX = 8;
+function simplifyMilestone(text, domain) {
+  const t = String(text || '');
+  const len = t.length || 1;
+  let best = '', bestKey = null;
+  const scan = list => {
+    for (const kw of (list || [])) {
+      if (kw.length < MS_SIMPLIFY_MIN) continue;
+      const idx = t.indexOf(kw);
+      if (idx === -1) continue;
+      const key = [(idx / len) < 0.5 ? 0 : 1, -kw.length];   // 前半句优先，其次取长
+      if (!bestKey || key[0] < bestKey[0] || (key[0] === bestKey[0] && key[1] < bestKey[1])) {
+        best = kw; bestKey = key;
+      }
+    }
+  };
+  scan(domain && domain.kw);
+  if (!best) scan(domain && domain.weak);
+  if (best) return best;
+  return t.length > MS_SIMPLIFY_MAX ? t.slice(0, MS_SIMPLIFY_MAX) + '…' : (t || '—');
+}
+
+// 弱词（情绪泛词）权重：只有强词时才让位，避免「…非常开心」这类句末情绪抢走归类
+const MS_WEAK_FACTOR = 0.25;
+// 关键词得分：长度² × 位置权重（前半句 ×2）。累加同领域的多个命中。
+function _msDomainScore(text, list, factor) {
+  const len = text.length || 1;
+  let s = 0;
+  for (const kw of (list || [])) {
+    const idx = text.indexOf(kw);
+    if (idx === -1) continue;
+    const posW = (idx / len) < 0.5 ? 2 : 1;      // 前半句通常是主题，权重翻倍
+    s += kw.length * kw.length * posW * factor;
+  }
+  return s;
+}
+// 打分制归类：取总得分最高的领域；并列时靠前者优先（数组顺序即语义优先级）
+// 旧实现是"命中即返回"，导致句末情绪词（开心）盖过整句主题（玩健身架）
+function classifyMilestone(text) {
+  const t = String(text || '');
+  let best = null, bestScore = 0;
+  for (const d of MILESTONE_DOMAINS) {
+    const s = _msDomainScore(t, d.kw, 1) + _msDomainScore(t, d.weak || [], MS_WEAK_FACTOR);
+    if (s > bestScore) { bestScore = s; best = d; }
+  }
+  return best || MILESTONE_OTHER;
+}
+// 月龄 + 距上次满月的天数（如 4月龄11天）
+function getAgeDetail(ds) {
+  const [y, m, d] = ds.split('-').map(Number);
+  const cur = new Date(y, m - 1, d);
+  let months = (y - BIRTH_DATE.getFullYear()) * 12 + (m - 1 - BIRTH_DATE.getMonth());
+  if (d < BIRTH_DATE.getDate()) months--;
+  months = Math.max(0, months);
+  const anniv = new Date(BIRTH_DATE.getFullYear(), BIRTH_DATE.getMonth() + months, BIRTH_DATE.getDate());
+  let days = Math.round((cur - anniv) / 86400000);
+  if (days < 0) days = 0;
+  return { months: months, days: days };
+}
+// 扫描全部历史日期的 note，按日期倒序返回；标注领域与是否首次出现
+function collectMilestones() {
+  const allKeys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (/^records_\d{4}-\d{2}-\d{2}$/.test(k)) allKeys.push(k);
+  }
+  allKeys.sort();                       // 日期升序，首次遇到的即为"最早"
+  const firstSeen = {};
+  const items = [];
+  for (const k of allKeys) {
+    const ds = k.slice(8);
+    let recs = [];
+    try { recs = JSON.parse(localStorage.getItem(k) || '[]'); } catch { continue; }
+    if (!Array.isArray(recs)) continue;
+    const seenToday = new Set();
+    for (const r of recs) {
+      const t = (r && r.note) ? String(r.note).trim() : '';
+      if (!t || seenToday.has(t)) continue;
+      seenToday.add(t);
+      if (!(t in firstSeen)) firstSeen[t] = ds;
+      items.push({ text: t, date: ds, isFirst: (firstSeen[t] === ds) });
+    }
+  }
+  // 按日期倒序（最新在上），同一天保持原顺序
+  items.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  for (const it of items) {
+    it.domain = classifyMilestone(it.text);
+    const ad = getAgeDetail(it.date);
+    it.ageMonths = ad.months; it.ageDays = ad.days;
+  }
+  return items;
+}
+let _milestoneItems = [];
+let _milestoneExpanded = false;
+const MILESTONE_PREVIEW = 5;
+
+// 徽章行：三大类别各取一条「最新达成的首次」成就，简化描述 + 完整日期；点击看全文
+let _msBadgeHits = [];        // 徽章对应的原始条目（供点击展开）
+let _msBadgeOpen = -1;        // 当前展开的徽章索引，-1 = 无
+function renderMilestoneBadges(items) {
+  _msBadgeHits = [];
+  _msBadgeOpen = -1;
+  let html = '<div class="ms-badges">';
+  MILESTONE_BADGE_GROUPS.forEach((g, idx) => {
+    // items 已按日期倒序 → 第一个命中的即为该类别最新达成的首次成就
+    const hit = items.find(i => i.isFirst && g.domains.indexOf(i.domain.id) !== -1);
+    if (hit) {
+      _msBadgeHits[idx] = hit;
+      const short = simplifyMilestone(hit.text, hit.domain);
+      html += `<div class="ms-badge" style="--msbd:${g.color};background:linear-gradient(160deg, ${g.color}2e, ${g.color}0d)" onclick="toggleMilestoneBadge(${idx})">` +
+        `<span class="ms-badge-em">${g.icon}</span>` +
+        `<div class="ms-badge-nm">${short.replace(/</g, '&lt;')}</div>` +
+        `<div class="ms-badge-dt">${hit.date}</div>` +
+      `</div>`;
+    } else {
+      _msBadgeHits[idx] = null;
+      html += `<div class="ms-badge empty">` +
+        `<span class="ms-badge-em">${g.icon}</span>` +
+        `<div class="ms-badge-nm">待解锁</div>` +
+        `<div class="ms-badge-dt">${g.label}</div>` +
+      `</div>`;
+    }
+  });
+  return html + '</div>';
+}
+// 点击徽章 → 展开/收起完整描述
+function toggleMilestoneBadge(idx) {
+  _msBadgeOpen = (_msBadgeOpen === idx) ? -1 : idx;
+  const el = document.getElementById('milestoneBadgeDetail');
+  if (el) el.innerHTML = renderBadgeDetail();
+}
+function renderBadgeDetail() {
+  const it = _msBadgeHits[_msBadgeOpen];
+  if (!it) return '';
+  return `<div class="ms-badge-detail" onclick="toggleMilestoneBadge(${_msBadgeOpen})">` +
+    `<div class="ms-bd-text">${it.text.replace(/</g, '&lt;')}</div>` +
+    `<div class="ms-bd-meta">${it.date} · ${it.domain.icon} ${it.domain.name}` +
+      (it.isFirst ? ' · 首次' : '') + ` · ${it.ageMonths}月龄${it.ageDays > 0 ? it.ageDays + '天' : ''}</div>` +
+  `</div>`;
+}
+
+function renderMilestoneInner() {
+  const items = _milestoneItems;
+  const shown = _milestoneExpanded ? items : items.slice(0, MILESTONE_PREVIEW);
+  // 按日期分组（items 已按日期倒序，同日期天然相邻）→ 同一天只显示一次日期
+  const groups = [];
+  for (const it of shown) {
+    const g = groups[groups.length - 1];
+    if (g && g.date === it.date) g.items.push(it);
+    else groups.push({ date: it.date, items: [it] });
+  }
+  let html = '';
+  for (const g of groups) {
+    const head = g.items[0];
+    const ageLabel = `${head.ageMonths}月龄${head.ageDays > 0 ? head.ageDays + '天' : ''}`;
+    let cards = '';
+    for (const it of g.items) {
+      const d = it.domain;
+      cards += `<div class="ms-card" style="border-left-color:${d.color}">` +
+        `<div class="ms-text">${it.text.replace(/</g, '&lt;')}</div>` +
+        `<div class="ms-meta">` +
+          `<span class="ms-tag" style="background:${d.color}22;color:${d.color}">${d.icon} ${d.name}</span>` +
+          (it.isFirst ? `<span class="ms-first">首次</span>` : '') +
+        `</div>` +
+      `</div>`;
+    }
+    html += `<div class="ms-group">` +
+      `<div class="ms-date">${g.date} · ${ageLabel}</div>` +
+      `<div class="ms-group-items">${cards}</div>` +
+    `</div>`;
+  }
+  if (items.length > MILESTONE_PREVIEW) {
+    html += `<div class="ms-more" onclick="toggleMilestoneExpand()">${_milestoneExpanded ? '收起 ▲' : `展开全部 ${items.length} 条 ▼`}</div>`;
+  }
+  return html;
+}
+function toggleMilestoneExpand() {
+  _milestoneExpanded = !_milestoneExpanded;
+  const el = document.getElementById('milestoneTimeline');
+  if (el) el.innerHTML = renderMilestoneInner();   // 只重绘时间轴，保持弹窗滚动位置
+}
+/* ==================== 奶量趋势（双轴折线图，v3.5.59） ====================
+ * 横轴：日期（全部已记录数据，非近15天）
+ * 左轴：每日总奶量（与近15天柱状图同口径：奶量×1.12 折算水+奶）
+ * 右轴：每日单次平均奶量（当日总奶量 ÷ 当日喝奶次数）
+ * v3.5.60：两轴均改为非 0 起点的动态区间，让波动看得更清楚（milkAxisRange）
+ * v3.5.62：两轴系数分开；v3.5.63 系数微调——总奶量 0.7×最低 ~ 1.05×最高；单次平均 0.95×最低 ~ 1.25×最高
+ * ============================================================ */
+function collectMilkTrendData() {
+  const keys = [];
+  // 当天还没过完、奶量没记全，统计进去会拉低曲线 → 只统计今天之前的完整日期
+  const _now = new Date();
+  const todayKey = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (/^records_\d{4}-\d{2}-\d{2}$/.test(k)) keys.push(k);
+  }
+  keys.sort();                       // 日期升序
+  const out = [];
+  for (const k of keys) {
+    const ds = k.slice(8);
+    if (ds >= todayKey) continue;    // 跳过当天及以后
+    let recs = [];
+    try { recs = JSON.parse(localStorage.getItem(k) || '[]'); } catch { continue; }
+    if (!Array.isArray(recs)) continue;
+    let sum = 0, cnt = 0;
+    for (const r of recs) {
+      if (r && r.type === 'milk') { cnt++; if (r.milkAmount) sum += r.milkAmount; }
+    }
+    if (cnt === 0 || sum <= 0) continue;
+    const total = Math.round(sum * 1.12);        // 与「近15天奶量」柱状图口径一致
+    out.push({ ds: ds, t: Date.parse(ds + 'T00:00:00'), total: total, avg: Math.round(total / cnt) });
+  }
+  return out;
+}
+// 纵轴区间：最小值 = 最低值 × loF 向下取整，最大值 = 最高值 × hiF 向上取整
+// 左轴（总奶量）用 0.7 / 1.05，右轴（单次平均）用 0.95 / 1.25（v3.5.63）
+function milkAxisRange(minV, maxV, loF, hiF) {
+  const lf = (typeof loF === 'number') ? loF : 0.8;
+  const hf = (typeof hiF === 'number') ? hiF : 1.2;
+  // ±1e-9 抵消浮点误差（如 800×1.1=880.0000000000001，直接 ceil 会变成 881）
+  let lo = Math.floor((Number(minV) || 0) * lf + 1e-9);
+  let hi = Math.ceil((Number(maxV) || 0) * hf - 1e-9);
+  if (!(hi > lo)) hi = lo + 1;          // 防止区间为 0 导致除零
+  return { min: lo, max: hi };
+}
+function makeMilkTrendChart() {
+  const data = collectMilkTrendData();
+  const legend = `<span style="float:right;font-size:10px;color:#b2bec3;margin-right:4px;">` +
+    `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#7da8e6;margin-right:2px;vertical-align:middle;"></span>总奶量 ` +
+    `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ff9f43;margin-right:2px;vertical-align:middle;"></span>单次平均</span>`;
+  const head = `<div class="chart-card"><div class="chart-title">🍼 奶量趋势（截至昨日）${legend}</div>`;
+  const n = data.length;
+  if (n === 0) return head + `<div class="chart-empty">暂无奶量数据</div></div>`;
+
+  const W = 360, H = 180, PL = 42, PR = 48, PT = 24, PB = 26;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  const tMin = data[0].t, tMax = data[n - 1].t;
+  const xf = ts => (tMax === tMin) ? (PL + iw / 2) : (PL + (iw * (ts - tMin)) / (tMax - tMin));
+
+  // 左右轴各自独立缩放，共用 5 条等分网格线（0/25/50/75/100% 对应各自 [min,max] 区间）
+  // 总奶量：0.7×最低 ~ 1.05×最高；单次平均：0.95×最低 ~ 1.25×最高
+  const totals = data.map(d => d.total), avgs = data.map(d => d.avg);
+  const rT = milkAxisRange(Math.min(...totals), Math.max(...totals), 0.7, 1.05);
+  const rA = milkAxisRange(Math.min(...avgs), Math.max(...avgs), 0.95, 1.25);
+  const yT = v => PT + ih - (ih * (v - rT.min)) / (rT.max - rT.min);
+  const yA = v => PT + ih - (ih * (v - rA.min)) / (rA.max - rA.min);
+
+  const pcts = [0, 0.25, 0.5, 0.75, 1];
+  let grid = '', ylabels = '';
+  pcts.forEach(p => {
+    const gy = (PT + ih - ih * p).toFixed(1);
+    grid += `<line class="gridln" x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#fff" font-size="9" text-anchor="end">${Math.round(rT.min + (rT.max - rT.min) * p)}</text>`;
+    ylabels += `<text x="${W - PR + 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#ff9f43" font-size="9" text-anchor="start">${Math.round(rA.min + (rA.max - rA.min) * p)}</text>`;
+  });
+  ylabels += `<text x="${PL - 5}" y="13" fill="#fff" font-size="8.5" font-weight="bold" text-anchor="end">总量ml</text>`;
+  ylabels += `<text x="${W - PR + 5}" y="13" fill="#ff9f43" font-size="8.5" font-weight="bold" text-anchor="start">单次ml</text>`;
+
+  // 横轴日期标签：首末 + 抽稀，最多约 7 个
+  let xlabels = '';
+  const xStep = Math.max(1, Math.ceil(n / 6));
+  data.forEach((d, i) => {
+    if (i % xStep !== 0 && i !== n - 1) return;
+    const [ , mo, dd ] = d.ds.split('-');
+    xlabels += `<text x="${xf(d.t).toFixed(1)}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${parseInt(mo)}/${parseInt(dd)}</text>`;
+  });
+
+  const pathT = data.map(d => `${xf(d.t).toFixed(1)} ${yT(d.total).toFixed(1)}`).join(' L');
+  const pathA = data.map(d => `${xf(d.t).toFixed(1)} ${yA(d.avg).toFixed(1)}`).join(' L');
+
+  // 数据点 + 点击提示（点数过多时抽稀命中区，避免 HTML 过大）
+  // v3.5.67：两条线各用独立 tip，避免点总奶量却弹出单次平均的标注
+  const tipIdT = 'mtip' + (++_chartTipSeq);   // 左轴：总奶量
+  const tipIdA = 'mtip' + (++_chartTipSeq);   // 右轴：单次平均
+  const mkTip = id => `<g id="${id}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.45)" stroke-width="0.5"/><text class="tiptext" font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  const hitStep = Math.max(1, Math.ceil(n / 40));
+  let dots = '';
+  data.forEach((d, i) => {
+    const px = xf(d.t).toFixed(1);
+    const pyT = yT(d.total), pyA = yA(d.avg);
+    dots += `<circle cx="${px}" cy="${pyT.toFixed(1)}" r="2" fill="#7da8e6" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
+    dots += `<circle cx="${px}" cy="${pyA.toFixed(1)}" r="2" fill="#ff9f43" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
+    if (i % hitStep !== 0 && i !== n - 1) return;
+    const [ , mo, dd ] = d.ds.split('-');
+    const lb = `${parseInt(mo)}/${parseInt(dd)}`;
+    // 命中半径按两条线的垂直间距收缩：间距近时缩小，防止上层的命中区盖住另一条线
+    const gap = Math.abs(pyT - pyA);
+    const hr = Math.max(4, Math.min(10, gap / 2));
+    dots += `<circle class="chart-hit" cx="${px}" cy="${pyT.toFixed(1)}" r="${hr.toFixed(1)}" fill="transparent" data-cx="${px}" data-cy="${pyT.toFixed(1)}" onclick="chartTip(this,'${tipIdT}','${lb}','总 ${d.total}ml')"/>`;
+    dots += `<circle class="chart-hit" cx="${px}" cy="${pyA.toFixed(1)}" r="${hr.toFixed(1)}" fill="transparent" data-cx="${px}" data-cy="${pyA.toFixed(1)}" onclick="chartTip(this,'${tipIdA}','${lb}','单次均 ${d.avg}ml')"/>`;
+  });
+  const tip = mkTip(tipIdT) + mkTip(tipIdA);
+  const clipId = 'mclip' + (++_chartTipSeq);
+
+  return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
+    `<defs><clipPath id="${clipId}"><rect x="${PL}" y="${PT}" width="${iw}" height="${ih}"/></clipPath></defs>` +
+    grid + ylabels + xlabels +
+    `<g clip-path="url(#${clipId})">` +
+      `<path class="dataline" d="M${pathT}" fill="none" stroke="#7da8e6" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` +
+      `<path d="M${pathA}" fill="none" stroke="#ff9f43" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` +
+    `</g>` + dots + tip + `</svg></div>`;
+}
+function makeMilestoneTimeline() {
+  const items = collectMilestones();
+  _milestoneItems = items;
+  const head = `<div class="chart-card"><div class="chart-title">🌟 成长里程碑</div>`;
+  if (!items.length) {
+    return head + `<div class="chart-empty">还没有成就记录<br><span style="font-size:12px;opacity:.7">记录时写点什么，比如「第一次翻身」</span></div></div>`;
+  }
+  const firstCount = items.filter(i => i.isFirst).length;
+  const nowAge = getAgeDetail(getTodayDateStr());
+  const stat = `<div class="ms-stat">当前 ${nowAge.months}月龄${nowAge.days > 0 ? nowAge.days + '天' : ''} · 共 ${items.length} 条 · ${firstCount} 个「第一次」</div>`;
+  return head + stat + renderMilestoneBadges(items) +
+    `<div id="milestoneBadgeDetail"></div>` +
+    `<div class="ms-timeline" id="milestoneTimeline">${renderMilestoneInner()}</div></div>`;
+}
+function openAnalysis() {
+  const content = document.getElementById('analysisContent');
+  // 1) 近15天（含当天）每日数据
+  const days = [];
+  for (let i = 14; i >= 0; i--) {
+    const dt = effectiveNow(); dt.setDate(dt.getDate() - i);
+    const ds = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+    days.push({ ds: ds, label: `${dt.getMonth()+1}/${dt.getDate()}` });
+  }
+  // 奶量（水+奶）= 水量 * 1.12
+  const milkData = days.map(d => { const t = dailyMilkTotal(d.ds); return { label: d.label, value: t != null ? Math.round(t * 1.12) : null }; });
+  const milkCountData = days.map(d => ({ label: d.label, value: dailyMilkCount(d.ds) }));
+  const sleepData = days.map(d => ({ label: d.label, value: dailySleepHours(d.ds) }));
+  const poopData = days.map(d => { const info = dailyPoopInfo(d.ds); return { label: d.label, value: info ? info.count : null, statuses: info ? info.statuses : null }; });
+  const poopGapPts = collectPoopGapSeries();
+  const gapMarks = getInterventionMarks().map(m => {
+    const t = Date.parse(m.date);
+    if (isNaN(t)) return null;
+    const p = m.date.split('-');
+    return { t: t, text: `${parseInt(p[1], 10)}/${parseInt(p[2], 10)} ${m.label || ''}`.trim() };
+  }).filter(Boolean);
+  // 2) 体重/身高曲线（相同数值只保留最早日期；横轴按日期间隔等分）
+  const hist = getBodyHistory();
+  const weightPts = dedupeBodySeries(hist.map(x => ({ d: x.d, v: x.w })));
+  const heightPts = dedupeBodySeries(hist.map(x => ({ d: x.d, v: x.h })));
+  const toChart = pts => pts.map(p => { const [y, m, dd] = p.d.split('-'); return { label: `${parseInt(m)}/${parseInt(dd)}`, value: p.v, t: Date.parse(p.d) }; });
+  let html = '';
+  // 月龄标准范围（每天按其所在月龄取 min/max，绿色虚线）
+  const milkStdRows = days.map(d => getStdRow(MILK_STD, d.ds));
+  const countStdRows = days.map(d => getStdRow(MILK_COUNT_STD, d.ds));
+  const sleepStdRows = days.map(d => getStdRow(SLEEP_STD, d.ds));
+  const poopStdRows = days.map(d => getStdRow(POOP_STD, d.ds));
+  html += makeMilkTrendChart();   // 奶量趋势（全部记录，双轴：总奶量 + 单次平均）
+  html += makeBarChart(milkData, { title: '🍼 每日奶量（水+奶，近15天）', unit: 'ml', color: '#7da8e6', tickStep: 100, stdLines: [{ values: milkStdRows.map(r => r.min) }, { values: milkStdRows.map(r => r.max) }] });
+  html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
+  html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
+  html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
+  // v3.5.71 间隔趋势：截止昨天的全部历史，折线图（无大便的日子不画点），并用竖线标出「加乳糖酶」等干预时间点
+  // v3.5.72 y 轴口径：大便时间 − 早于它的最近一次喝奶时间（分钟）
+  html += makeLineChart(poopGapPts, {
+    title: '💩🍼 大便与喝奶间隔（截至昨日）',
+    unit: '分钟', color: '#8fbc8f',
+    fmt: v => String(Math.round(v)),
+    xTickMode: 'keyDates',
+    tipText: d => (d.count > 1 ? `${d.value}分钟 · ${d.count}次平均` : `${d.value}分钟`),
+    markers: gapMarks
+  });
+  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT }, zoomTiers: { min: 3, step: 1 } });
+  html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT }, zoomTiers: { min: 50, step: 5 } });
+  html += makeMilestoneTimeline();   // 成长里程碑时间轴（置于最下方）
+  content.innerHTML = html;
+  bindChartTipDismiss();
+  showModal('analysisModal');
+}
+
+/* ==================== 模态框 ==================== */
+function showModal(id) { document.getElementById(id).classList.add('show'); document.body.style.overflow = 'hidden'; }
+function hideModal(id) { document.getElementById(id).classList.remove('show'); document.body.style.overflow = ''; }
+function closeModal(e, id) { if (e.target.id === id) hideModal(id); }
+function showToast(msg, ms) { const toast = document.getElementById('toast'); toast.textContent = msg; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), ms || 1800); }
+
+/* ==================== 云端同步模块 ==================== */
+
+// ---------- 配置 ----------
+// Supabase 默认端点 / 家庭码统一在 app-config.js 中维护（不在代码里写死）
+const SYNC_CONFIG = { supabaseUrl: _DEFAULT_SUPABASE_URL, supabaseKey: _DEFAULT_SUPABASE_KEY, pollInterval: 5*60*1000, historyDays: 30 };
+const PRESET_FAMILY_CODE = _DEFAULT_FAMILY_CODE;
+let _cryptoKey = null, _cryptoFamilyCode = null, _isSyncing = false;
+
+function loadSyncConfig() {
+  // 预设值优先，localStorage覆盖
+  if (!localStorage.getItem('sb_url')) localStorage.setItem('sb_url', SYNC_CONFIG.supabaseUrl);
+  if (!localStorage.getItem('sb_key')) localStorage.setItem('sb_key', SYNC_CONFIG.supabaseKey);
+  if (!localStorage.getItem('family_code')) localStorage.setItem('family_code', PRESET_FAMILY_CODE);
+  SYNC_CONFIG.supabaseUrl = localStorage.getItem('sb_url') || '';
+  SYNC_CONFIG.supabaseKey = localStorage.getItem('sb_key') || '';
+}
+function isSyncReady() {
+  return !!(SYNC_CONFIG.supabaseUrl && SYNC_CONFIG.supabaseKey && localStorage.getItem('family_code'));
+}
+function getFamilyId() { return localStorage.getItem('family_id') || ''; }
+function getDeviceName() { return localStorage.getItem('device_name') || '未知设备'; }
+function getTodayDateStr() {
+  const d = effectiveNow();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// ---------- 加密模块（Web Crypto API / AES-GCM 端到端加密）----------
+function bufToB64(buf) {
+  const bytes = new Uint8Array(buf); let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+function b64ToBuf(b64) {
+  const binary = atob(b64); const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+async function generateFamilyId(familyCode) {
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(familyCode));
+  return Array.from(new Uint8Array(hash)).slice(0, 8).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+async function deriveKey(familyCode, saltB64) {
+  if (_cryptoKey && _cryptoFamilyCode === familyCode) return _cryptoKey;
+  const salt = b64ToBuf(saltB64);
+  const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(familyCode), {name:'PBKDF2'}, false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations:310000, hash:'SHA-256'}, baseKey, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
+  _cryptoKey = key; _cryptoFamilyCode = familyCode; return key;
+}
+async function encrypt(key, plaintext) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, new TextEncoder().encode(plaintext));
+  return { data: bufToB64(ciphertext), iv: bufToB64(iv) };
+}
+async function decrypt(key, dataB64, ivB64) {
+  const plaintext = await crypto.subtle.decrypt({name:'AES-GCM', iv: b64ToBuf(ivB64)}, key, b64ToBuf(dataB64));
+  return new TextDecoder().decode(plaintext);
+}
+async function getCryptoKey() {
+  const fc = localStorage.getItem('family_code'); if (!fc) return null;
+  let salt = localStorage.getItem('family_salt');
+  if (!salt) {
+    // 本地没有 salt：先查云端是否已有（加入已有家庭），绝不自动生成覆盖
+    if (isSyncReady()) {
+      try {
+        const saltRows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq._salt&select=encrypted_data`);
+        if (saltRows.length > 0 && saltRows[0].encrypted_data) {
+          salt = saltRows[0].encrypted_data;
+          localStorage.setItem('family_salt', salt);
+          console.log('[Crypto] 已拉取云端 salt，加入现有家庭');
+          return await deriveKey(fc, salt);
+        }
+      } catch (e) {}
+    }
+    // 云端也没有才新建（首次创建家庭）
+    salt = bufToB64(crypto.getRandomValues(new Uint8Array(16)));
+    localStorage.setItem('family_salt', salt);
+    await uploadSalt(salt);
+    console.log('[Crypto] 新建家庭 salt');
+  }
+  return await deriveKey(fc, salt);
+}
+async function uploadSalt(saltB64) {
+  if (!isSyncReady()) return;
+  try { await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key:'_salt', encrypted_data: saltB64, iv:'', last_modified: Date.now() }); } catch {}
+}
+
+// ---------- Supabase REST 客户端 ----------
+async function supabaseRequest(path, method, body) {
+  const url = `${SYNC_CONFIG.supabaseUrl}/rest/v1/${path}`;
+  const headers = { 'apikey': SYNC_CONFIG.supabaseKey, 'Authorization': `Bearer ${SYNC_CONFIG.supabaseKey}`, 'Content-Type': 'application/json' };
+  if (method === 'POST') headers['Prefer'] = 'resolution=merge-duplicates';
+  const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
+  if (method === 'GET') return res.json();
+  return null;
+}
+async function supabaseGet(path) { return supabaseRequest(path, 'GET'); }
+async function supabaseUpsert(table, row) { return supabaseRequest(table, 'POST', row); }
+
+// ---------- 同步：上传 ----------
+async function syncUpload(category, dateStr) {
+  if (!isSyncReady()) return;
+  if (!navigator.onLine) { enqueueSync(category, dateStr); return; }
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    // salt 一致性检查与自动修复：防止用错误的 salt 加密上传
+    const localSalt = localStorage.getItem('family_salt');
+    if (localSalt && isSyncReady()) {
+      try {
+        const saltRows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq._salt&select=encrypted_data`);
+        if (saltRows.length > 0 && saltRows[0].encrypted_data && saltRows[0].encrypted_data !== localSalt) {
+          // salt 不一致：尝试用本地 salt 解密云端一条数据，验证哪个 salt 正确
+          let localSaltValid = false, cloudSaltValid = false;
+          try {
+            const testRows = await supabaseGet(`family_records?family_id=eq.${getFamilyId()}&record_date=eq.${getTodayDateStr()}&select=encrypted_data,iv`);
+            if (testRows.length > 0) {
+              // 尝试用本地 salt 解密
+              try { await decrypt(key, testRows[0].encrypted_data, testRows[0].iv); localSaltValid = true; } catch {}
+              // 尝试用云端 salt 解密（需要临时派生密钥）
+              if (!localSaltValid) {
+                try {
+                  const cloudKey = await deriveKey(localStorage.getItem('family_code'), saltRows[0].encrypted_data);
+                  await decrypt(cloudKey, testRows[0].encrypted_data, testRows[0].iv);
+                  cloudSaltValid = true;
+                } catch {}
+              }
+            }
+          } catch {}
+          if (!localSaltValid && !cloudSaltValid) {
+            // 两者都无法解密：云端数据已损坏，用本地 salt 覆盖修复
+            console.warn('[Sync] 云端 salt 和数据均无法解密，用本地 salt 修复');
+            await uploadSalt(localSalt);
+            showToast('检测到云端密钥损坏，已自动修复，请重新点击同步');
+            return;
+          } else if (!localSaltValid && cloudSaltValid) {
+            // 云端 salt 能解密，本地不能：拉取云端 salt
+            console.warn('[Sync] 本地 salt 错误，拉取云端 salt');
+            localStorage.setItem('family_salt', saltRows[0].encrypted_data);
+            _cryptoKey = null;
+            showToast('已同步云端密钥，请重新操作');
+            return;
+          } else if (localSaltValid && !cloudSaltValid) {
+            // 本地 salt 能解密，云端不能：用本地覆盖云端
+            console.warn('[Sync] 云端 salt 错误，用本地 salt 修复');
+            await uploadSalt(localSalt);
+          }
+          // 两者都能解密（理论上不可能，但安全起见继续）
+        }
+      } catch (e) {}
+    }
+    const fid = getFamilyId();
+    if (category === 'records') {
+      let records = JSON.parse(localStorage.getItem(`records_${dateStr}`) || '[]');
+      if (!Array.isArray(records)) records = [];
+      const { data, iv } = await encrypt(key, JSON.stringify(records));
+      // last_modified 用本地修改时间戳（若缺失则用当前时间，保证比旧数据新）
+      const localTs = getLocalRecordTs(dateStr);
+      const modTime = localTs > 0 ? localTs : Date.now();
+      await supabaseUpsert('family_records', { family_id: fid, record_date: dateStr, encrypted_data: data, iv, last_modified: modTime, modified_by: getDeviceName() });
+      // 上传后把本地时间戳对齐到云端时间，避免下次拉取误判
+      if (localTs === 0) localStorage.setItem(`records_${dateStr}_ts`, String(modTime));
+      // 同步删除墓碑：让家人设备知道这些记录已删除，避免合并时复活
+      try {
+        const tombs = [...getTombstones(dateStr)];
+        const { data: tdata, iv: tiv } = await encrypt(key, JSON.stringify(tombs));
+        await supabaseUpsert('family_config', { family_id: fid, config_key: '_del_' + dateStr, encrypted_data: tdata, iv: tiv, last_modified: Date.now() });
+      } catch (e) {}
+    } else if (category === 'config') {
+      const configKeys = ['hiddenActivities','grossMotorOptions','fineMotorOptions','solidFoodOptions','babyHeight','babyWeight','bodyHistory','milkDefaultAmount'];
+      const upTs = Date.now();
+      for (const ck of configKeys) {
+        const val = localStorage.getItem(ck) || '';
+        const { data, iv } = await encrypt(key, val);
+        await supabaseUpsert('family_config', { family_id: fid, config_key: ck, encrypted_data: data, iv, last_modified: upTs });
+        // v3.5.69 上传成功后对齐本地时间戳，以免下次拉取时把自己刚传的内容判为"云端更新"再覆盖回来
+        // v3.5.76 扩展到全部配置键（身高/体重/bodyHistory 也要对齐，否则拉取会用云端旧值覆盖刚输入的数据）
+        localStorage.setItem(`cfgts_${ck}`, String(upTs));
+      }
+    }
+    setSyncStatus('synced');
+  } catch (e) { console.warn('同步上传失败:', e); setSyncStatus('pending'); enqueueSync(category, dateStr); }
+}
+
+// ---------- 同步：拉取 ----------
+async function syncOneDay(key, fid, ds) {
+  try {
+    const rows = await supabaseGet(`family_records?family_id=eq.${fid}&record_date=eq.${ds}&select=encrypted_data,iv,last_modified`);
+    let cloudRecs = null, cloudTs = 0;
+    if (rows.length > 0) {
+      cloudTs = rows[0].last_modified || 0;
+      try {
+        const plaintext = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
+        const parsed = JSON.parse(plaintext);
+        if (Array.isArray(parsed)) cloudRecs = parsed;
+      } catch (e) { cloudRecs = null; }
+    }
+    let localRecs = [];
+    try { const p = JSON.parse(localStorage.getItem(`records_${ds}`) || '[]'); if (Array.isArray(p)) localRecs = p; } catch {}
+    const tombs = getTombstones(ds);
+    const merged = mergeRecordLists(cloudRecs || [], localRecs, tombs);
+    const mergedJson = JSON.stringify(merged);
+    const localJson = JSON.stringify(localRecs);
+    const cloudJson = cloudRecs === null ? null : JSON.stringify(cloudRecs);
+    let dayChanged = false;
+    if (mergedJson !== localJson) {
+      const oldLocal = localStorage.getItem(`records_${ds}`);
+      if (oldLocal) { localStorage.setItem(`records_${ds}_bak`, oldLocal); localStorage.setItem(`records_${ds}_bak_ts`, localStorage.getItem(`records_${ds}_ts`) || '0'); }
+      localStorage.setItem(`records_${ds}`, mergedJson);
+      dayChanged = true;
+    }
+    if (cloudJson !== mergedJson) {
+      const { data, iv } = await encrypt(key, mergedJson);
+      const newTs = Math.max(cloudTs, getLocalRecordTs(ds), Date.now());
+      await supabaseUpsert('family_records', { family_id: fid, record_date: ds, encrypted_data: data, iv, last_modified: newTs, modified_by: getDeviceName() });
+      localStorage.setItem(`records_${ds}_ts`, String(newTs));
+    } else {
+      if (cloudTs > 0) localStorage.setItem(`records_${ds}_ts`, String(cloudTs));
+    }
+    return dayChanged;
+  } catch (e) { return false; }
+}
+
+async function syncPullAll(opts) {
+  if (!isSyncReady() || !navigator.onLine || _isSyncing) return;
+  _isSyncing = true; setSyncStatus('syncing');
+  try {
+    const key = await getCryptoKey(); if (!key) { _isSyncing = false; return; }
+    const fid = getFamilyId(); let changed = false;
+    // 同步天数：启动/手动为全量(historyDays)，前台恢复/轮询只同步最近几天以控制请求量
+    const days = (opts && opts.days) || SYNC_CONFIG.historyDays;
+
+    // 1. 拉取近期记录（分批并发：每批 6 天，降低串行等待；合并/备份/双向收敛语义保持不变）
+    const today = new Date();
+    const dates = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      dates.push(ds);
+    }
+    const BATCH = 6;
+    for (let b = 0; b < dates.length; b += BATCH) {
+      const batch = dates.slice(b, b + BATCH);
+      const rs = await Promise.all(batch.map(ds => syncOneDay(key, fid, ds).catch(e => { console.warn('同步单日失败:', ds, e); return false; })));
+      if (rs.some(Boolean)) changed = true;
+    }
+
+    // 2. 拉取配置
+    try {
+      const configRows = await supabaseGet(`family_config?family_id=eq.${fid}&select=config_key,encrypted_data,iv,last_modified`);
+      for (const row of configRows) {
+        if (row.config_key === '_salt') continue;
+        // 删除墓碑：合并到本地（取并集），使其他设备已删除的记录不会在本地复活
+        if (row.config_key && row.config_key.indexOf('_del_') === 0) {
+          try {
+            const dsT = row.config_key.slice(5);
+            const plaintext = await decrypt(key, row.encrypted_data, row.iv);
+            let arr = []; try { arr = JSON.parse(plaintext); } catch {}
+            if (Array.isArray(arr) && arr.length) {
+              const before = getTombstones(dsT).size;
+              const merged = addTombstones(dsT, arr);
+              if (merged.size > before) changed = true;   // 有新墓碑 → 需重渲染
+            }
+          } catch {}
+          continue;
+        }
+        try {
+          const localTs = parseInt(localStorage.getItem(`cfgts_${row.config_key}`) || '0');
+          // v3.5.69 自定义选项改为「并集合并」，绝不因时间戳判断失误而整体覆盖、丢掉用户新加的选项。
+          // 判定"本地是否独有"用三个信号：本地时间戳较新 / 两分钟内保存过 / 云端原文本里确实没有这些项
+          // （第三点专门覆盖长期离线的情况：云端若早已包含，就不该判为本地独有）
+          if (CUSTOM_OPT_KEYS.includes(row.config_key)) {
+            const plaintext = await decrypt(key, row.encrypted_data, row.iv);
+            let cloudArr = [];
+            try { const p = JSON.parse(plaintext); if (Array.isArray(p)) cloudArr = p; } catch {}
+            let localArr = [];
+            try { const p = JSON.parse(localStorage.getItem(row.config_key) || '[]'); if (Array.isArray(p)) localArr = p; } catch {}
+            const _fresh = CUSTOM_OPT_DEFS[row.config_key] || [];
+            const _delKey = CUSTOM_OPT_DEL_KEYS[row.config_key] || '';
+            const _delArr = safeParseArr(localStorage.getItem(_delKey));
+            const localOnly = localArr.filter(o => localArr.includes(o) && !cloudArr.includes(o));
+            const cloudOnly = cloudArr.filter(o => cloudArr.includes(o) && !localArr.includes(o));
+            const _withinWindow = localTs > 0 && (Date.now() - localTs) < 120000;
+            const _realLocalOnly = localOnly.filter(o => !_fresh.includes(o));
+            const _keepLocal = localTs > row.last_modified || _withinWindow || _realLocalOnly.length > 0;
+            let merged;
+            if (_keepLocal) merged = Array.from(new Set([...localArr, ...cloudArr]));
+            else merged = Array.from(new Set([...cloudArr, ...localArr]));
+            // 已删除的出厂项不再补回（尊重用户删除），然后再把没见过的出厂项补齐
+            merged = merged.filter(o => !_delArr.includes(o));
+            _fresh.forEach(o => { if (!merged.includes(o) && !_delArr.includes(o)) merged.push(o); });
+            const before = localStorage.getItem(row.config_key);
+            localStorage.setItem(row.config_key, JSON.stringify(merged));
+            localStorage.setItem(`cfgts_${row.config_key}`, String(Math.max(localTs, row.last_modified)));
+            if (before !== JSON.stringify(merged)) changed = true;
+            // 本地独有的项（用户新加的）→ 立即回写云端，保证家人设备与以后任何覆盖都能拿到
+            if (_keepLocal && (merged.length > cloudArr.length || merged.join('|') !== cloudArr.join('|'))) {
+              try {
+                const { data: upData, iv: upIv } = await encrypt(key, JSON.stringify(merged));
+                await supabaseUpsert('family_config', { family_id: fid, config_key: row.config_key, encrypted_data: upData, iv: upIv, last_modified: Date.now() });
+              } catch (e) {}
+            }
+            continue;   // 已处理，跳过下面的整体覆盖逻辑
+          }
+          if (row.last_modified > localTs) {
+            const plaintext = await decrypt(key, row.encrypted_data, row.iv);
+            localStorage.setItem(row.config_key, plaintext);
+            localStorage.setItem(`cfgts_${row.config_key}`, String(row.last_modified));
+            changed = true;
+          }
+        } catch {}
+      }
+    } catch {}
+
+    // updateOverview(true):同步拉取的数据由对方设备产生，推送责任在产生方，
+    // 本设备不应再推送一次（否则"对方记录→本设备同步→本设备再推"造成跨设备重复）
+    if (changed) { loadCustomOptions(); loadHiddenActivities(); loadHeight(); loadWeight(); renderCategoryBar(); renderCards(); updateOverview(true);
+      // 如果分析弹窗正打开，刷新身高体重曲线
+      if (document.getElementById('analysisModal') && document.getElementById('analysisModal').classList.contains('show')) { openAnalysis(); }
+    }
+    setSyncStatus('synced');
+  } catch (e) { console.warn('同步拉取失败:', e); setSyncStatus('pending'); }
+  _isSyncing = false;
+}
+async function syncPullAllAndRefresh() {
+  if (!isSyncReady()) { showToast('请先配置同步'); openSyncSettings(); return; }
+  showToast('同步中...');
+  // 双向：先把本地改动推上去，再拉取合并（旧版只拉不推，本地改动会一直卡在本机）
+  try { await syncUpload('records', getTodayDateStr()); } catch (e) {}
+  try { await syncUpload('config'); } catch (e) {}
+  await syncPullAll();
+  showToast('同步完成');
+}
+// v3.5.6 数据保护：从备份恢复今日数据（恢复最近一次云端拉取覆盖前的本地数据）
+async function restoreTodayFromBackup() {
+  const ds = getTodayDateStr();
+  const bak = localStorage.getItem(`records_${ds}_bak`);
+  if (!bak) { showToast('今日暂无备份（备份在每次云端拉取覆盖前自动创建）'); return; }
+  let bakRecords;
+  try { bakRecords = JSON.parse(bak); if (!Array.isArray(bakRecords)) throw 0; } catch { showToast('备份数据损坏'); return; }
+  if (!confirm(`将用备份恢复今日数据（共 ${bakRecords.length} 条）并上传云端覆盖？\n当前本地记录将被替换，请谨慎操作。`)) return;
+  localStorage.setItem(`records_${ds}`, bak);
+  localStorage.setItem(`records_${ds}_ts`, String(Date.now())); // 本地最新 → 下次同步会把备份数据推上云端
+  renderCards(); updateOverview();
+  hideModal('manageModal');
+  showToast(`已恢复 ${bakRecords.length} 条记录，正在上传云端...`);
+  try { await syncUpload('records', ds); showToast('云端已同步更新'); } catch (e) { showToast('云端上传失败，本地已恢复'); }
+}
+
+// ---------- 离线队列 ----------
+function enqueueSync(category, dateStr) {
+  let q = []; try { q = JSON.parse(localStorage.getItem('syncQueue') || '[]'); } catch {}
+  const k = category + '_' + (dateStr || '');
+  q = q.filter(item => (item.category + '_' + (item.dateStr || '')) !== k);
+  q.push({ category, dateStr, ts: Date.now() });
+  localStorage.setItem('syncQueue', JSON.stringify(q));
+}
+async function flushSyncQueue() {
+  let q = []; try { q = JSON.parse(localStorage.getItem('syncQueue') || '[]'); } catch {}
+  if (q.length === 0) return;
+  localStorage.setItem('syncQueue', '[]');
+  const deduped = {};
+  for (const item of q) { const k = item.category + '_' + (item.dateStr || ''); deduped[k] = item; }
+  for (const item of Object.values(deduped)) { try { await syncUpload(item.category, item.dateStr); } catch {} }
+}
+
+// ---------- 同步状态 ----------
+function setSyncStatus(status) {
+  const dot = document.getElementById('syncDot'); const dotM = document.getElementById('syncDotManage');
+  const text = document.getElementById('syncStatusText'); const textM = document.getElementById('syncStatusTextManage');
+  const fidEl = document.getElementById('syncFamilyId');
+  const cfg = { synced: ['on','已同步'], syncing: ['pending','同步中...'], pending: ['pending','待同步'], off: ['off','未配置'] };
+  const [cls, label] = cfg[status] || cfg.off;
+  [dot, dotM].forEach(d => { if (d) { d.className = 'sync-dot ' + cls; } });
+  [text, textM].forEach(t => { if (t) t.textContent = label; });
+  if (fidEl) { const fid = getFamilyId(); fidEl.textContent = fid ? `家庭ID: ${fid.slice(0,8)}...（家人用此ID确认同一家庭）` : ''; }
+}
+function updateSyncUI() {
+  if (!isSyncReady()) { setSyncStatus('off'); return; }
+  setSyncStatus('synced');
+}
+
+// ---------- 家庭码 / 同步设置 UI ----------
+function showFamilySetup() { showModal('familySetupModal'); }
+// 同步设置：4 框（URL / key / 家庭码 / 设备名）的掩码逻辑（样式同讯飞，焦点清空/失焦回填）
+const SYNC_INPUT_IDS = ['sbUrlInput', 'sbKeyInput', 'familyCodeInput', 'deviceNameInput'];
+function openSyncSettings() {
+  // 全部以掩码形式回填；本地有值或默认配置存在时显示掩码，焦点清空
+  const hasUrl = !!(localStorage.getItem('sb_url') || (_APP.supabase && _APP.supabase.url));
+  const hasKey = !!(localStorage.getItem('sb_key') || (_APP.supabase && _APP.supabase.anonKey));
+  const hasFcode = !!(localStorage.getItem('family_code') || _APP.familyCode);
+  const dname = localStorage.getItem('device_name') || '';
+  document.getElementById('sbUrlInput').value = hasUrl ? XF_MASK : '';
+  document.getElementById('sbKeyInput').value = hasKey ? XF_MASK : '';
+  document.getElementById('familyCodeInput').value = hasFcode ? XF_MASK : '';
+  document.getElementById('deviceNameInput').value = dname; // 设备名非敏感，原样显示
+  // 同步设置框默认密码类型，点"显示明文"切换
+  const see = document.getElementById('syncSeeToggle'); if (see) see.checked = false;
+  ['sbUrlInput', 'sbKeyInput', 'familyCodeInput'].forEach(id => { const el = document.getElementById(id); if (el) el.type = 'password'; });
+  bindSyncMaskEvents();
+  updateSyncUI(); showModal('syncModal');
+}
+function bindSyncMaskEvents() {
+  ['sbUrlInput', 'sbKeyInput', 'familyCodeInput'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el._maskBound) return; el._maskBound = true;
+    el.addEventListener('focus', function() { if (this.value === XF_MASK) this.value = ''; });
+    el.addEventListener('blur', function() {
+      // 留空 → 恢复掩码（未修改）
+      if (!this.value.trim()) {
+        const orig = id === 'sbUrlInput' ? (localStorage.getItem('sb_url') || (_APP.supabase && _APP.supabase.url))
+                    : id === 'sbKeyInput' ? (localStorage.getItem('sb_key') || (_APP.supabase && _APP.supabase.anonKey))
+                    : (localStorage.getItem('family_code') || _APP.familyCode);
+        this.value = orig ? XF_MASK : '';
+      }
+    });
+  });
+}
+function toggleSyncSee() {
+  const show = document.getElementById('syncSeeToggle').checked;
+  ['sbUrlInput', 'sbKeyInput', 'familyCodeInput'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.type = show ? 'text' : 'password';
+  });
+}
+async function saveSyncConfig() {
+  // 掩码视为"未修改"——回退到 localStorage 或 app-config 默认值
+  const getRaw = (id, fallback) => {
+    const v = document.getElementById(id).value.trim();
+    if (!v || v === XF_MASK) return fallback;
+    return v;
+  };
+  const url = getRaw('sbUrlInput', localStorage.getItem('sb_url') || (_APP.supabase && _APP.supabase.url) || '').replace(/\/+$/, '');
+  const skey = getRaw('sbKeyInput', localStorage.getItem('sb_key') || (_APP.supabase && _APP.supabase.anonKey) || '');
+  const fcode = getRaw('familyCodeInput', localStorage.getItem('family_code') || _APP.familyCode || '');
+  const dname = document.getElementById('deviceNameInput').value.trim() || '未知设备';
+  if (!url || !skey || !fcode) { showToast('请填写 URL、key 和家庭码'); return; }
+  if (fcode.length < 4) { showToast('家庭码至少4位'); return; }
+  showToast('配置中...');
+  localStorage.setItem('sb_url', url); localStorage.setItem('sb_key', skey);
+  localStorage.setItem('family_code', fcode); localStorage.setItem('device_name', dname);
+  loadSyncConfig();
+  const fid = await generateFamilyId(fcode); localStorage.setItem('family_id', fid);
+  _cryptoKey = null; // 清缓存重新派生
+  try {
+    // 尝试拉取 salt（加入已有家庭）；拉不到则新建（创建新家庭）
+    const saltRows = await supabaseGet(`family_config?family_id=eq.${fid}&config_key=eq._salt&select=encrypted_data`);
+    if (saltRows.length > 0 && saltRows[0].encrypted_data) {
+      localStorage.setItem('family_salt', saltRows[0].encrypted_data);
+      showToast('已加入家庭，拉取数据中...');
+    } else {
+      const newSalt = bufToB64(crypto.getRandomValues(new Uint8Array(16)));
+      localStorage.setItem('family_salt', newSalt);
+      await uploadSalt(newSalt);
+      showToast('已创建新家庭');
+    }
+    await syncPullAll();
+    updateSyncUI();
+  } catch (e) {
+    console.warn('配置验证失败:', e);
+    showToast('连接失败，请检查 URL 和 key');
+    return;
+  }
+  hideModal('syncModal'); showToast('同步已开启');
+}
+async function uploadAllLocalData() {
+  if (!isSyncReady()) { showToast('请先保存配置'); return; }
+  showToast('上传中...');
+  try {
+    // 上传所有本地记录（跳过 records_<日期>_ts 时间戳键）
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('records_') && !k.endsWith('_ts')) keys.push(k); }
+    const key = await getCryptoKey(); const fid = getFamilyId();
+    for (const k of keys) {
+      const ds = k.replace('records_', '');
+      let records = JSON.parse(localStorage.getItem(k) || '[]');
+      if (!Array.isArray(records)) records = [];
+      const { data, iv } = await encrypt(key, JSON.stringify(records));
+      const localTs = getLocalRecordTs(ds);
+      const modTime = localTs > 0 ? localTs : Date.now();
+      await supabaseUpsert('family_records', { family_id: fid, record_date: ds, encrypted_data: data, iv, last_modified: modTime, modified_by: getDeviceName() });
+      if (localTs === 0) localStorage.setItem(`records_${ds}_ts`, String(modTime));
+    }
+    await syncUpload('config');
+    showToast(`已上传 ${keys.length} 天记录`);
+  } catch (e) { showToast('上传失败: ' + e.message); }
+}
+
+// ---------- PWA：动态注入 manifest ----------
+function setupPWA() {
+  try {
+    const iconUri = 'assets/pwa-icon-192.webp';
+    const _dayBg = document.body.classList.contains('theme-day') ? '#f5f8fd' : '#0a0f1e'; // v3.5.21 manifest 颜色随实际主题（含手动切换）
+    const manifest = { name:'小咕噜的日常', short_name:'小咕噜', start_url:'./index.html', scope:'.', display:'standalone', background_color:_dayBg, theme_color:_dayBg, icons:[{src:iconUri, sizes:'192x192', type:'image/png'},{src:iconUri, sizes:'512x512', type:'image/png'}] };
+    const blob = new Blob([JSON.stringify(manifest)], {type:'application/manifest+json'});
+    const manifestUrl = URL.createObjectURL(blob);
+    const link = document.createElement('link'); link.rel = 'manifest'; link.href = manifestUrl;
+    document.head.appendChild(link);
+  } catch {}
+  // 监听 PWA 安装事件，提供页面内安装引导
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    window.deferredInstallPrompt = e;
+    showInstallPrompt();
+  });
+}
+function showInstallPrompt() {
+  // 已作为 PWA 运行（主屏幕/桌面快捷方式），不显示安装横幅
+  if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true) return;
+  // 用户之前手动关闭过安装横幅，尊重用户选择
+  if (localStorage.getItem('pwa_install_dismissed') === 'yes') return;
+  if (document.getElementById('pwaInstallBar')) return;
+  const bar = document.createElement('div');
+  bar.id = 'pwaInstallBar';
+  bar.style.cssText = 'position:fixed;top:0;left:0;width:100%;z-index:200;background:#1a1f2e;border-bottom:1px solid rgba(255,255,255,0.1);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;color:#fff;';
+  bar.innerHTML = '<span>📲 安装到主屏幕，像 App 一样使用</span><div style="display:flex;align-items:center;gap:8px;"><button id="pwaInstallBtn" style="padding:6px 14px;border-radius:16px;border:none;background:#667eea;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">安装</button><button id="pwaDismissBtn" style="padding:4px 8px;border-radius:12px;border:none;background:transparent;color:#b2bec3;font-size:18px;line-height:1;cursor:pointer;" title="不再提示">×</button></div>';
+  document.body.appendChild(bar);
+  document.getElementById('pwaInstallBtn').addEventListener('click', async () => {
+    const prompt = window.deferredInstallPrompt;
+    if (!prompt) return;
+    prompt.prompt();
+    const { outcome } = await prompt.userChoice;
+    if (outcome === 'accepted') { window.deferredInstallPrompt = null; bar.remove(); }
+  });
+  document.getElementById('pwaDismissBtn').addEventListener('click', () => {
+    localStorage.setItem('pwa_install_dismissed', 'yes');
+    bar.remove();
+  });
+}
+// 如果已作为 PWA 运行，隐藏浏览器 UI 提示
+window.addEventListener('appinstalled', () => { const bar = document.getElementById('pwaInstallBar'); if (bar) bar.remove(); window.deferredInstallPrompt = null; });
+
+// ---------- 同步初始化 ----------
+async function initSync() {
+  loadSyncConfig();
+  setupSyncListeners();
+  // 有预设配置则自动生成family_id并开始同步，不弹引导
+  if (isSyncReady()) {
+    const fc = localStorage.getItem('family_code');
+    if (fc && !localStorage.getItem('family_id')) {
+      const fid = await generateFamilyId(fc);
+      localStorage.setItem('family_id', fid);
+    }
+    // 如果没有 salt，尝试从云端拉取（加入已有家庭）；拉不到再生成（创建新家庭）
+    if (!localStorage.getItem('family_salt')) {
+      const fid = getFamilyId();
+      try {
+        const saltRows = await supabaseGet(`family_config?family_id=eq.${fid}&config_key=eq._salt&select=encrypted_data`);
+        if (saltRows.length > 0 && saltRows[0].encrypted_data) {
+          localStorage.setItem('family_salt', saltRows[0].encrypted_data);
+        } else {
+          const newSalt = bufToB64(crypto.getRandomValues(new Uint8Array(16)));
+          localStorage.setItem('family_salt', newSalt);
+          await uploadSalt(newSalt);
+        }
+      } catch (e) { console.warn('salt同步失败:', e); }
+    }
+    updateSyncUI();
+    // v3.5.10 启动自动双向同步：复用 syncPullAll 内置的冲突判定与 v3.5.6 备份保护
+    // - cloudTs > localTs：拉取云端覆盖本地（覆盖前自动备份 records_<ds>_bak）
+    // - localTs > cloudTs：本地有未上传修改 → 自动反推云端（满足"家人打开即看到更新"+"本地修改自动同步"）
+    // - 相等或无云端记录：不动，保留本地
+    // 安全前提：syncPullAll 内部已有备份+冲突判定，此调用不绕过任何防护
+    // 启动：近 3 天优先（首屏数据秒级到位），4 秒后后台静默补全全量 30 天（不阻塞首屏）
+    try { await syncPullAll({ days: 3 }); } catch (e) { console.warn('启动同步(近3天)失败:', e); }
+    try { setTimeout(() => { syncPullAll().catch(e => console.warn('后台补全同步失败:', e)); }, 4000); } catch (e) {}
+    return;
+  }
+  showFamilySetup();
+}
+function setupSyncListeners() {
+  // v3.5.55：重新启用前台恢复/网络恢复/轮询同步。
+  // 原实现只在页面首次加载时同步一次，PWA 从后台切回前台不会重新同步，
+  // 导致家人"打开小程序"其实没触发任何同步，看不到别人的新记录。
+  // 为控制请求量，这些增量同步只处理最近 3 天（启动与手动"立即同步"仍为全量 30 天）。
+  const quick = { days: 3 };
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && isSyncReady() && navigator.onLine) { flushSyncQueue(); syncPullAll(quick); }
+  });
+  window.addEventListener('online', () => {
+    if (isSyncReady()) { flushSyncQueue(); syncPullAll(quick); }
+  });
+  setInterval(() => {
+    if (isSyncReady() && navigator.onLine && !document.hidden) syncPullAll(quick);
+  }, SYNC_CONFIG.pollInterval);
+}
+
+// ===== 全局兜底：未捕获 JS 错误 toast 提示（便于真机定位问题） =====
+window.addEventListener('error', (e) => {
+  try { showToast('脚本异常: ' + (e.message || 'unknown').slice(0, 60)); } catch (_) {}
+});
+window.addEventListener('unhandledrejection', (e) => {
+  try { showToast('异步异常: ' + String(e.reason && e.reason.message || e.reason || '').slice(0, 60)); } catch (_) {}
+});
+
+// ===== fabBtn 事件绑定：复用 enableFastTap（与底部导航一致）=====
+// 触摸端：touchstart/end 触发，touchend 时 preventDefault 抑制合成 click，只开一次
+// 桌面端：仍走 onclick（mouse 无合成 click 落在遮罩上的问题）
+// 注意：移除原 ontouchstart 内联 —— 它在按下即开弹窗，松手时合成 click 会落在刚弹出的
+//       遮罩上触发 closeModal，导致"点一次点不开"（弹窗开即被关）。
+setTimeout(() => {
+  const fab = document.getElementById('fabBtn');
+  if (fab && !fab.dataset.fastTapBound) {
+    fab.dataset.fastTapBound = '1';
+    enableFastTap(fab, openAddModal);
+  }
+  // 版本号显示：管理弹窗最上方（标题下方小字）
+  const verTag = document.getElementById('appVersionTag');
+  if (verTag) verTag.textContent = APP_VERSION;
+}, 0);
+
+init();
