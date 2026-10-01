@@ -621,7 +621,10 @@
   }
   .sf-select .sf-trigger .sf-ph { font-size: 14px; color: #dfe6e9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sf-select .sf-trigger .sf-ph.sf-ph-empty { color: rgba(255,255,255,0.4); }
-  .sf-select .sf-trigger .sf-arrow { color: #b2bec3; font-size: 12px; flex-shrink: 0; }
+  .sf-select .sf-trigger .sf-arrow {
+    color: #dfe6e9; font-size: 20px; line-height: 1; flex-shrink: 0;
+    font-weight: 700;
+  }
   .sf-select .sf-panel {
     position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 999;
     background: #22272e; border: 1px solid rgba(255,255,255,0.2); border-radius: 10px;
@@ -1241,7 +1244,7 @@
   body.theme-day .sf-select .sf-trigger { background: #ffffff; border-color: rgba(9,132,227,0.25); }
   body.theme-day .sf-select .sf-trigger .sf-ph { color: #3d4852; }
   body.theme-day .sf-select .sf-trigger .sf-ph.sf-ph-empty { color: #a4b0be; }
-  body.theme-day .sf-select .sf-trigger .sf-arrow { color: #636e72; }
+  body.theme-day .sf-select .sf-trigger .sf-arrow { color: #3d4852; }
   body.theme-day .sf-select .sf-panel { background: #ffffff; border-color: rgba(9,132,227,0.25); box-shadow: 0 10px 28px rgba(9,132,227,0.18); }
   body.theme-day .sf-select .sf-panel .sf-search input { background: #f5f8fa; border-color: rgba(9,132,227,0.25); color: #3d4852; }
   body.theme-day .sf-select .sf-panel .sf-opt { color: #3d4852; }
@@ -2832,7 +2835,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.74 0923-0930'; // 吃睡新增「辅食」活动:开始时间+食物可搜索多选下拉(带滚动条)+克数+饭后正常/异常+备注;可编辑、进历史与日报;管理弹窗可增删食物选项,永久生效并同步
+const APP_VERSION = 'v3.5.75 1001-1020'; // 辅食食物下拉箭头放大且去掉横向拉伸恢复原始宽度;点击空白处(含iOS触控)关闭下拉;语音速记支持辅食(识别食物/克数/饭后状态,确认界面可直接勾选食物与改饭后状态)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2911,6 +2914,7 @@ function sfOnCheck(p, id, val, checked) {
   const st = sfState(p, id);
   if (checked) st.sel.add(val); else st.sel.delete(val);
   sfRenderTrigger(p, id);
+  if (p === 'vi') { try { sfSyncVoiceItem(id); } catch (e) {} }
 }
 function sfRenderTrigger(p, id) {
   const el = document.getElementById(`${p}ph_${id}`);
@@ -2966,11 +2970,20 @@ function sfAddNew(p, id, name) {
   const sEl = document.getElementById(`${p}search_${id}`); if (sEl) sEl.value = '';
   sfRenderList(p, id); sfRenderTrigger(p, id);
 }
-// 点击下拉以外的区域关闭面板（面板内部点击不关闭，方便多选）
-document.addEventListener('click', function (e) {
-  if (e && e.target && e.target.closest && e.target.closest('.sf-select')) return;
+// 点击下拉以外的任何区域都关闭面板（面板内部点击不关闭，方便多选）
+// iOS Safari 对 div/span 等"不可点击元素"不派发 click，故同时监听 touchstart
+function _sfOutsideClose(e) {
+  if (!e) return;
+  const t = e.target;
+  if (t && t.closest && t.closest('.sf-select')) return;   // 下拉内部：不关
   sfCloseAllPanels();
-});
+}
+document.addEventListener('click', _sfOutsideClose);
+document.addEventListener('touchstart', _sfOutsideClose, { passive: true });
+// iOS 事件委托兜底：让 body 具备可点击性，click 才会冒泡到 document
+if (document.body && !document.body.hasAttribute('onclick')) {
+  document.body.setAttribute('onclick', 'void(0)');
+}
 
 function renderAddModal() {
   // 分类栏高亮
@@ -3331,7 +3344,7 @@ const VOICE_RULES = [
       let amount = 1; const am = zone.match(/([一二两三四五六七八九十]|\d+)\s*[粒颗滴]/); if (am) { const n = cnNum(am[1]); if (n !== null && n >= 1 && n <= 10) amount = n; }
       return { params: { supplementTypes: types.length ? types : ['AD'], supplementAmount: amount } };
     } },
-  { id: 'solidFood', re: /辅食|米粉|米糊|果泥|肉泥|菜泥|蛋黄|吃了?\s*(?:米糊|米粉|果泥|肉泥|菜泥)/,
+  { id: 'solidFood', re: /辅食|米粉|米糊|果泥|肉泥|菜泥|蛋黄|米饼|磨牙棒|添加\s*辅食|(?:吃了?|喂了?|给的?)\s*(?:米糊|米粉|果泥|肉泥|菜泥|蛋黄|高铁|南瓜|土豆|红薯|紫薯|山药|胡萝卜|西兰花|白菜|油菜|苹果|香蕉|梨|牛油果|猕猴桃|西瓜|冬瓜|黄瓜|莴苣|西红柿|茄子|香菇|玉米|小米|豆腐|猪肝|鸡蛋|猪肉|牛肉|羊肉|鸡肉|鱼|虾)/,
     parse: (zone) => {
       const foods = [];
       getSolidFoodOptions().forEach(f => { if (zone.includes(f) && !foods.includes(f)) foods.push(f); });
@@ -3975,6 +3988,7 @@ function renderVoiceItems(unmatched) {
   const box = document.getElementById('voiceResultList');
   const btn = document.getElementById('voiceConfirmBtn');
   let html = '';
+  const viPending = [];   // v3.5.75 辅食：食物下拉需在 innerHTML 落盘后回填
   if (voiceItems.length === 0) {
     html = '<div class="voice-empty-tip">未识别到活动。试试：喂奶130 · 睡了一小时 · 洗澡了 · 大便拉肚子 · 体温38度5</div>';
   } else {
@@ -3995,16 +4009,26 @@ function renderVoiceItems(unmatched) {
       const isDur = pd && pd.key === 'duration';
       const dh = isDur ? Math.floor((pd.value || 0) / 60) : 0;
       const dm = isDur ? Math.round((pd.value || 0) % 60) : 0;
-      html += `<div class="voice-record-item${it.warn ? ' vri-warn' : ''}">
+      // v3.5.75 辅食：语音确认界面也能直接选食物 / 改饭后状态（听不清时手动补）
+      const isSf = it.actId === 'solidFood';
+      if (isSf) viPending.push({ p: 'vi', id: String(i), sel: it.params.solidFoods || [] });
+      const sfBlock = isSf
+        ? `<div class="input-row sf-row"><label class="sf-label">食物:</label>${sfPickerHtml('vi', String(i))}</div>`
+          + `<div class="input-row sf-row sf-meal-row"><label class="sf-label">饭后:</label>`
+          + `<label><input type="radio" name="vimeal_${i}" value="正常" ${(it.params.afterMeal||'正常')==='正常'?'checked':''}> 正常</label>`
+          + `<label><input type="radio" name="vimeal_${i}" value="异常" ${it.params.afterMeal==='异常'?'checked':''}> 异常</label></div>`
+        : '';
+      html += `<div class="voice-record-item${it.warn ? ' vri-warn' : ''}" id="vri_${i}">
         <div class="vri-head">
           <span class="vri-name">${it.icon} ${it.name}${extra.length ? '<span class="vri-unit"> · ' + extra.join(' · ') + '</span>' : ''}</span>
-          ${it.warn ? '<span class="vri-unit" style="color:#fd79a8;">待补</span>' : ''}
+          <span class="vri-unit" id="viwarn_${i}" style="color:#fd79a8;${it.warn ? '' : 'display:none;'}">待补</span>
           <span class="vri-del" onclick="voiceItems.splice(${i},1);renderVoiceItems();">&#10005;</span>
         </div>
         <div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" min="0" max="23" value="${vhh}" id="vit_h_${i}"><span>:</span><input type="number" min="0" max="59" value="${vmm}" id="vit_m_${i}"></div></div>
         ${isDur
           ? `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">${pd.label}:</label><input type="number" min="0" id="vinh_${i}" value="${dh}" style="width:50px;"><span class="unit">h</span><input type="number" min="0" max="59" id="vinm_${i}" value="${dm}" style="width:50px;margin-left:8px;"><span class="unit">min</span></div>`
           : (pd ? `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">${pd.label}:</label><input type="number" min="${pd.min}" step="${pd.step}" value="${pd.value != null ? pd.value : ''}" id="vin_${i}"><span class="unit">${pd.unit}</span></div>` : '')}
+        ${sfBlock}
       </div>`;
     });
   }
@@ -4012,8 +4036,21 @@ function renderVoiceItems(unmatched) {
   const warnCount = voiceItems.filter(x => x.warn).length;
   if (warnCount > 0) html += `<div class="voice-empty-tip" style="color:#fd79a8;">${warnCount} 条参数未听清（粉框），请补充后确认</div>`;
   box.innerHTML = html;
+  viPending.forEach(x => sfInit(x.p, x.id, x.sel));
   btn.style.display = voiceItems.length ? '' : 'none';
   btn.textContent = `确认添加 ${voiceItems.length} 条`;
+}
+// v3.5.75 语音里选了食物后，同步回该条记录并撤下「待补」标记
+function sfSyncVoiceItem(idx) {
+  const i = parseInt(idx, 10);
+  const it = (typeof voiceItems !== 'undefined' && voiceItems[i]) || null;
+  if (!it || it.actId !== 'solidFood') return;
+  it.params.solidFoods = sfGetSelection('vi', String(i));
+  it.warn = it.params.solidFoods.length === 0;
+  const badge = document.getElementById('viwarn_' + i);
+  if (badge) badge.style.display = it.warn ? '' : 'none';
+  const card = document.getElementById('vri_' + i);
+  if (card && card.classList) card.classList.toggle('vri-warn', !!it.warn);
 }
 function confirmVoiceAdd() {
   if (voiceItems.length === 0) return;
@@ -4040,7 +4077,7 @@ function confirmVoiceAdd() {
       if (nEl && nEl.value !== '' && !isNaN(parseFloat(nEl.value))) it.params[pd.key] = parseFloat(nEl.value);
     }
   });
-  voiceItems.forEach(it => {
+  voiceItems.forEach((it, viIdx) => {
     const act = ACTIVITIES.find(a => a.id === it.actId); if (!act) return;
     const p = it.params;
     const record = { type: it.actId, name: act.name, time: timeStr, recTime: it.recTime, timestamp: ts, note: p.note || '', updatedAt: Date.now() };
@@ -4049,7 +4086,17 @@ function confirmVoiceAdd() {
     else if (act.type === 'drinkWater') { record.drinkTime = it.recTime; }
     else if (act.type === 'poop') { record.poopTime = it.recTime; record.poopStatus = p.poopStatus || '正常'; }
     else if (act.type === 'supplement') { record.supplementTypes = (p.supplementTypes && p.supplementTypes.length) ? p.supplementTypes : ['AD']; record.supplementTime = it.recTime; record.supplementAmount = Math.max(1, Math.round(p.supplementAmount || 1)); }
-    else if (act.type === 'solidFood') { record.solidFoods = p.solidFoods || []; record.solidFoodTime = it.recTime; record.solidFoodAmount = Math.max(0, Math.round(p.solidFoodAmount || 0)); record.afterMeal = p.afterMeal || '正常'; if (p.note) record.note = p.note; }
+    else if (act.type === 'solidFood') {
+      // v3.5.75 优先取语音面板里手动勾选的食物（听不清时用户会自己补）
+      const picked = (typeof sfGetSelection === 'function') ? sfGetSelection('vi', String(viIdx)) : [];
+      record.solidFoods = picked.length ? picked : (p.solidFoods || []);
+      record.solidFoodTime = it.recTime;
+      record.solidFoodAmount = Math.max(0, Math.round(p.solidFoodAmount || 0));
+      const rds2 = document.getElementsByName(`vimeal_${viIdx}`); let _vm = p.afterMeal || '正常';
+      for (const r of rds2) { if (r.checked) { _vm = r.value; break; } }
+      record.afterMeal = _vm;
+      if (p.note) record.note = p.note;
+    }
     else if (act.type === 'vaccine') { record.vaccineTypes = p.vaccineTypes || []; record.vaccineTime = it.recTime; record.vaccineDose = Math.max(1, Math.round(p.vaccineDose || 1)); }
     else if (act.type === 'listenStory') { record.storyLangs = (p.storyLangs && p.storyLangs.length) ? p.storyLangs : ['中文']; record.storyTime = it.recTime; }
     else if (act.type === 'grossMotor') { record.grossMotorItems = p.grossMotorItems || []; record.grossMotorTime = it.recTime; }
