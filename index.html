@@ -148,6 +148,14 @@
     color: #fff; font-weight: 600;
   }
   .cat-tag:active { transform: scale(0.95); }
+  /* v3.5.82 分析弹窗标签页：图标+文字左右排列，三标签等分整宽、间距拉大 */
+  #analysisTabBar { justify-content: space-between; gap: 12px; overflow-x: visible; }
+  #analysisTabBar .cat-tag {
+    flex: 1 1 0; min-width: 0;
+    flex-direction: row; justify-content: center; gap: 6px;
+    padding: 10px 8px; font-size: 15px;
+  }
+  #analysisTabBar .cat-tag .cat-label { font-size: 15px; }
 
   /* ===== 活动卡片 ===== */
   .cards-grid {
@@ -1227,7 +1235,7 @@
   body.theme-day .history-date-label { color: #000; }
   body.theme-day .history-summary { background: rgba(9,132,227,0.05); border-color: rgba(9,132,227,0.12); }
   body.theme-day .history-sum-row .hs-label { color: #636e72; }
-  body.theme-day .history-sum-row .hs-value { color: #d68910; }
+  body.theme-day .history-sum-row .hs-value { color: #3d4852; }
   body.theme-day .history-body-row label { color: #636e72; }
   body.theme-day .history-body-row input { background: #ffffff; border-color: rgba(9,132,227,0.25); color: #3d4852; }
   body.theme-day .history-body-row input:focus { border-color: rgba(9,132,227,0.5); }
@@ -1660,8 +1668,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.81"></script>
-<script src="app-config.js?v=v3.5.81"></script>
-<script src="app.js?v=v3.5.81"></script>
+<script src="std-config.js?v=v3.5.82"></script>
+<script src="app-config.js?v=v3.5.82"></script>
+<script src="app.js?v=v3.5.82"></script>
 </body>
 </html>

@@ -1231,7 +1231,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.81'; // 分析弹窗改版: 标签页改首页分类样式(吃睡/健康/成长), 消化→健康(💚), 睡眠时长图并入"吃睡"最下方; 奶量及次数柱状图: 次数改橙色(与奶量趋势单次平均线同色)/右轴改白/右轴刻度间隔3/柱形间隔×2+横向滚动; 历史弹窗: 去高重图标+高cm/重kg/今日成就/水+奶量 改14px白色
+const APP_VERSION = 'v3.5.82'; // 分析弹窗: 标签页图标文字改左右排列+三标签等分整宽, 切换标签面板等高不再跳动; 辅食环形无异常时不再显示红色弧; 奶量及次数柱形每天占宽 36→18(缩短一半); 历史弹窗: 水+奶量/今日成就/高/重 的数值与单位改为内联白色(不依赖可被缓存的CSS)并兜底去图标
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2601,6 +2601,16 @@ function openHistory() {
   const t = new Date(); t.setDate(t.getDate() - 1);
   document.getElementById('historyDate').value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
   loadHistory(); showModal('historyModal');
+  hardenHistoryColors();
+}
+// v3.5.82 历史弹窗配色兜底：颜色直接内联，不依赖可能被缓存的 CSS；
+// 同时兜底去掉旧缓存 HTML 里「高/重」前残留的图标，保证任意缓存状态下都呈现白字无图标
+function hardenHistoryColors() {
+  const day = document.body.classList.contains('theme-day');
+  const c = day ? '#3d4852' : '#ffffff';
+  document.querySelectorAll('#historyModal .hs-label, #historyModal .hs-value, #historyModal .history-body-row .hb-unit').forEach(el => { el.style.color = c; });
+  document.querySelectorAll('#historyModal .history-body-row label').forEach((el, i) => { el.style.color = c; el.textContent = (i === 0 ? '高' : '重'); });
+  ['historyHeightInput', 'historyWeightInput'].forEach(id => { const el = document.getElementById(id); if (el) el.style.color = c; });
 }
 function loadHistory() {
   const ds = document.getElementById('historyDate').value; if (!ds) return;
@@ -2620,8 +2630,10 @@ function loadHistory() {
   let totalMilk = 0;
   records.forEach(r => { if (r.type === 'milk' && r.milkAmount) totalMilk += r.milkAmount; });
   const achArr = computeAchievements(records);
-  let sHtml = `<div class="history-sum-row"><span class="hs-label">🍼 水+奶量</span><span class="hs-value">${Math.round(totalMilk * 1.12)} ml</span></div>`;
-  sHtml += `<div class="history-sum-row"><span class="hs-label">🏆 今日成就</span><span class="hs-value">${achArr.length > 0 ? achArr.join(' | ') : '无'}</span></div>`;
+  // v3.5.82 颜色改为内联：不依赖可能被缓存的旧 CSS（v3.5.80 的 #ffeaa7 黄色），彻底消除"数值/单位/内容发黄"；主题自适应
+  const _hvc = document.body.classList.contains('theme-day') ? '#3d4852' : '#ffffff';
+  let sHtml = `<div class="history-sum-row"><span class="hs-label" style="color:${_hvc}">🍼 水+奶量</span><span class="hs-value" style="color:${_hvc}">${Math.round(totalMilk * 1.12)} ml</span></div>`;
+  sHtml += `<div class="history-sum-row"><span class="hs-label" style="color:${_hvc}">🏆 今日成就</span><span class="hs-value" style="color:${_hvc}">${achArr.length > 0 ? achArr.join(' | ') : '无'}</span></div>`;
   if (summary) { summary.innerHTML = sHtml; summary.style.display = 'flex'; }
   // 按活动开始时间正序排列
   const sorted = [...records].sort((a, b) => {
@@ -3606,10 +3618,10 @@ function makeMilkCountComboChart(milkData, countData, milkStdRows) {
   const hasMilk = milkData.some(d => d.value != null);
   const hasCount = countData.some(d => d.value != null);
   if (!hasMilk && !hasCount) return head + `<div class="chart-empty">暂无数据</div></div>`;
-  // v3.5.81 柱形间隔调大1倍：每天固定占宽 36（原约 18），总宽超出容器 → 外层横向滚动
+  // v3.5.82 柱形间隔缩短一半：每天固定占宽 18（v3.5.81 为 36）
   const H = 168, PL = 42, PR = 48, PT = 22, PB = 24;
   const n = milkData.length;
-  const slotW = 36;
+  const slotW = 18;
   const iw = n * slotW;
   const W = PL + iw + PR;
   const ih = H - PT - PB;
@@ -4148,13 +4160,17 @@ function makeSolidFoodAnalysis() {
   const segNo = (normalCount / totalFoods) * C;
   const segUn = (notTried / totalFoods) * C;
   const dash = len => `${len.toFixed(2)} ${(C - len).toFixed(2)}`;
+  // v3.5.82 无异常时不绘制红色弧（stroke-linecap="round" 在 0 长度时仍会残留一个小红点）
+  const abArc = abnormalCount > 0
+    ? `<circle cx="100" cy="100" r="70" stroke="#ff7675" stroke-dasharray="${dash(segAb)}" stroke-dashoffset="0" stroke-linecap="round"/>`
+    : '';
   const ring = `<div class="sf-ring-wrap">` +
     `<div class="sf-abnormal">` + [...abnormal].map(f => `<span class="sf-ab-chip">${String(f).replace(/</g, '&lt;')}</span>`).join('') + `</div>` +
     `<svg class="sf-donut" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">` +
       `<g transform="rotate(-90 100 100)" fill="none" stroke-width="22">` +
         `<circle cx="100" cy="100" r="70" stroke="rgba(255,255,255,0.16)" stroke-dasharray="${dash(segUn)}" stroke-dashoffset="${(-(segAb + segNo)).toFixed(2)}"/>` +
         `<circle cx="100" cy="100" r="70" stroke="#2ecc71" stroke-dasharray="${dash(segNo)}" stroke-dashoffset="${(-segAb).toFixed(2)}" stroke-linecap="round"/>` +
-        `<circle cx="100" cy="100" r="70" stroke="#ff7675" stroke-dasharray="${dash(segAb)}" stroke-dashoffset="0" stroke-linecap="round"/>` +
+        abArc +
       `</g>` +
       `<text class="sf-center-num" x="100" y="98" text-anchor="middle">${triedCount}/${totalFoods}</text>` +
       `<text class="sf-center-lab" x="100" y="116" text-anchor="middle">已尝试/总数</text>` +
@@ -4242,6 +4258,23 @@ function openAnalysis() {
   content.innerHTML = html;
   bindChartTipDismiss();
   showModal('analysisModal');
+  // v3.5.82 各分类面板统一高度，切换标签时弹窗不跳动
+  requestAnimationFrame(() => equalizeAnalysisPanels());
+}
+
+// v3.5.82 分析弹窗：把所有分类面板的最小高度统一为「最高面板」的高度，避免切换标签时弹窗高度/滚动位置跳动
+function equalizeAnalysisPanels() {
+  const panels = [...document.querySelectorAll('#analysisContent .tab-panel')];
+  if (panels.length < 2) return;
+  panels.forEach(p => { p.style.minHeight = ''; });
+  let max = 0;
+  panels.forEach(p => {
+    const prev = p.style.display;
+    p.style.display = ''; p.style.visibility = 'hidden';
+    max = Math.max(max, p.offsetHeight);
+    p.style.display = prev; p.style.visibility = '';
+  });
+  if (max > 0) panels.forEach(p => { p.style.minHeight = max + 'px'; });
 }
 
 // v3.5.81 分析弹窗分区标签切换：仅切换 display，所有图表已在上方一次性渲染
