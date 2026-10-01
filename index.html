@@ -652,6 +652,8 @@
   .sf-select .sf-panel .sf-empty { padding: 10px 6px; font-size: 13px; color: #8a949c; text-align: center; }
   .add-inputs input[type="number"].sf-amt { width: 66px; flex-shrink: 0; }
   .sf-meal-row { gap: 12px; }
+  /* v3.5.76 食物下拉收窄：与「开始时间」输入组等宽（添加弹窗内时间输入为 80px×2 + 间距 4×2 + 冒号 ≈173px） */
+  .add-inputs .sf-row .sf-select { flex: 0 0 auto; width: 173px; min-width: 0; }
   .sf-tags { max-height: 180px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .temp-indicator-inline { font-size: 17px; margin-left: 5px; }
   .temp-normal { color: #2ecc71; }
@@ -1339,10 +1341,10 @@
       <div class="age-row"><div class="age-info" id="ageInfo">计算中...</div></div>
       <div class="body-measure">
         <label>高:</label>
-        <input type="number" step="0.1" id="heightInput" placeholder="" onchange="saveHeight()">
+        <input type="number" step="0.1" id="heightInput" placeholder="" inputmode="decimal" oninput="onBodyInput('h')" onchange="saveHeight()" onblur="saveHeight()">
         <span class="unit">cm</span>
         <label>重:</label>
-        <input type="number" step="0.1" id="weightInput" placeholder="" onchange="saveWeight()">
+        <input type="number" step="0.1" id="weightInput" placeholder="" inputmode="decimal" oninput="onBodyInput('w')" onchange="saveWeight()" onblur="saveWeight()">
         <span class="unit">kg</span>
       </div>
     </div>
@@ -1897,10 +1899,43 @@ function updateAgeInfo() {
   document.getElementById('ageInfo').innerHTML = `<span class="highlight">${months}</span>月龄，出生第<span class="highlight">${days}</span>天`;
 }
 
-function loadHeight() { const h = localStorage.getItem('babyHeight'); if (h) document.getElementById('heightInput').value = h; }
-function saveHeight() { const raw = document.getElementById('heightInput').value; localStorage.setItem('babyHeight', raw); const v = parseFloat(raw); if (v > 0) recordBodyMeasurement('h', v); else syncUpload('config'); }
-function loadWeight() { const w = localStorage.getItem('babyWeight'); if (w) document.getElementById('weightInput').value = w; }
-function saveWeight() { const raw = document.getElementById('weightInput').value; localStorage.setItem('babyWeight', raw); const v = parseFloat(raw); if (v > 0) recordBodyMeasurement('w', v); else syncUpload('config'); }
+// v3.5.76 身高体重保存加固：写盘即打时间戳(cfgts_*)，防止云端拉取用旧值覆盖刚输入的数据
+function bumpConfigTs(key) { try { localStorage.setItem('cfgts_' + key, String(Date.now())); } catch (e) {} }
+let _bodySaveTimer = null;
+// 输入过程中防抖保存：即使不触发 blur/change（如切后台），也能落盘且进曲线
+function onBodyInput(field) {
+  if (_bodySaveTimer) clearTimeout(_bodySaveTimer);
+  _bodySaveTimer = setTimeout(function () { _bodySaveTimer = null; if (field === 'w') saveWeight(); else saveHeight(); }, 800);
+}
+// 页面隐藏/卸载时强制落盘，避免"输入后直接切走"丢数据
+function flushBodySaves() {
+  if (_bodySaveTimer) { clearTimeout(_bodySaveTimer); _bodySaveTimer = null; }
+  try { saveHeight(); } catch (e) {}
+  try { saveWeight(); } catch (e) {}
+}
+function loadHeight() { const el = document.getElementById('heightInput'); if (!el) return; if (document.activeElement === el) return; const h = localStorage.getItem('babyHeight'); if (h != null) el.value = h; }
+function saveHeight() {
+  const el = document.getElementById('heightInput'); if (!el) return;
+  const raw = String(el.value == null ? '' : el.value).trim();
+  const prev = localStorage.getItem('babyHeight') || '';
+  if (raw !== prev) { localStorage.setItem('babyHeight', raw); bumpConfigTs('babyHeight'); }
+  const v = parseFloat(raw);
+  if (v > 0) recordBodyMeasurement('h', v);          // 幂等：无变化时不重复写盘/上传
+  else if (raw !== prev) syncUpload('config');
+}
+function loadWeight() { const el = document.getElementById('weightInput'); if (!el) return; if (document.activeElement === el) return; const w = localStorage.getItem('babyWeight'); if (w != null) el.value = w; }
+function saveWeight() {
+  const el = document.getElementById('weightInput'); if (!el) return;
+  const raw = String(el.value == null ? '' : el.value).trim();
+  const prev = localStorage.getItem('babyWeight') || '';
+  if (raw !== prev) { localStorage.setItem('babyWeight', raw); bumpConfigTs('babyWeight'); }
+  const v = parseFloat(raw);
+  if (v > 0) recordBodyMeasurement('w', v);          // 幂等：无变化时不重复写盘/上传
+  else if (raw !== prev) syncUpload('config');
+}
+document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flushBodySaves(); });
+window.addEventListener('pagehide', flushBodySaves);
+window.addEventListener('beforeunload', flushBodySaves);
 
 // 业务"今天"的判定：每日重置时间为凌晨 1:00（0:00-0:59 期间仍算昨天）
 function effectiveNow() {
@@ -2710,7 +2745,7 @@ function openEditRecord(type, timestamp, ds) {
     // v3.5.74 辅食：食物（可搜索多选）+ 克数 + 饭后正常/异常
     editPendingSf = { p: 'edt', id: act.id, sel: rec.solidFoods || [] };
     html += `<div class="input-row sf-row"><label class="sf-label">食物:</label>${sfPickerHtml('edt', act.id)}<input type="number" step="1" min="0" id="edt_sfamt" class="sf-amt" placeholder="0" value="${rec.solidFoodAmount > 0 ? rec.solidFoodAmount : ''}"><span class="unit">g</span></div>`;
-    html += `<div class="input-row sf-row sf-meal-row"><label class="sf-label">饭后:</label><label><input type="radio" name="edt_meal" value="正常" ${(rec.afterMeal||'正常')==='正常'?'checked':''}> 正常</label><label><input type="radio" name="edt_meal" value="异常" ${rec.afterMeal==='异常'?'checked':''}> 异常</label></div>`;
+    html += `<div class="input-row sf-row sf-meal-row radio-group"><label class="sf-label">饭后:</label><label><input type="radio" name="edt_meal" value="正常" ${(rec.afterMeal||'正常')==='正常'?'checked':''}> 正常</label><label><input type="radio" name="edt_meal" value="异常" ${rec.afterMeal==='异常'?'checked':''}> 异常</label></div>`;
   } else if (act.type === 'vaccine') {
     const sel = rec.vaccineTypes || [];
     let vh = ''; VACCINE_OPTIONS.forEach(v => { vh += `<label><input type="checkbox" name="edt_vac" value="${v}" ${sel.includes(v)?'checked':''}> ${v}</label>`; });
@@ -2835,7 +2870,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.75 1001-1020'; // 辅食食物下拉箭头放大且去掉横向拉伸恢复原始宽度;点击空白处(含iOS触控)关闭下拉;语音速记支持辅食(识别食物/克数/饭后状态,确认界面可直接勾选食物与改饭后状态)
+const APP_VERSION = 'v3.5.76 1001-1040'; // 辅食:饭后正常/异常字号对齐大便单选,食物下拉收窄到与开始时间等宽;修复首页身高体重偶发不自动保存(写盘即打cfgts时间戳防云端旧值覆盖+输入防抖/失焦/页面隐藏多重落盘+同步回填不再冲掉正在输入的值)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3028,7 +3063,7 @@ function renderAddList(filterText) {
       const _sh = String(new Date().getHours()).padStart(2,'0'), _sm = String(new Date().getMinutes()).padStart(2,'0');
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${_sh}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${_sm}"></div></div>`;
       inputsHtml += `<div class="input-row sf-row"><label class="sf-label">食物:</label>${sfPickerHtml('ad', act.id)}<input type="number" step="1" min="0" id="adinp_${act.id}" placeholder="0" class="sf-amt"><span class="unit">g</span></div>`;
-      inputsHtml += `<div class="input-row sf-row sf-meal-row"><label class="sf-label">饭后:</label><label><input type="radio" name="admeal_${act.id}" value="正常" checked> 正常</label><label><input type="radio" name="admeal_${act.id}" value="异常"> 异常</label></div>`;
+      inputsHtml += `<div class="input-row sf-row sf-meal-row radio-group"><label class="sf-label">饭后:</label><label><input type="radio" name="admeal_${act.id}" value="正常" checked> 正常</label><label><input type="radio" name="admeal_${act.id}" value="异常"> 异常</label></div>`;
       sfPending.push({ p: 'ad', id: act.id, sel: [] });
     } else if (act.type === 'vaccine') {
       let vh = ''; VACCINE_OPTIONS.forEach(v => { vh += `<label><input type="checkbox" name="advac_${act.id}" value="${v}"> ${v}</label>`; });
@@ -4014,7 +4049,7 @@ function renderVoiceItems(unmatched) {
       if (isSf) viPending.push({ p: 'vi', id: String(i), sel: it.params.solidFoods || [] });
       const sfBlock = isSf
         ? `<div class="input-row sf-row"><label class="sf-label">食物:</label>${sfPickerHtml('vi', String(i))}</div>`
-          + `<div class="input-row sf-row sf-meal-row"><label class="sf-label">饭后:</label>`
+          + `<div class="input-row sf-row sf-meal-row radio-group"><label class="sf-label">饭后:</label>`
           + `<label><input type="radio" name="vimeal_${i}" value="正常" ${(it.params.afterMeal||'正常')==='正常'?'checked':''}> 正常</label>`
           + `<label><input type="radio" name="vimeal_${i}" value="异常" ${it.params.afterMeal==='异常'?'checked':''}> 异常</label></div>`
         : '';
@@ -4633,7 +4668,11 @@ function recordBodyMeasurement(field, val, dateStr) {
   // 高和重都被清空 → 整条记录移除，避免曲线上留下空白点
   if (rec.h == null && rec.w == null) hist = hist.filter(x => x.d !== ds);
   hist.sort((a, b) => a.d.localeCompare(b.d));
-  localStorage.setItem('bodyHistory', JSON.stringify(hist));
+  const serialized = JSON.stringify(hist);
+  // v3.5.76 幂等：内容没变就不重复写盘/上传（oninput/onchange/onblur 可能多次触发）
+  if (localStorage.getItem('bodyHistory') === serialized) return;
+  localStorage.setItem('bodyHistory', serialized);
+  bumpConfigTs('bodyHistory');   // 打上本地时间戳，避免同步拉取把刚记录的曲线点覆盖掉
   syncUpload('config');
   // 如果分析弹窗正打开，实时刷新图表
   if (document.getElementById('analysisModal') && document.getElementById('analysisModal').classList.contains('show')) {
@@ -5800,7 +5839,8 @@ async function syncUpload(category, dateStr) {
         const { data, iv } = await encrypt(key, val);
         await supabaseUpsert('family_config', { family_id: fid, config_key: ck, encrypted_data: data, iv, last_modified: upTs });
         // v3.5.69 上传成功后对齐本地时间戳，以免下次拉取时把自己刚传的内容判为"云端更新"再覆盖回来
-        if (CUSTOM_OPT_KEYS.includes(ck)) localStorage.setItem(`cfgts_${ck}`, String(upTs));
+        // v3.5.76 扩展到全部配置键（身高/体重/bodyHistory 也要对齐，否则拉取会用云端旧值覆盖刚输入的数据）
+        localStorage.setItem(`cfgts_${ck}`, String(upTs));
       }
     }
     setSyncStatus('synced');
