@@ -1231,7 +1231,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.84'; // 奶量及次数图 x 轴日期抽稀(与其他图一致: step=ceil(n/7), 最多约7个且首末必显示), 避免 15 天日期全列过挤; 浅色模式辅食图配色适配(环形未尝试弧/中心文字/图例/标签/时间轴 class 化); 历史弹窗数值单位内联白色+兜底
+const APP_VERSION = 'v3.5.85'; // 奶量及次数图: 蓝色柱挂 bar-rect / 标准虚线挂 stdline class, 浅色模式蓝柱#0984e3+虚线#00b894 与其他图统一(深色不变); 分析弹窗标签页高度约减25%(40->30px: padding10->5,图标20->16,标签15->12); 成长标签图标 📈->🌟(同成长里程碑); index.html 缓存参数升 v3.5.85
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3666,7 +3666,7 @@ function makeMilkCountComboChart(milkData, countData, milkStdRows) {
     const mv = milkData[i].value, cv = countData[i].value;
     if (mv != null) {
       const top = yMilk(mv), bottom = yMilk(0);
-      bars += `<rect x="${blueX.toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, bottom - top).toFixed(1)}" rx="2" fill="#7da8e6"/>`;
+      bars += `<rect class="bar-rect" x="${blueX.toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, bottom - top).toFixed(1)}" rx="2" fill="#7da8e6"/>`;
     }
     if (cv != null) {
       const top = yCount(cv), bottom = yCount(0);
@@ -3695,7 +3695,7 @@ function makeMilkCountComboChart(milkData, countData, milkStdRows) {
   let stdSvg = '';
   [milkStdRows.map(r => r.min), milkStdRows.map(r => r.max)].forEach(vals => {
     const p = buildStdPath(vals);
-    if (p) stdSvg += `<path d="${p}" fill="none" stroke="#5eead4" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.9"/>`;
+    if (p) stdSvg += `<path class="stdline" d="${p}" fill="none" stroke="#5eead4" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.9"/>`;
   });
   const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.45)" stroke-width="0.5"/><text class="tiptext" font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
   return head + `<div class="chart-scroll"><svg class="chart-svg" viewBox="0 0 ${W} ${H}" width="${W}" style="width:${W}px;height:auto" xmlns="http://www.w3.org/2000/svg">` +
@@ -4228,7 +4228,7 @@ function openAnalysis() {
   html += `<div class="category-bar" id="analysisTabBar">` +
     `<div class="cat-tag active" data-tab="feed" onclick="switchAnalysisTab('feed')"><span class="cat-icon">🍼</span><span class="cat-label">吃睡</span></div>` +
     `<div class="cat-tag" data-tab="health" onclick="switchAnalysisTab('health')"><span class="cat-icon">💚</span><span class="cat-label">健康</span></div>` +
-    `<div class="cat-tag" data-tab="grow" onclick="switchAnalysisTab('grow')"><span class="cat-icon">📈</span><span class="cat-label">成长</span></div>` +
+    `<div class="cat-tag" data-tab="grow" onclick="switchAnalysisTab('grow')"><span class="cat-icon">🌟</span><span class="cat-label">成长</span></div>` +
     `</div>`;
   // —— 吃睡：奶量趋势 + 奶量及次数(合并) + 辅食情况 + 睡眠时长 ——
   html += `<div class="tab-panel" data-panel="feed">`;
