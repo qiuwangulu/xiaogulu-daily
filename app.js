@@ -1223,7 +1223,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.77 1340-1410'; // 性能优化(B+): 内联图片外链压缩(删重复favicon/日间背景/默认照片/PWA图标, HTML 672KB->81KB)+主JS外链app.js+删no-store meta; 同步启动改近3天优先+4s后台补全全量, 记录拉取改分批并发(Promise.all), 合并/墓碑/双向收敛语义不变
+const APP_VERSION = 'v3.5.78 1658-1740'; // 分析弹窗分区标签页(喂养/消化/睡眠/成长, 现有10张图仅分类不动); 奶量及次数合并为双轴柱状图(左蓝奶量ml/右绿次数次, 仅保留奶量标准虚线); 含上轮未提交的辅食情况(环形统计+时间轴)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3595,6 +3595,97 @@ function makeBarChart(data, opts) {
   return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
     grid + ylabels + xlabels + bars + stdSvg + tip + `</svg></div>`;
 }
+// v3.5.78 奶量及次数合并图：双轴柱状图
+//   左轴 = 奶量(ml)，蓝色柱(#7da8e6)；右轴 = 次数(次)，绿色柱(#2ecc71)
+//   仅保留奶量标准范围虚线（teal），去掉喝奶次数标准线；点击柱区显示「奶量Xml · 次数Y次」
+function makeMilkCountComboChart(milkData, countData, milkStdRows) {
+  const title = '🍼 奶量及次数（水+奶，近15天）';
+  const legend = `<span style="float:right;font-size:10px;color:#b2bec3;margin-right:4px;">` +
+    `<span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#7da8e6;margin-right:2px;vertical-align:middle;"></span>奶量 ` +
+    `<span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#2ecc71;margin-right:2px;vertical-align:middle;"></span>次数</span>`;
+  const head = `<div class="chart-card"><div class="chart-title">${title}${legend}</div>`;
+  const hasMilk = milkData.some(d => d.value != null);
+  const hasCount = countData.some(d => d.value != null);
+  if (!hasMilk && !hasCount) return head + `<div class="chart-empty">暂无数据</div></div>`;
+  const W = 360, H = 168, PL = 42, PR = 48, PT = 22, PB = 24;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  const n = milkData.length;
+  const slotW = iw / n;
+  const barW = Math.min(13, Math.max(4, slotW * 0.34));
+  // 左轴：奶量(ml)，tickStep=100，并纳入奶量标准范围线取值
+  const milkVals = milkData.map(d => d.value).filter(v => v != null);
+  const milkStdVals = (milkStdRows || []).map(r => [r.min, r.max]).flat().filter(v => v != null);
+  const milkRangeMax = Math.max(0, ...milkVals, ...milkStdVals);
+  let milkMax = Math.ceil(milkRangeMax / 100) * 100; if (milkMax <= milkRangeMax) milkMax += 100; if (milkMax <= 0) milkMax = 100;
+  const yMilk = v => PT + ih - (ih * v) / milkMax;
+  // 右轴：次数(次)。最大值对齐到 4 的倍数，使 0/25/50/75/100% 五档刻度为互不重复的整数且与网格线对齐
+  const countVals = countData.map(d => d.value).filter(v => v != null);
+  const countRangeMax = Math.max(0, ...countVals);
+  let countMax = Math.ceil(countRangeMax / 4) * 4; if (countMax <= countRangeMax) countMax += 4; if (countMax <= 0) countMax = 4;
+  const yCount = v => PT + ih - (ih * v) / countMax;
+  // 网格线 + 双轴刻度标签（按 0/25/50/75/100% 等分，与奶量趋势双轴一致）
+  const pcts = [0, 0.25, 0.5, 0.75, 1];
+  let grid = '', ylabels = '';
+  pcts.forEach(p => {
+    const gy = (PT + ih - ih * p).toFixed(1);
+    grid += `<line class="gridln" x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#fff" font-size="9" text-anchor="end">${Math.round(milkMax * p)}</text>`;
+    ylabels += `<text x="${W - PR + 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#2ecc71" font-size="9" text-anchor="start">${Math.round(countMax * p)}</text>`;
+  });
+  ylabels += `<text x="${PL - 5}" y="13" fill="#fff" font-size="8.5" font-weight="bold" text-anchor="end">奶量ml</text>`;
+  ylabels += `<text x="${W - PR + 5}" y="13" fill="#2ecc71" font-size="8.5" font-weight="bold" text-anchor="start">次数</text>`;
+  // x轴标签（抽稀，最多约7个）
+  const step = Math.max(1, Math.ceil(n / 7));
+  let xlabels = '';
+  milkData.forEach((d, i) => {
+    const cx = PL + slotW * i + slotW / 2;
+    if (i % step !== 0 && i !== n - 1) return;
+    xlabels += `<text x="${cx.toFixed(1)}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${d.label}</text>`;
+  });
+  // 柱形：蓝(奶量,左轴) + 绿(次数,右轴) 并排；命中区 class=bar-hit 避免被点击消失逻辑误清
+  const tipId = 'ctip' + (++_chartTipSeq);
+  let bars = '';
+  milkData.forEach((d, i) => {
+    const cx = PL + slotW * i + slotW / 2;
+    const blueX = cx - barW - 1, greenX = cx + 1;
+    const mv = milkData[i].value, cv = countData[i].value;
+    if (mv != null) {
+      const top = yMilk(mv), bottom = yMilk(0);
+      bars += `<rect x="${blueX.toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, bottom - top).toFixed(1)}" rx="2" fill="#7da8e6"/>`;
+    }
+    if (cv != null) {
+      const top = yCount(cv), bottom = yCount(0);
+      bars += `<rect x="${greenX.toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, bottom - top).toFixed(1)}" rx="2" fill="#2ecc71"/>`;
+    }
+    const mLbl = mv != null ? (Math.round(mv) + 'ml') : '—';
+    const cLbl = cv != null ? (cv + '次') : '—';
+    const valText = `奶量 ${mLbl} · 次数 ${cLbl}`.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const labelText = d.label.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const hitY = Math.min(mv != null ? yMilk(mv) : (H - PB), cv != null ? yCount(cv) : (H - PB));
+    bars += `<rect class="bar-hit" x="${(cx - slotW / 2).toFixed(1)}" y="${PT.toFixed(1)}" width="${slotW.toFixed(1)}" height="${ih.toFixed(1)}" fill="transparent" data-cx="${cx.toFixed(1)}" data-cy="${hitY.toFixed(1)}" onclick="chartTip(this,'${tipId}','${labelText}','${valText}')"/>`;
+  });
+  // 奶量标准范围虚线（teal），仅奶量；含 min + max 两条阶梯线
+  const buildStdPath = values => {
+    const pts = [];
+    milkData.forEach((d, i) => { if (d.value == null || values[i] == null) return; pts.push({ x: PL + slotW * i + slotW / 2, v: values[i] }); });
+    if (pts.length < 2) return '';
+    let p = `M${pts[0].x.toFixed(1)} ${yMilk(pts[0].v).toFixed(1)} `;
+    for (let k = 1; k < pts.length; k++) {
+      const prev = pts[k - 1], cur = pts[k];
+      if (prev.v === cur.v) { p += `L${cur.x.toFixed(1)} ${yMilk(cur.v).toFixed(1)} `; }
+      else { const mid = ((prev.x + cur.x) / 2).toFixed(1); p += `L${mid} ${yMilk(prev.v).toFixed(1)} L${mid} ${yMilk(cur.v).toFixed(1)} L${cur.x.toFixed(1)} ${yMilk(cur.v).toFixed(1)} `; }
+    }
+    return p.trim();
+  };
+  let stdSvg = '';
+  [milkStdRows.map(r => r.min), milkStdRows.map(r => r.max)].forEach(vals => {
+    const p = buildStdPath(vals);
+    if (p) stdSvg += `<path d="${p}" fill="none" stroke="#5eead4" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.9"/>`;
+  });
+  const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.45)" stroke-width="0.5"/><text class="tiptext" font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
+    grid + ylabels + xlabels + bars + stdSvg + tip + `</svg></div>`;
+}
 /* ==================== 成长里程碑时间轴（v3.5.56） ====================
  * 数据来源：全部历史记录里的 note 字段（今日成就），跨日期扫描。
  * 非结构化文本 → 展示层轻结构化：关键词自动归类到发展领域 + 自动识别"首次"。
@@ -3956,6 +4047,132 @@ function makeMilestoneTimeline() {
     `<div id="milestoneBadgeDetail"></div>` +
     `<div class="ms-timeline" id="milestoneTimeline">${renderMilestoneInner()}</div></div>`;
 }
+/* ==================== 辅食情况分析（v3.5.78） ==================== */
+/* 食物图标映射：与首页辅食活动一致；未预设对应图标的，foodIcon 默认返回 🥣 */
+const SOLID_FOOD_ICONS = {
+  '高铁米粉':'🍚','不含铁米粉':'🍚','苹果':'🍎','南瓜':'🎃','山药':'🥔','小米':'🌾','红薯':'🍠','玉米':'🌽','紫薯':'🍠','猪肉':'🥩','牛肉':'🥩','羊肉':'🥩','鱼':'🐟','鸡肉':'🍗','虾':'🦐','鸡蛋':'🥚','猪肝':'🍖','胡萝卜':'🥕','梨':'🍐','豆腐':'🧈','花生':'🥜','枣':'🌰','黄豆':'🫘','绿豆':'🫘','红豆':'🫘','油菜':'🥬','白菜':'🥬','西兰花':'🥦','西红柿':'🍅','茄子':'🍆','牛油果':'🥑','芒果':'🥭','猕猴桃':'🥝','莴苣':'🥬','黄瓜':'🥒','核桃':'🌰','冬瓜':'🍈','香菇':'🍄','香蕉':'🍌','西瓜':'🍉'
+};
+function foodIcon(name) { return SOLID_FOOD_ICONS[name] || '🥣'; }
+
+// 扫描全部历史，收集辅食记录（思路同 collectMilestones）
+function collectSolidFoods() {
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (/^records_\d{4}-\d{2}-\d{2}$/.test(k)) keys.push(k);
+  }
+  keys.sort();
+  const firstFoodDate = {};
+  const records = [];
+  for (const k of keys) {
+    const ds = k.slice(8);
+    let recs = [];
+    try { recs = JSON.parse(localStorage.getItem(k) || '[]'); } catch { continue; }
+    if (!Array.isArray(recs)) continue;
+    for (const r of recs) {
+      if (r && r.type === 'solidFood' && Array.isArray(r.solidFoods) && r.solidFoods.length) {
+        const foods = r.solidFoods.map(f => String(f));
+        foods.forEach(f => { if (!(f in firstFoodDate)) firstFoodDate[f] = ds; });
+        records.push({ date: ds, foods: foods, amount: r.solidFoodAmount || 0, afterMeal: r.afterMeal || '正常' });
+      }
+    }
+  }
+  records.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  return { records, firstFoodDate };
+}
+
+let _sfExpanded = false;
+let _sfGroups = [];
+let _sfFirstFoodDate = {};
+const SF_PREVIEW = 5;
+
+function renderSfTimeline() {
+  const groups = _sfGroups;
+  const shown = _sfExpanded ? groups : groups.slice(0, SF_PREVIEW);
+  let html = '';
+  for (const g of shown) {
+    const ad = getAgeDetail(g.date);
+    const ageLabel = `${ad.months}月龄${ad.days > 0 ? ad.days + '天' : ''}`;
+    let cards = '';
+    for (const r of g.items) {
+      const icon = foodIcon(r.foods[0]);                 // 对应食物图标，无预设默认 🥣
+      const fnames = r.foods.map(f => String(f).replace(/</g, '&lt;')).join('、');
+      const amt = r.amount > 0 ? ' ' + r.amount + 'g' : '';
+      const isFirst = r.foods.some(f => _sfFirstFoodDate[f] === g.date);
+      const bad = r.afterMeal === '异常';
+      cards += `<div class="ms-card" style="border-left-color:${bad ? '#ff7675' : '#74b9ff'}">` +
+        `<div class="ms-text">${icon} ${fnames}${amt}</div>` +
+        `<div class="ms-meta">` +
+          `<span class="ms-tag" style="background:${bad ? '#ff767522' : '#2ecc7122'};color:${bad ? '#ff7675' : '#2ecc71'}">${r.afterMeal}</span>` +
+          (isFirst ? `<span class="ms-first">首次</span>` : '') +
+        `</div>` +
+      `</div>`;
+    }
+    html += `<div class="ms-group">` +
+      `<div class="ms-date">${g.date} · ${ageLabel}</div>` +
+      `<div class="ms-group-items">${cards}</div>` +
+    `</div>`;
+  }
+  if (groups.length > SF_PREVIEW) {
+    html += `<div class="ms-more" onclick="toggleSfExpand()">${_sfExpanded ? '收起 ▲' : `展开全部 ${groups.length} 天 ▼`}</div>`;
+  }
+  return html;
+}
+function toggleSfExpand() {
+  _sfExpanded = !_sfExpanded;
+  const el = document.getElementById('sfTimeline');
+  if (el) el.innerHTML = renderSfTimeline();
+}
+
+function makeSolidFoodAnalysis() {
+  const { records, firstFoodDate } = collectSolidFoods();
+  _sfFirstFoodDate = firstFoodDate;
+  const head = `<div class="chart-card"><div class="chart-title">🥣 辅食情况</div>`;
+  if (!records.length) {
+    return head + `<div class="chart-empty">还没有辅食记录<br><span style="font-size:12px;opacity:.7">添加辅食后，这里会统计尝试进度与饭后反应</span></div></div>`;
+  }
+  const totalFoods = Math.max(1, getSolidFoodOptions().length);   // 食物总数（分母）
+  const tried = new Set(), abnormal = new Set();
+  records.forEach(r => r.foods.forEach(f => { tried.add(f); if (r.afterMeal === '异常') abnormal.add(f); }));
+  const triedCount = tried.size;
+  const abnormalCount = abnormal.size;
+  const normalCount = triedCount - abnormalCount;
+  const notTried = Math.max(0, totalFoods - triedCount);
+  const nowAge = getAgeDetail(getTodayDateStr());
+  const stat = `<div class="ms-stat">当前 ${nowAge.months}月龄${nowAge.days > 0 ? nowAge.days + '天' : ''} · 共尝试 ${triedCount} 种 · 异常 ${abnormalCount} 种</div>`;
+
+  // 环形：异常红 / 正常绿 / 未尝试白
+  const C = 2 * Math.PI * 70;
+  const segAb = (abnormalCount / totalFoods) * C;
+  const segNo = (normalCount / totalFoods) * C;
+  const segUn = (notTried / totalFoods) * C;
+  const dash = len => `${len.toFixed(2)} ${(C - len).toFixed(2)}`;
+  const ring = `<div class="sf-ring-wrap">` +
+    `<div class="sf-abnormal">` + [...abnormal].map(f => `<span class="sf-ab-chip">${String(f).replace(/</g, '&lt;')}</span>`).join('') + `</div>` +
+    `<svg class="sf-donut" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">` +
+      `<g transform="rotate(-90 100 100)" fill="none" stroke-width="22">` +
+        `<circle cx="100" cy="100" r="70" stroke="rgba(255,255,255,0.16)" stroke-dasharray="${dash(segUn)}" stroke-dashoffset="${(-(segAb + segNo)).toFixed(2)}"/>` +
+        `<circle cx="100" cy="100" r="70" stroke="#2ecc71" stroke-dasharray="${dash(segNo)}" stroke-dashoffset="${(-segAb).toFixed(2)}" stroke-linecap="round"/>` +
+        `<circle cx="100" cy="100" r="70" stroke="#ff7675" stroke-dasharray="${dash(segAb)}" stroke-dashoffset="0" stroke-linecap="round"/>` +
+      `</g>` +
+      `<text class="sf-center-num" x="100" y="98" text-anchor="middle">${triedCount}/${totalFoods}</text>` +
+      `<text class="sf-center-lab" x="100" y="116" text-anchor="middle">已尝试/总数</text>` +
+    `</svg>` +
+    `<div class="sf-legend"><span><i style="background:#ff7675"></i>异常</span><span><i style="background:#2ecc71"></i>正常</span><span><i style="background:rgba(255,255,255,0.4)"></i>未尝试</span></div>` +
+  `</div>`;
+
+  // 时间轴（与成长里程碑样式一致）
+  _sfGroups = [];
+  for (const r of records) {
+    const g = _sfGroups[_sfGroups.length - 1];
+    if (g && g.date === r.date) g.items.push(r);
+    else _sfGroups.push({ date: r.date, items: [r] });
+  }
+  const tl = `<div class="ms-timeline" id="sfTimeline">${renderSfTimeline()}</div>`;
+
+  return head + stat + ring + tl + `</div>`;
+}
+
 function openAnalysis() {
   const content = document.getElementById('analysisContent');
   // 1) 近15天（含当天）每日数据
@@ -3988,10 +4205,21 @@ function openAnalysis() {
   const countStdRows = days.map(d => getStdRow(MILK_COUNT_STD, d.ds));
   const sleepStdRows = days.map(d => getStdRow(SLEEP_STD, d.ds));
   const poopStdRows = days.map(d => getStdRow(POOP_STD, d.ds));
+  // ===== 分析弹窗分区标签页（v3.5.78）：喂养 / 消化 / 睡眠 / 成长 =====
+  html += `<div class="tab-bar" id="analysisTabBar">` +
+    `<div class="tab-item active" data-tab="feed" onclick="switchAnalysisTab('feed')">🍼 喂养<span class="cnt">3</span></div>` +
+    `<div class="tab-item" data-tab="digest" onclick="switchAnalysisTab('digest')">💩 消化<span class="cnt">2</span></div>` +
+    `<div class="tab-item" data-tab="sleep" onclick="switchAnalysisTab('sleep')">😴 睡眠<span class="cnt">1</span></div>` +
+    `<div class="tab-item" data-tab="grow" onclick="switchAnalysisTab('grow')">📈 成长<span class="cnt">3</span></div>` +
+    `</div>`;
+  // —— 喂养：奶量趋势 + 奶量及次数(合并) + 辅食情况 ——
+  html += `<div class="tab-panel" data-panel="feed">`;
   html += makeMilkTrendChart();   // 奶量趋势（全部记录，双轴：总奶量 + 单次平均）
-  html += makeBarChart(milkData, { title: '🍼 每日奶量（水+奶，近15天）', unit: 'ml', color: '#7da8e6', tickStep: 100, stdLines: [{ values: milkStdRows.map(r => r.min) }, { values: milkStdRows.map(r => r.max) }] });
-  html += makeBarChart(milkCountData, { title: '🍼 每日喝奶次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, stdLines: [{ values: countStdRows.map(r => r.min) }, { values: countStdRows.map(r => r.max) }] });
-  html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
+  html += makeMilkCountComboChart(milkData, milkCountData, milkStdRows); // 奶量及次数（双轴柱状，合并）
+  html += makeSolidFoodAnalysis();    // 辅食情况（环形统计 + 时间轴）
+  html += `</div>`;
+  // —— 消化：大便次数 + 大便与喝奶间隔 ——
+  html += `<div class="tab-panel" data-panel="digest" style="display:none">`;
   html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
   // v3.5.71 间隔趋势：截止昨天的全部历史，折线图（无大便的日子不画点），并用竖线标出「加乳糖酶」等干预时间点
   // v3.5.72 y 轴口径：大便时间 − 早于它的最近一次喝奶时间（分钟）
@@ -4003,12 +4231,26 @@ function openAnalysis() {
     tipText: d => (d.count > 1 ? `${d.value}分钟 · ${d.count}次平均` : `${d.value}分钟`),
     markers: gapMarks
   });
+  html += `</div>`;
+  // —— 睡眠：每日睡眠时长 ——
+  html += `<div class="tab-panel" data-panel="sleep" style="display:none">`;
+  html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
+  html += `</div>`;
+  // —— 成长：体重趋势 + 身高趋势 + 成长里程碑 ——
+  html += `<div class="tab-panel" data-panel="grow" style="display:none">`;
   html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT }, zoomTiers: { min: 3, step: 1 } });
   html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT }, zoomTiers: { min: 50, step: 5 } });
-  html += makeMilestoneTimeline();   // 成长里程碑时间轴（置于最下方）
+  html += makeMilestoneTimeline();   // 成长里程碑时间轴
+  html += `</div>`;
   content.innerHTML = html;
   bindChartTipDismiss();
   showModal('analysisModal');
+}
+
+// v3.5.78 分析弹窗分区标签切换：仅切换 display，所有图表已在上方一次性渲染
+function switchAnalysisTab(tab) {
+  document.querySelectorAll('#analysisContent .tab-item').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('#analysisContent .tab-panel').forEach(p => { p.style.display = (p.dataset.panel === tab) ? '' : 'none'; });
 }
 
 /* ==================== 模态框 ==================== */

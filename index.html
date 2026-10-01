@@ -944,6 +944,12 @@
     text-align: center; color: #636e72;
     padding: 28px 0; font-size: 14px;
   }
+  /* ---- 分析弹窗分区标签栏（v3.5.78） ---- */
+  .tab-bar { display: flex; gap: 6px; margin: 0 0 14px; padding: 4px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-item { flex: 1 0 auto; min-width: 70px; text-align: center; cursor: pointer; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.5); padding: 8px 10px; border-radius: 10px; white-space: nowrap; transition: all .15s; border: 1px solid transparent; user-select: none; -webkit-user-select: none; }
+  .tab-item.active { color: #fff; background: rgba(116,185,255,0.18); border-color: rgba(116,185,255,0.5); }
+  .tab-item .cnt { font-size: 10px; opacity: .7; margin-left: 3px; }
   /* ---- 成长里程碑时间轴 ---- */
   .ms-stat {
     font-size: 11px; color: rgba(255,255,255,0.45);
@@ -1000,6 +1006,16 @@
   }
   .ms-badge-detail .ms-bd-text { font-size: 12.5px; color: #dfe6e9; line-height: 1.5; word-break: break-word; }
   .ms-badge-detail .ms-bd-meta { font-size: 9.5px; color: rgba(255,255,255,0.45); margin-top: 5px; }
+  /* ---- 辅食情况（v3.5.78） ---- */
+  .sf-ring-wrap { display: flex; flex-direction: column; align-items: center; padding: 4px 0 2px; }
+  .sf-abnormal { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 10px; }
+  .sf-ab-chip { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 9px; background: rgba(255,118,117,0.16); color: #ff7675; border: 1px solid rgba(255,118,117,0.45); }
+  .sf-ab-chip::before { content: "⚠ "; }
+  .sf-donut { width: 180px; height: 180px; }
+  .sf-center-num { font-size: 30px; font-weight: 800; fill: #fff; }
+  .sf-center-lab { font-size: 10px; fill: rgba(255,255,255,0.5); }
+  .sf-legend { display: flex; gap: 14px; justify-content: center; margin-top: 10px; font-size: 11px; color: #b2bec3; }
+  .sf-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
   .modal-actions.space-between { justify-content: space-between; }
   .copy-float {
     position: sticky; bottom: 6px;
@@ -1264,6 +1280,9 @@
   /* ===== 分析图表 ===== */
   body.theme-day .chart-card { background: rgba(9,132,227,0.04); border-color: rgba(9,132,227,0.12); }
   body.theme-day .chart-title { color: #3d4852; }
+  body.theme-day .tab-bar { background: rgba(9,132,227,0.05); border-color: rgba(9,132,227,0.15); }
+  body.theme-day .tab-item { color: rgba(61,72,82,0.55); }
+  body.theme-day .tab-item.active { color: #1d2b3a; background: rgba(9,132,227,0.12); border-color: rgba(9,132,227,0.4); }
   body.theme-day .ms-stat { color: rgba(61,72,82,0.55); }
   body.theme-day .ms-card { background: rgba(9,132,227,0.05); }
   body.theme-day .ms-text { color: #3d4852; }
