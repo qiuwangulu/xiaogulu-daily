@@ -847,9 +847,8 @@ function doPush(achArr, totalMilk, newAchievements) {
         ? `<li><span style="background:#ffecb3;color:#c0392b;font-weight:bold;padding:1px 4px;border-radius:3px;">${esc(a)}</span></li>`
         : `<li>${esc(a)}</li>`
       ).join('');
-      // 当天统计
-      let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
-      if (!Array.isArray(recs)) recs = [];
+      // 当天统计（v3.5.79 统一走 getRecordsByDate 过滤脏记录）
+      const recs = getRecordsByDate(ds);
       let poopCount = 0, outdoorMin = 0, sleepMin = 0;
       recs.forEach(r => {
         if (r.type === 'poop') poopCount++;
@@ -894,8 +893,7 @@ function getLastMilkRecord() {
     const dt = new Date(today);
     dt.setDate(dt.getDate() - d);
     const ds = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
-    let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch { continue; }
-    if (!Array.isArray(recs)) continue;
+    const recs = getRecordsByDate(ds);   // v3.5.79 过滤脏记录
     let best = null, bestMin = -1;
     for (const r of recs) {
       if (r.type === 'milk' && r.milkTime) {
@@ -1233,7 +1231,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.79 1730-1810'; // 修复: 清理误推上云的测试脏记录并加防护(sanitizeRecords 过滤无时间戳的非法记录, 覆盖读取/渲染/统计/上传全链路) + 同步前置拉取删除墓碑(一轮收敛, 防止本地残留脏记录被回推云端)
+const APP_VERSION = 'v3.5.80'; // 收尾: 渲染层直读全改走 getRecordsByDate(sanitize), 消除历史列表/首页/分析弹窗的 undefined 显示(loadHistory 2610 等5处); 10/1 水+奶=470 已确认非脏数据; 含缓存破坏参数确保新版落到各端
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2607,8 +2605,8 @@ function openHistory() {
 function loadHistory() {
   const ds = document.getElementById('historyDate').value; if (!ds) return;
   loadHistoryBody(ds);   // 回填该日期已记录的身高/体重
-  let records = []; try { records = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
-  if (!Array.isArray(records)) records = [];
+  // v3.5.79 历史列表同样走 sanitize：脏记录（无时间戳的测试数据）不再被渲染成 undefined
+  const records = getRecordsByDate(ds);
   const list = document.getElementById('historyList');
   const summary = document.getElementById('historySummary');
   const dateLabel = document.getElementById('historyDateLabel');
@@ -3165,10 +3163,7 @@ function getInterventionMarks() {
 function collectPoopGapSeries() {
   const cache = {};
   const load = d => {
-    if (!(d in cache)) {
-      try { const a = JSON.parse(localStorage.getItem(getDateKey(d)) || '[]'); cache[d] = Array.isArray(a) ? a : []; }
-      catch { cache[d] = []; }
-    }
+    if (!(d in cache)) cache[d] = getRecordsByDate(d);   // v3.5.79 过滤脏记录
     return cache[d];
   };
   const todayDs = getTodayDateStr();
@@ -3218,9 +3213,7 @@ function _shiftDs(ds, days) {
 // 返回 { avg: 平均间隔分钟, count: 参与平均的大便次数, min, max } 或 null（当天无大便/无喝奶记录）
 // loader: 可选的取记录函数（全历史扫描时传入带缓存的版本，避免同一天被反复解析）
 function dailyPoopMilkGap(ds, loader) {
-  const load = loader || function (d) {
-    try { const a = JSON.parse(localStorage.getItem(getDateKey(d)) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
-  };
+  const load = loader || getRecordsByDate;   // v3.5.79 过滤脏记录
   const base = _dsToBaseMs(ds); if (base == null) return null;
   const recs = load(ds);
   if (!Array.isArray(recs)) return null;
