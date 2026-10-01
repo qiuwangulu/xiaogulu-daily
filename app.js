@@ -1231,7 +1231,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.83'; // 浅色模式适配: 辅食情况图环形"未尝试"弧/中心文字/图例/异常标签/时间轴节点与竖线改为主题 class 驱动(CSS 主题覆写), 修复浅色模式下环形与文字看不清(原先内联白色); 辅食卡片标签与首次徽章浅色下加深; 历史弹窗: 水+奶量/今日成就/高/重 数值单位内联白色+兜底
+const APP_VERSION = 'v3.5.84'; // 奶量及次数图 x 轴日期抽稀(与其他图一致: step=ceil(n/7), 最多约7个且首末必显示), 避免 15 天日期全列过挤; 浅色模式辅食图配色适配(环形未尝试弧/中心文字/图例/标签/时间轴 class 化); 历史弹窗数值单位内联白色+兜底
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3649,9 +3649,11 @@ function makeMilkCountComboChart(milkData, countData, milkStdRows) {
   });
   ylabels += `<text x="${PL - 5}" y="13" fill="#fff" font-size="8.5" font-weight="bold" text-anchor="end">奶量ml</text>`;
   ylabels += `<text x="${W - PR + 5}" y="13" fill="#fff" font-size="8.5" font-weight="bold" text-anchor="start">次数</text>`;
-  // x轴标签（间隔变大后全部显示）
+  // x轴标签（v3.5.84 与其他图口径一致：抽稀，最多约 7 个，首末必显示）
+  const step = Math.max(1, Math.ceil(n / 7));
   let xlabels = '';
   milkData.forEach((d, i) => {
+    if (i % step !== 0 && i !== n - 1) return;
     const cx = PL + slotW * i + slotW / 2;
     xlabels += `<text x="${cx.toFixed(1)}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${d.label}</text>`;
   });
