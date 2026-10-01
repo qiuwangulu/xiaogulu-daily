@@ -345,13 +345,13 @@ function loadHiddenActivities() {
 function saveHiddenActivities() { localStorage.setItem('hiddenActivities', JSON.stringify(hiddenActivities)); syncUpload('config'); }
 
 function getTodayRecords() {
-  try { return JSON.parse(localStorage.getItem(getTodayKey()) || '[]'); } catch { return []; }
+  try { return sanitizeRecords(JSON.parse(localStorage.getItem(getTodayKey()) || '[]')); } catch { return []; }
 }
 // 读取任意日期的记录（历史页编辑/添加/删除用）
+// v3.5.79 统一走 sanitizeRecords：脏记录（无 type 或无时间信息）不再进入界面与统计
 function getRecordsByDate(ds) {
   try {
-    const arr = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]');
-    return Array.isArray(arr) ? arr : [];
+    return sanitizeRecords(JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'));
   } catch { return []; }
 }
 // 统一的数据落地后处理：刷新历史列表 / 今日卡片 / 分析图表，并同步云端
@@ -400,6 +400,16 @@ function getLocalRecordTs(ds) {
  * 新逻辑：记录级合并 = 并集 + 删除墓碑 + 同键取 updatedAt 较新者，双向收敛。
  * 只会保留更多数据，不会丢数据。
  * ============================================================ */
+// 记录合法性校验：必须带 type，且必须带时间信息（recTime 或 timestamp）。
+// 用途：过滤历史遗留或误注入的脏记录（例如 {type:'milk',milkAmount:150} 这种既无 recTime
+// 也无 timestamp 的测试数据），避免它们出现在界面（被渲染成 undefined）、计入统计，
+// 或被同步逻辑回传云端。真实记录在保存时都带 timestamp，因此该判据不会误伤正常数据。
+function isValidRecord(r) {
+  return !!(r && typeof r === 'object' && r.type && (r.recTime || r.timestamp));
+}
+function sanitizeRecords(arr) {
+  return Array.isArray(arr) ? arr.filter(isValidRecord) : [];
+}
 // 记录唯一键：type|timestamp
 function recKey(r) {
   if (!r || typeof r !== 'object') return '';
@@ -1223,7 +1233,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.78 1658-1740'; // 分析弹窗分区标签页(喂养/消化/睡眠/成长, 现有10张图仅分类不动); 奶量及次数合并为双轴柱状图(左蓝奶量ml/右绿次数次, 仅保留奶量标准虚线); 含上轮未提交的辅食情况(环形统计+时间轴)
+const APP_VERSION = 'v3.5.79 1730-1810'; // 修复: 清理误推上云的测试脏记录并加防护(sanitizeRecords 过滤无时间戳的非法记录, 覆盖读取/渲染/统计/上传全链路) + 同步前置拉取删除墓碑(一轮收敛, 防止本地残留脏记录被回推云端)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3112,30 +3122,26 @@ function dedupeBodySeries(points) {
   return out;
 }
 function dailyMilkTotal(ds) {
-  let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
-  if (!Array.isArray(recs)) recs = [];
+  const recs = getRecordsByDate(ds);   // v3.5.79 统一过滤脏记录，避免脏数据计入图表
   let total = 0;
   recs.forEach(r => { if (r.type === 'milk' && r.milkAmount) total += r.milkAmount; });
   return total > 0 ? total : null;
 }
 function dailySleepHours(ds) {
-  let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
-  if (!Array.isArray(recs)) recs = [];
+  const recs = getRecordsByDate(ds);
   let total = 0;
   recs.forEach(r => { if (r.type === 'sleep' && r.duration) total += r.duration; });
   return total > 0 ? total / 60 : null;
 }
 function dailyMilkCount(ds) {
-  let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
-  if (!Array.isArray(recs)) recs = [];
+  const recs = getRecordsByDate(ds);
   let count = 0;
   recs.forEach(r => { if (r.type === 'milk') count++; });
   return count > 0 ? count : null;
 }
 function dailyPoopInfo(ds) {
   // 返回 { count, statuses: [状态文字] }，无记录返回 null
-  let recs = []; try { recs = JSON.parse(localStorage.getItem(getDateKey(ds)) || '[]'); } catch {}
-  if (!Array.isArray(recs)) recs = [];
+  const recs = getRecordsByDate(ds);
   const statuses = [];
   recs.forEach(r => { if (r.type === 'poop') statuses.push(r.poopStatus || '正常'); });
   return statuses.length > 0 ? { count: statuses.length, statuses: statuses } : null;
@@ -4411,8 +4417,8 @@ async function syncUpload(category, dateStr) {
     }
     const fid = getFamilyId();
     if (category === 'records') {
-      let records = JSON.parse(localStorage.getItem(`records_${dateStr}`) || '[]');
-      if (!Array.isArray(records)) records = [];
+      // v3.5.79 上传前过滤脏记录，杜绝把无时间戳的非法数据推送到云端
+      let records = sanitizeRecords(JSON.parse(localStorage.getItem(`records_${dateStr}`) || '[]'));
       const { data, iv } = await encrypt(key, JSON.stringify(records));
       // last_modified 用本地修改时间戳（若缺失则用当前时间，保证比旧数据新）
       const localTs = getLocalRecordTs(dateStr);
@@ -4456,9 +4462,11 @@ async function syncOneDay(key, fid, ds) {
       } catch (e) { cloudRecs = null; }
     }
     let localRecs = [];
-    try { const p = JSON.parse(localStorage.getItem(`records_${ds}`) || '[]'); if (Array.isArray(p)) localRecs = p; } catch {}
+    try { localRecs = sanitizeRecords(JSON.parse(localStorage.getItem(`records_${ds}`) || '[]')); } catch {}
     const tombs = getTombstones(ds);
-    const merged = mergeRecordLists(cloudRecs || [], localRecs, tombs);
+    // v3.5.79 合并结果再过一道合法性过滤：云端若残留脏记录（旧版本误传），
+    // 会在本轮同步中被就地清除（本地 + 云端双向收敛），无需人工介入
+    const merged = sanitizeRecords(mergeRecordLists(sanitizeRecords(cloudRecs || []), localRecs, tombs));
     const mergedJson = JSON.stringify(merged);
     const localJson = JSON.stringify(localRecs);
     const cloudJson = cloudRecs === null ? null : JSON.stringify(cloudRecs);
@@ -4489,6 +4497,22 @@ async function syncPullAll(opts) {
     const fid = getFamilyId(); let changed = false;
     // 同步天数：启动/手动为全量(historyDays)，前台恢复/轮询只同步最近几天以控制请求量
     const days = (opts && opts.days) || SYNC_CONFIG.historyDays;
+
+    // 0. 预拉「删除墓碑」（v3.5.79）
+    // 墓碑原来只在第 2 步（拉取配置）时合并到本地，导致第 1 步合并记录时用的还是旧墓碑：
+    // 家人设备上残留的已删除记录（例如误注入的测试数据）会在本轮被并集合并后又回推云端，形成拉锯。
+    // 这里提前拉一次墓碑，使云端最新墓碑在"本轮记录合并"时就生效，一次同步即可收敛。
+    try {
+      const tombRows = await supabaseGet(`family_config?family_id=eq.${fid}&config_key=like._del_*&select=config_key,encrypted_data,iv`);
+      for (const row of tombRows) {
+        try {
+          const dsT = String(row.config_key).slice(5);
+          const plainTomb = await decrypt(key, row.encrypted_data, row.iv);
+          let arrTomb = []; try { arrTomb = JSON.parse(plainTomb); } catch {}
+          if (Array.isArray(arrTomb) && arrTomb.length) addTombstones(dsT, arrTomb);
+        } catch (e) {}
+      }
+    } catch (e) {}
 
     // 1. 拉取近期记录（分批并发：每批 6 天，降低串行等待；合并/备份/双向收敛语义保持不变）
     const today = new Date();
