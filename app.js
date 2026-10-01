@@ -1231,7 +1231,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.80'; // 收尾: 渲染层直读全改走 getRecordsByDate(sanitize), 消除历史列表/首页/分析弹窗的 undefined 显示(loadHistory 2610 等5处); 10/1 水+奶=470 已确认非脏数据; 含缓存破坏参数确保新版落到各端
+const APP_VERSION = 'v3.5.81'; // 分析弹窗改版: 标签页改首页分类样式(吃睡/健康/成长), 消化→健康(💚), 睡眠时长图并入"吃睡"最下方; 奶量及次数柱状图: 次数改橙色(与奶量趋势单次平均线同色)/右轴改白/右轴刻度间隔3/柱形间隔×2+横向滚动; 历史弹窗: 去高重图标+高cm/重kg/今日成就/水+奶量 改14px白色
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3601,26 +3601,30 @@ function makeMilkCountComboChart(milkData, countData, milkStdRows) {
   const title = '🍼 奶量及次数（水+奶，近15天）';
   const legend = `<span style="float:right;font-size:10px;color:#b2bec3;margin-right:4px;">` +
     `<span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#7da8e6;margin-right:2px;vertical-align:middle;"></span>奶量 ` +
-    `<span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#2ecc71;margin-right:2px;vertical-align:middle;"></span>次数</span>`;
+    `<span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#ff9f43;margin-right:2px;vertical-align:middle;"></span>次数</span>`;
   const head = `<div class="chart-card"><div class="chart-title">${title}${legend}</div>`;
   const hasMilk = milkData.some(d => d.value != null);
   const hasCount = countData.some(d => d.value != null);
   if (!hasMilk && !hasCount) return head + `<div class="chart-empty">暂无数据</div></div>`;
-  const W = 360, H = 168, PL = 42, PR = 48, PT = 22, PB = 24;
-  const iw = W - PL - PR, ih = H - PT - PB;
+  // v3.5.81 柱形间隔调大1倍：每天固定占宽 36（原约 18），总宽超出容器 → 外层横向滚动
+  const H = 168, PL = 42, PR = 48, PT = 22, PB = 24;
   const n = milkData.length;
-  const slotW = iw / n;
-  const barW = Math.min(13, Math.max(4, slotW * 0.34));
+  const slotW = 36;
+  const iw = n * slotW;
+  const W = PL + iw + PR;
+  const ih = H - PT - PB;
+  const barW = Math.min(14, Math.max(5, slotW * 0.22));
+  const barGap = 4;   // 同一天两根柱的间距（原约 2，调大1倍）
   // 左轴：奶量(ml)，tickStep=100，并纳入奶量标准范围线取值
   const milkVals = milkData.map(d => d.value).filter(v => v != null);
   const milkStdVals = (milkStdRows || []).map(r => [r.min, r.max]).flat().filter(v => v != null);
   const milkRangeMax = Math.max(0, ...milkVals, ...milkStdVals);
   let milkMax = Math.ceil(milkRangeMax / 100) * 100; if (milkMax <= milkRangeMax) milkMax += 100; if (milkMax <= 0) milkMax = 100;
   const yMilk = v => PT + ih - (ih * v) / milkMax;
-  // 右轴：次数(次)。最大值对齐到 4 的倍数，使 0/25/50/75/100% 五档刻度为互不重复的整数且与网格线对齐
+  // 右轴：次数(次)。最大值对齐到 12 的倍数，使 0/25/50/75/100% 五档刻度为 0/3/6/9/12（间隔=3）且与左侧网格线共用
   const countVals = countData.map(d => d.value).filter(v => v != null);
   const countRangeMax = Math.max(0, ...countVals);
-  let countMax = Math.ceil(countRangeMax / 4) * 4; if (countMax <= countRangeMax) countMax += 4; if (countMax <= 0) countMax = 4;
+  let countMax = Math.ceil(countRangeMax / 12) * 12; if (countMax < countRangeMax) countMax += 12; if (countMax <= 0) countMax = 12;
   const yCount = v => PT + ih - (ih * v) / countMax;
   // 网格线 + 双轴刻度标签（按 0/25/50/75/100% 等分，与奶量趋势双轴一致）
   const pcts = [0, 0.25, 0.5, 0.75, 1];
@@ -3629,24 +3633,22 @@ function makeMilkCountComboChart(milkData, countData, milkStdRows) {
     const gy = (PT + ih - ih * p).toFixed(1);
     grid += `<line class="gridln" x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
     ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#fff" font-size="9" text-anchor="end">${Math.round(milkMax * p)}</text>`;
-    ylabels += `<text x="${W - PR + 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#2ecc71" font-size="9" text-anchor="start">${Math.round(countMax * p)}</text>`;
+    ylabels += `<text x="${W - PR + 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#fff" font-size="9" text-anchor="start">${Math.round(countMax * p)}</text>`;
   });
   ylabels += `<text x="${PL - 5}" y="13" fill="#fff" font-size="8.5" font-weight="bold" text-anchor="end">奶量ml</text>`;
-  ylabels += `<text x="${W - PR + 5}" y="13" fill="#2ecc71" font-size="8.5" font-weight="bold" text-anchor="start">次数</text>`;
-  // x轴标签（抽稀，最多约7个）
-  const step = Math.max(1, Math.ceil(n / 7));
+  ylabels += `<text x="${W - PR + 5}" y="13" fill="#fff" font-size="8.5" font-weight="bold" text-anchor="start">次数</text>`;
+  // x轴标签（间隔变大后全部显示）
   let xlabels = '';
   milkData.forEach((d, i) => {
     const cx = PL + slotW * i + slotW / 2;
-    if (i % step !== 0 && i !== n - 1) return;
     xlabels += `<text x="${cx.toFixed(1)}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${d.label}</text>`;
   });
-  // 柱形：蓝(奶量,左轴) + 绿(次数,右轴) 并排；命中区 class=bar-hit 避免被点击消失逻辑误清
+  // 柱形：蓝(奶量,左轴,同"奶量趋势"总奶量线色 #7da8e6) + 橙(次数,右轴,同"单次平均"线色 #ff9f43) 并排
   const tipId = 'ctip' + (++_chartTipSeq);
   let bars = '';
   milkData.forEach((d, i) => {
     const cx = PL + slotW * i + slotW / 2;
-    const blueX = cx - barW - 1, greenX = cx + 1;
+    const blueX = cx - barGap / 2 - barW, greenX = cx + barGap / 2;
     const mv = milkData[i].value, cv = countData[i].value;
     if (mv != null) {
       const top = yMilk(mv), bottom = yMilk(0);
@@ -3654,7 +3656,7 @@ function makeMilkCountComboChart(milkData, countData, milkStdRows) {
     }
     if (cv != null) {
       const top = yCount(cv), bottom = yCount(0);
-      bars += `<rect x="${greenX.toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, bottom - top).toFixed(1)}" rx="2" fill="#2ecc71"/>`;
+      bars += `<rect x="${greenX.toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, bottom - top).toFixed(1)}" rx="2" fill="#ff9f43"/>`;
     }
     const mLbl = mv != null ? (Math.round(mv) + 'ml') : '—';
     const cLbl = cv != null ? (cv + '次') : '—';
@@ -3682,8 +3684,8 @@ function makeMilkCountComboChart(milkData, countData, milkStdRows) {
     if (p) stdSvg += `<path d="${p}" fill="none" stroke="#5eead4" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.9"/>`;
   });
   const tip = `<g id="${tipId}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.45)" stroke-width="0.5"/><text class="tiptext" font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
-  return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
-    grid + ylabels + xlabels + bars + stdSvg + tip + `</svg></div>`;
+  return head + `<div class="chart-scroll"><svg class="chart-svg" viewBox="0 0 ${W} ${H}" width="${W}" style="width:${W}px;height:auto" xmlns="http://www.w3.org/2000/svg">` +
+    grid + ylabels + xlabels + bars + stdSvg + tip + `</svg></div></div>`;
 }
 /* ==================== 成长里程碑时间轴（v3.5.56） ====================
  * 数据来源：全部历史记录里的 note 字段（今日成就），跨日期扫描。
@@ -4204,36 +4206,32 @@ function openAnalysis() {
   const countStdRows = days.map(d => getStdRow(MILK_COUNT_STD, d.ds));
   const sleepStdRows = days.map(d => getStdRow(SLEEP_STD, d.ds));
   const poopStdRows = days.map(d => getStdRow(POOP_STD, d.ds));
-  // ===== 分析弹窗分区标签页（v3.5.78）：喂养 / 消化 / 睡眠 / 成长 =====
-  html += `<div class="tab-bar" id="analysisTabBar">` +
-    `<div class="tab-item active" data-tab="feed" onclick="switchAnalysisTab('feed')">🍼 喂养<span class="cnt">3</span></div>` +
-    `<div class="tab-item" data-tab="digest" onclick="switchAnalysisTab('digest')">💩 消化<span class="cnt">2</span></div>` +
-    `<div class="tab-item" data-tab="sleep" onclick="switchAnalysisTab('sleep')">😴 睡眠<span class="cnt">1</span></div>` +
-    `<div class="tab-item" data-tab="grow" onclick="switchAnalysisTab('grow')">📈 成长<span class="cnt">3</span></div>` +
+  // ===== 分析弹窗分区标签页（v3.5.81）：吃睡 / 健康 / 成长，样式与首页分类一致 =====
+  html += `<div class="category-bar" id="analysisTabBar">` +
+    `<div class="cat-tag active" data-tab="feed" onclick="switchAnalysisTab('feed')"><span class="cat-icon">🍼</span><span class="cat-label">吃睡</span></div>` +
+    `<div class="cat-tag" data-tab="health" onclick="switchAnalysisTab('health')"><span class="cat-icon">💚</span><span class="cat-label">健康</span></div>` +
+    `<div class="cat-tag" data-tab="grow" onclick="switchAnalysisTab('grow')"><span class="cat-icon">📈</span><span class="cat-label">成长</span></div>` +
     `</div>`;
-  // —— 喂养：奶量趋势 + 奶量及次数(合并) + 辅食情况 ——
+  // —— 吃睡：奶量趋势 + 奶量及次数(合并) + 辅食情况 + 睡眠时长 ——
   html += `<div class="tab-panel" data-panel="feed">`;
   html += makeMilkTrendChart();   // 奶量趋势（全部记录，双轴：总奶量 + 单次平均）
   html += makeMilkCountComboChart(milkData, milkCountData, milkStdRows); // 奶量及次数（双轴柱状，合并）
   html += makeSolidFoodAnalysis();    // 辅食情况（环形统计 + 时间轴）
+  html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] }); // 睡眠时长（v3.5.81 并入吃睡分类最下方）
   html += `</div>`;
-  // —— 消化：大便次数 + 大便与喝奶间隔 ——
-  html += `<div class="tab-panel" data-panel="digest" style="display:none">`;
-  html += makeBarChart(poopData, { title: '💩 每日大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
+  // —— 健康：大便次数 + 大便时间 ——
+  html += `<div class="tab-panel" data-panel="health" style="display:none">`;
+  html += makeBarChart(poopData, { title: '💩 大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
   // v3.5.71 间隔趋势：截止昨天的全部历史，折线图（无大便的日子不画点），并用竖线标出「加乳糖酶」等干预时间点
   // v3.5.72 y 轴口径：大便时间 − 早于它的最近一次喝奶时间（分钟）
   html += makeLineChart(poopGapPts, {
-    title: '💩🍼 大便与喝奶间隔（截至昨日）',
+    title: '💩 大便时间（与喝奶间隔，截至昨日）',
     unit: '分钟', color: '#8fbc8f',
     fmt: v => String(Math.round(v)),
     xTickMode: 'keyDates',
     tipText: d => (d.count > 1 ? `${d.value}分钟 · ${d.count}次平均` : `${d.value}分钟`),
     markers: gapMarks
   });
-  html += `</div>`;
-  // —— 睡眠：每日睡眠时长 ——
-  html += `<div class="tab-panel" data-panel="sleep" style="display:none">`;
-  html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] });
   html += `</div>`;
   // —— 成长：体重趋势 + 身高趋势 + 成长里程碑 ——
   html += `<div class="tab-panel" data-panel="grow" style="display:none">`;
@@ -4246,9 +4244,9 @@ function openAnalysis() {
   showModal('analysisModal');
 }
 
-// v3.5.78 分析弹窗分区标签切换：仅切换 display，所有图表已在上方一次性渲染
+// v3.5.81 分析弹窗分区标签切换：仅切换 display，所有图表已在上方一次性渲染
 function switchAnalysisTab(tab) {
-  document.querySelectorAll('#analysisContent .tab-item').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('#analysisTabBar .cat-tag').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
   document.querySelectorAll('#analysisContent .tab-panel').forEach(p => { p.style.display = (p.dataset.panel === tab) ? '' : 'none'; });
 }
 

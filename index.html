@@ -706,14 +706,14 @@
     display: flex; align-items: center; justify-content: center; gap: 7px;
     margin: -4px 0 14px; font-size: 14px;
   }
-  .history-body-row label { color: #b2bec3; font-size: 13px; white-space: nowrap; }
+  .history-body-row label { color: #fff; font-size: 14px; white-space: nowrap; }
   .history-body-row input {
     background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15);
     border-radius: 6px; color: #fff; font-size: 14px;
     padding: 5px 6px; width: 66px; outline: none; text-align: center;
   }
   .history-body-row input:focus { border-color: rgba(116,185,255,0.6); }
-  .history-body-row .hb-unit { font-size: 12px; color: #b2bec3; margin-right: 4px; }
+  .history-body-row .hb-unit { font-size: 14px; color: #fff; margin-right: 4px; }
   /* 自绘日期选择器 */
   .dp-month-nav {
     display: flex; align-items: center; justify-content: space-between;
@@ -866,8 +866,8 @@
     border-radius: 10px;
   }
   .history-sum-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-size: 14px; }
-  .history-sum-row .hs-label { color: #b2bec3; flex-shrink: 0; }
-  .history-sum-row .hs-value { color: #ffeaa7; text-align: right; word-break: break-all; font-weight: 600; }
+  .history-sum-row .hs-label { color: #fff; flex-shrink: 0; }
+  .history-sum-row .hs-value { color: #fff; text-align: right; word-break: break-all; font-weight: 600; }
 
   .custom-options-section {
     margin-top: 18px; padding-top: 14px;
@@ -940,6 +940,8 @@
     margin-bottom: 6px; padding-left: 4px;
   }
   .chart-svg { width: 100%; height: auto; display: block; }
+  /* v3.5.81 柱形图横向滚动容器（柱形间隔调大后总宽超出模态框，可左右滑动查看） */
+  .chart-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .chart-empty {
     text-align: center; color: #636e72;
     padding: 28px 0; font-size: 14px;
@@ -1437,12 +1439,12 @@
     </div>
     <!-- v3.5.73 所选日期的身高/体重：可补录与修改，数据同步进入体重/身高趋势曲线 -->
     <div class="history-body-row">
-      <label>📏 高</label>
+      <label>高</label>
       <input type="number" step="0.1" min="0" id="historyHeightInput" placeholder="—" inputmode="decimal"
              onchange="saveHistoryBody('h')" onblur="saveHistoryBody('h')"
              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
       <span class="hb-unit">cm</span>
-      <label>⚖️ 重</label>
+      <label>重</label>
       <input type="number" step="0.1" min="0" id="historyWeightInput" placeholder="—" inputmode="decimal"
              onchange="saveHistoryBody('w')" onblur="saveHistoryBody('w')"
              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
@@ -1658,8 +1660,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.80"></script>
-<script src="app-config.js?v=v3.5.80"></script>
-<script src="app.js?v=v3.5.80"></script>
+<script src="std-config.js?v=v3.5.81"></script>
+<script src="app-config.js?v=v3.5.81"></script>
+<script src="app.js?v=v3.5.81"></script>
 </body>
 </html>
