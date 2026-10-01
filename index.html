@@ -1022,10 +1022,15 @@
   .sf-ab-chip { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 9px; background: rgba(255,118,117,0.16); color: #ff7675; border: 1px solid rgba(255,118,117,0.45); }
   .sf-ab-chip::before { content: "⚠ "; }
   .sf-donut { width: 180px; height: 180px; }
+  /* v3.5.83 环形配色改为 CSS class 驱动（原先内联白，浅色模式下看不见） */
+  .sf-arc-un { stroke: rgba(255,255,255,0.16); }
   .sf-center-num { font-size: 30px; font-weight: 800; fill: #fff; }
   .sf-center-lab { font-size: 10px; fill: rgba(255,255,255,0.5); }
   .sf-legend { display: flex; gap: 14px; justify-content: center; margin-top: 10px; font-size: 11px; color: #b2bec3; }
   .sf-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
+  .sf-lg-ab { background: #ff7675; }
+  .sf-lg-no { background: #2ecc71; }
+  .sf-lg-un { background: rgba(255,255,255,0.4); }
   .modal-actions.space-between { justify-content: space-between; }
   .copy-float {
     position: sticky; bottom: 6px;
@@ -1306,6 +1311,20 @@
   body.theme-day .ms-badge .ms-badge-dt { color: rgba(61,72,82,0.55); }
   body.theme-day .ms-badge.empty { border-color: rgba(61,72,82,0.2); }
   body.theme-day .ms-badge.empty .ms-badge-nm { color: rgba(61,72,82,0.4); }
+  /* ---- 辅食情况图 浅色配色（v3.5.83）---- */
+  body.theme-day .sf-arc-un { stroke: rgba(9,132,227,0.15); }
+  body.theme-day .sf-center-num { fill: #1d2b3a; }
+  body.theme-day .sf-center-lab { fill: rgba(61,72,82,0.55); }
+  body.theme-day .sf-legend { color: #5b6b78; }
+  body.theme-day .sf-legend .sf-lg-un { background: rgba(61,72,82,0.28); }
+  body.theme-day .sf-ab-chip { background: rgba(214,48,49,0.1); color: #d63031; border-color: rgba(214,48,49,0.4); }
+  /* 辅食卡片内联色标签：浅色下加深，保证对比度 */
+  body.theme-day .ms-tag[style*="#2ecc71"] { color: #0b8a55 !important; background: rgba(46,204,113,0.16) !important; }
+  body.theme-day .ms-tag[style*="#ff7675"] { color: #d63031 !important; background: rgba(255,118,117,0.16) !important; }
+  body.theme-day .ms-first { color: #b9770e; background: rgba(214,137,16,0.16); }
+  /* 时间轴竖线与节点 */
+  body.theme-day .ms-timeline::before { background: linear-gradient(180deg, rgba(214,137,16,0.5), rgba(9,132,227,0.25)); }
+  body.theme-day .ms-group::before { background: #0984e3; border-color: #ffffff; }
   body.theme-day .chart-zoom-btn { color: #0984e3; background: rgba(9,132,227,0.12); border-color: rgba(9,132,227,0.35); }
   body.theme-day .chart-zoom-btn.active { background: rgba(9,132,227,0.35); color: #fff; }
   /* SVG 内颜色（CSS 优先级高于 SVG 属性，可整体接管；tiptext 为绿底白字浮层需排除） */
@@ -1668,8 +1687,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.82"></script>
-<script src="app-config.js?v=v3.5.82"></script>
-<script src="app.js?v=v3.5.82"></script>
+<script src="std-config.js?v=v3.5.83"></script>
+<script src="app-config.js?v=v3.5.83"></script>
+<script src="app.js?v=v3.5.83"></script>
 </body>
 </html>

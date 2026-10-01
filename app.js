@@ -1231,7 +1231,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.82'; // 分析弹窗: 标签页图标文字改左右排列+三标签等分整宽, 切换标签面板等高不再跳动; 辅食环形无异常时不再显示红色弧; 奶量及次数柱形每天占宽 36→18(缩短一半); 历史弹窗: 水+奶量/今日成就/高/重 的数值与单位改为内联白色(不依赖可被缓存的CSS)并兜底去图标
+const APP_VERSION = 'v3.5.83'; // 浅色模式适配: 辅食情况图环形"未尝试"弧/中心文字/图例/异常标签/时间轴节点与竖线改为主题 class 驱动(CSS 主题覆写), 修复浅色模式下环形与文字看不清(原先内联白色); 辅食卡片标签与首次徽章浅色下加深; 历史弹窗: 水+奶量/今日成就/高/重 数值单位内联白色+兜底
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4168,14 +4168,14 @@ function makeSolidFoodAnalysis() {
     `<div class="sf-abnormal">` + [...abnormal].map(f => `<span class="sf-ab-chip">${String(f).replace(/</g, '&lt;')}</span>`).join('') + `</div>` +
     `<svg class="sf-donut" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">` +
       `<g transform="rotate(-90 100 100)" fill="none" stroke-width="22">` +
-        `<circle cx="100" cy="100" r="70" stroke="rgba(255,255,255,0.16)" stroke-dasharray="${dash(segUn)}" stroke-dashoffset="${(-(segAb + segNo)).toFixed(2)}"/>` +
+        `<circle class="sf-arc-un" cx="100" cy="100" r="70" stroke-dasharray="${dash(segUn)}" stroke-dashoffset="${(-(segAb + segNo)).toFixed(2)}"/>` +
         `<circle cx="100" cy="100" r="70" stroke="#2ecc71" stroke-dasharray="${dash(segNo)}" stroke-dashoffset="${(-segAb).toFixed(2)}" stroke-linecap="round"/>` +
         abArc +
       `</g>` +
       `<text class="sf-center-num" x="100" y="98" text-anchor="middle">${triedCount}/${totalFoods}</text>` +
       `<text class="sf-center-lab" x="100" y="116" text-anchor="middle">已尝试/总数</text>` +
     `</svg>` +
-    `<div class="sf-legend"><span><i style="background:#ff7675"></i>异常</span><span><i style="background:#2ecc71"></i>正常</span><span><i style="background:rgba(255,255,255,0.4)"></i>未尝试</span></div>` +
+    `<div class="sf-legend"><span><i class="sf-lg-ab"></i>异常</span><span><i class="sf-lg-no"></i>正常</span><span><i class="sf-lg-un"></i>未尝试</span></div>` +
   `</div>`;
 
   // 时间轴（与成长里程碑样式一致）
