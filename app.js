@@ -1231,7 +1231,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.85'; // 奶量及次数图: 蓝色柱挂 bar-rect / 标准虚线挂 stdline class, 浅色模式蓝柱#0984e3+虚线#00b894 与其他图统一(深色不变); 分析弹窗标签页高度约减25%(40->30px: padding10->5,图标20->16,标签15->12); 成长标签图标 📈->🌟(同成长里程碑); index.html 缓存参数升 v3.5.85
+const APP_VERSION = 'v3.5.86'; // 成长里程碑标题图标 🌟->🏆(与历史弹窗今日成就一致), 成长标签页图标保持 🌟 不变; 修复同步完成重渲染时分析弹窗标签被重置回「吃睡」导致窗口跳动(openAnalysis 保留当前激活标签); index.html 缓存参数升 v3.5.86
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4051,7 +4051,7 @@ function makeMilkTrendChart() {
 function makeMilestoneTimeline() {
   const items = collectMilestones();
   _milestoneItems = items;
-  const head = `<div class="chart-card"><div class="chart-title">🌟 成长里程碑</div>`;
+  const head = `<div class="chart-card"><div class="chart-title">🏆 成长里程碑</div>`;
   if (!items.length) {
     return head + `<div class="chart-empty">还没有成就记录<br><span style="font-size:12px;opacity:.7">记录时写点什么，比如「第一次翻身」</span></div></div>`;
   }
@@ -4194,6 +4194,10 @@ function makeSolidFoodAnalysis() {
 
 function openAnalysis() {
   const content = document.getElementById('analysisContent');
+  // v3.5.86 保留当前激活标签：同步完成/图表缩放会重新调用 openAnalysis()，若不保留会把标签重置回默认「吃睡」导致窗口跳动
+  const _anaModal = document.getElementById('analysisModal');
+  const _activeTag = content ? content.querySelector('#analysisTabBar .cat-tag.active') : null;
+  const _prevTab = (_anaModal && _anaModal.classList.contains('show') && _activeTag) ? _activeTag.dataset.tab : null;
   // 1) 近15天（含当天）每日数据
   const days = [];
   for (let i = 14; i >= 0; i--) {
@@ -4259,6 +4263,8 @@ function openAnalysis() {
   html += `</div>`;
   content.innerHTML = html;
   bindChartTipDismiss();
+  // v3.5.86 渲染后恢复到重渲染前激活的标签（首次打开无历史激活则维持默认「吃睡」）
+  if (_prevTab && _prevTab !== 'feed') { try { switchAnalysisTab(_prevTab); } catch (e) {} }
   showModal('analysisModal');
   // v3.5.82 各分类面板统一高度，切换标签时弹窗不跳动
   requestAnimationFrame(() => equalizeAnalysisPanels());
