@@ -222,9 +222,11 @@
     0% { background: rgba(178,190,195,0.35); }
     100% { background: rgba(0,0,0,0.3); }
   }
-  .record-tag .rec-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+  /* v3.5.91 详情可换行后，时间与多行详情改为顶部对齐 */
+  .record-tag .rec-left { display: flex; align-items: flex-start; gap: 8px; flex: 1; min-width: 0; }
   .record-tag .rec-time { font-size: 13px; color: #74b9ff; white-space: nowrap; font-weight: 600; }
-  .record-tag .rec-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* v3.5.91 内容过长自动换行多行显示（去掉单行省略号截断） */
+  .record-tag .rec-detail { overflow: visible; white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
   .record-tag .rec-delete, .history-record .rec-delete {
     width: 27px; height: 27px;
     cursor: pointer; padding: 2px; flex-shrink: 0;
@@ -1688,8 +1690,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.90"></script>
-<script src="app-config.js?v=v3.5.90"></script>
-<script src="app.js?v=v3.5.90"></script>
+<script src="std-config.js?v=v3.5.91"></script>
+<script src="app-config.js?v=v3.5.91"></script>
+<script src="app.js?v=v3.5.91"></script>
 </body>
 </html>

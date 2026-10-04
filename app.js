@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.90'; // 首页/历史老奶记录(无lactase字段)回退显示当日乳糖酶量(formatRecordBrief加ds参数); 体重变化图左线加 leftConnectNulls 跨空档连成折线并保留数据点; index.html 缓存参数升 v3.5.90
+const APP_VERSION = 'v3.5.91'; // 分析弹窗三张图右侧(乳糖酶/单次平均)线·轴·图例改为主题色(深色白/浅色黑,原橙#ff9f43); 体重变化图左轴刻度改为 0.9*最小~1.1*最大; 体重变化标题加「(截止昨日)」; 首页活动框记录详情可自动换行; index.html 缓存参数升 v3.5.91
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3692,7 +3692,9 @@ function makeLactaseDualChart(leftData, rightData, opts) {
   const title = opts.title;
   const leftUnit = opts.leftUnit || '', rightUnit = opts.rightUnit || '滴';
   const leftColor = opts.leftColor || '#7da8e6';
-  const rightColor = opts.rightColor || '#ff9f43';
+  // v3.5.91 右侧线·右侧轴·图例改为主题色：深色模式白色、浅色模式黑色（原橙色 #ff9f43）
+  // 与 applyTheme 的 body.theme-day 判定保持一致（图表在弹窗打开时渲染，取当前主题）
+  const rightColor = document.body.classList.contains('theme-day') ? '#111111' : '#ffffff';
   const leftFmt = opts.leftFmt || (v => v);
   const rightFmt = opts.rightFmt || (v => v);
   const leftLabel = opts.leftLabel || '左轴';
@@ -3795,7 +3797,7 @@ function makeLactaseDualChart(leftData, rightData, opts) {
     lDots += `<circle cx="${px}" cy="${py}" r="3" fill="${leftColor}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
       `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" data-cx="${px}" data-cy="${py}" onclick="chartTip(this,'${leftTipId}','${lb}','${esc(tx)}')"/>`;
   });
-  // 右线（橘色虚线，不带可见数据点；断开于 null，裁剪到绘图区）
+  // 右线（主题色虚线：深色模式白/浅色模式黑，不带可见数据点；断开于 null，裁剪到绘图区）
   // v3.5.88 乳糖酶线仅保留透明点击热区（便于查看数值），不再绘制圆点
   let rPath = '', rDots = '', rStarted = false;
   rightData.forEach((d, i) => {
@@ -4181,9 +4183,11 @@ function milkAxisRange(minV, maxV, loF, hiF) {
 }
 function makeMilkTrendChart() {
   const data = collectMilkTrendData();
+  // v3.5.91 右侧（单次平均）线·右侧轴·图例改为主题色：深色模式白色、浅色模式黑色（原橙色 #ff9f43）
+  const rightColor = document.body.classList.contains('theme-day') ? '#111111' : '#ffffff';
   const legend = `<span style="float:right;font-size:10px;color:#b2bec3;margin-right:4px;">` +
     `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#7da8e6;margin-right:2px;vertical-align:middle;"></span>总奶量 ` +
-    `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ff9f43;margin-right:2px;vertical-align:middle;"></span>单次平均</span>`;
+    `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${rightColor};margin-right:2px;vertical-align:middle;"></span>单次平均</span>`;
   const head = `<div class="chart-card"><div class="chart-title">🍼 奶量趋势（截至昨日）${legend}</div>`;
   const n = data.length;
   if (n === 0) return head + `<div class="chart-empty">暂无奶量数据</div></div>`;
@@ -4207,10 +4211,10 @@ function makeMilkTrendChart() {
     const gy = (PT + ih - ih * p).toFixed(1);
     grid += `<line class="gridln" x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
     ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#fff" font-size="9" text-anchor="end">${Math.round(rT.min + (rT.max - rT.min) * p)}</text>`;
-    ylabels += `<text x="${W - PR + 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#ff9f43" font-size="9" text-anchor="start">${Math.round(rA.min + (rA.max - rA.min) * p)}</text>`;
+    ylabels += `<text x="${W - PR + 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${rightColor}" font-size="9" text-anchor="start">${Math.round(rA.min + (rA.max - rA.min) * p)}</text>`;
   });
   ylabels += `<text x="${PL - 5}" y="13" fill="#fff" font-size="8.5" font-weight="bold" text-anchor="end">总量ml</text>`;
-  ylabels += `<text x="${W - PR + 5}" y="13" fill="#ff9f43" font-size="8.5" font-weight="bold" text-anchor="start">单次ml</text>`;
+  ylabels += `<text x="${W - PR + 5}" y="13" fill="${rightColor}" font-size="8.5" font-weight="bold" text-anchor="start">单次ml</text>`;
 
   // 横轴日期标签：首末 + 抽稀，最多约 7 个
   let xlabels = '';
@@ -4235,7 +4239,7 @@ function makeMilkTrendChart() {
     const px = xf(d.t).toFixed(1);
     const pyT = yT(d.total), pyA = yA(d.avg);
     dots += `<circle cx="${px}" cy="${pyT.toFixed(1)}" r="2" fill="#7da8e6" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
-    dots += `<circle cx="${px}" cy="${pyA.toFixed(1)}" r="2" fill="#ff9f43" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
+    dots += `<circle cx="${px}" cy="${pyA.toFixed(1)}" r="2" fill="${rightColor}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
     if (i % hitStep !== 0 && i !== n - 1) return;
     const [ , mo, dd ] = d.ds.split('-');
     const lb = `${parseInt(mo)}/${parseInt(dd)}`;
@@ -4253,7 +4257,7 @@ function makeMilkTrendChart() {
     grid + ylabels + xlabels +
     `<g clip-path="url(#${clipId})">` +
       `<path class="dataline" d="M${pathT}" fill="none" stroke="#7da8e6" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` +
-      `<path d="M${pathA}" fill="none" stroke="#ff9f43" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` +
+      `<path d="M${pathA}" fill="none" stroke="${rightColor}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` +
     `</g>` + dots + tip + `</svg></div>`;
 }
 function makeMilestoneTimeline() {
@@ -4452,7 +4456,7 @@ function openAnalysis() {
   html += makeLactaseDualChart(poopGapPts, lactaseGap, {
     title: '💩 大便与喝奶时间差变化（截止昨日）',
     leftLabel: '间隔分钟', leftUnit: '分钟', leftColor: '#7da8e6', leftFmt: v => String(Math.round(v)),
-    rightLabel: '乳糖酶', rightUnit: '滴', rightColor: '#ff9f43', rightFmt: v => String(v),
+    rightLabel: '乳糖酶', rightUnit: '滴', rightFmt: v => String(v),
     xTickMode: 'keyDates',
     leftTipText: d => (d.count > 1 ? `${d.value}分钟 · ${d.count}次平均` : `${d.value}分钟`),
     rightTipText: d => `${d.value}滴`
@@ -4462,11 +4466,11 @@ function openAnalysis() {
   const weightDualLeft = poopGapPts.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: weightRecordedOn(p.ds) }));
   const weightDualRight = poopGapPts.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: getLactaseByDate(p.ds) }));
   html += makeLactaseDualChart(weightDualLeft, weightDualRight, {
-    title: '⚖️ 体重变化',
+    title: '⚖️ 体重变化（截止昨日）',
     leftLabel: '体重', leftUnit: 'kg', leftColor: '#7da8e6', leftFmt: v => v.toFixed(1),
-    leftScaleFactor: { min: 0.8, max: 1.2 },   // v3.5.88 左轴刻度 = 本段最小体重*0.8 ~ 最大体重*1.2
+    leftScaleFactor: { min: 0.9, max: 1.1 },   // v3.5.91 左轴刻度 = 本段最小体重*0.9 ~ 最大体重*1.1
     leftConnectNulls: true,                     // v3.5.90 体重按折线连接各测量点（仅测体重的几天有值，跨空档连线），保留数据点
-    rightLabel: '乳糖酶', rightUnit: '滴', rightColor: '#ff9f43', rightFmt: v => String(v),
+    rightLabel: '乳糖酶', rightUnit: '滴', rightFmt: v => String(v),
     xTickMode: 'keyDates',
     leftTipText: d => `${d.value}kg`,
     rightTipText: d => `${d.value}滴`
