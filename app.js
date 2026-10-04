@@ -928,9 +928,6 @@ function updateOverview(skipPush) {
     html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶:</span><span class="ov-value">暂无记录</span></div>`;
   }
   html += `<div class="overview-item"><span class="ov-label">水+奶量:</span><span class="ov-value">${Math.round(totalMilk * 1.12)} ml</span></div>`;
-  // v3.5.88 首页概览新增当日乳糖酶量（滴），口径与健康分类图表一致
-  const _lacToday = getLactaseByDate(getTodayDateStr());
-  html += `<div class="overview-item"><span class="ov-label">🍼 乳糖酶:</span><span class="ov-value">${_lacToday != null ? _lacToday : 0} 滴</span></div>`;
   html += '</div>';
 
   const achArr = computeAchievements(records);
@@ -1026,7 +1023,7 @@ function renderCards(newestIds) {
 
 function formatRecordBrief(r) {
   let base = '';
-  if (r.type === 'milk') { if (r.milkAmount > 0) base = r.milkAmount + 'ml'; }
+  if (r.type === 'milk') { if (r.milkAmount > 0) base = r.milkAmount + 'ml'; if (r.lactase != null) base += ' · 乳糖酶' + r.lactase + '滴'; }
   else if (r.type === 'poop') { base = r.poopStatus || ''; }
   else if (r.type === 'supplement') { base = (r.supplementTypes||[]).join('/'); if (r.supplementAmount > 0) base += ' ' + r.supplementAmount + '粒'; }
   else if (r.type === 'solidFood') { base = (r.solidFoods||[]).join('、'); if (r.solidFoodAmount > 0) base += ' ' + r.solidFoodAmount + 'g'; if (r.afterMeal) base += ' · 饭后' + r.afterMeal; }
@@ -1234,7 +1231,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.88'; // 首页概览+日报新增当日乳糖酶量(滴); 分析健康「乳糖酶线」去掉数据点(仅保留透明点击热区),「体重变化」左轴刻度改为该段日期体重 min*0.8~max*1.2(左线蓝实线带点); 大便次数图虚线固定为3; 分析弹窗标签页字号 12->14; 数据修复:清除10/2、10/3误注入测试记录(各1奶+1便,已写删除墓碑收敛); index.html 缓存参数升 v3.5.88
+const APP_VERSION = 'v3.5.89'; // 乳糖酶聚合改为「当日取一次最小值」(getLactaseByDate由求和改最小值,图表/日报口径一致); 去掉首页总览乳糖酶; 首页与历史弹窗喝奶活动框每条记录显示对应乳糖酶量(formatRecordBrief); 日报乳糖酶显示当日单次最小值; index.html 缓存参数升 v3.5.89
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2590,7 +2587,7 @@ function openReport() {
         const base = s ? s.totalMilk : 0;
         const mixed = Math.round(base * 1.12);
         html += `<div class="report-item"><span class="report-label">${act.icon} 喝奶（水+奶）</span><span class="report-value${isZero?' zero':''}">${mixed}ml</span></div>`;
-        // v3.5.88 日报新增当日乳糖酶量（滴），口径与健康分类图表一致
+        // v3.5.89 日报显示当日乳糖酶「单次最小值」（口径同健康图表：getLactaseByDate 已改为取当日喝奶记录乳糖酶最小值）
         const _lac = getLactaseByDate(getTodayDateStr());
         html += `<div class="report-item"><span class="report-label">${act.icon} 乳糖酶</span><span class="report-value${(!_lac) ? ' zero' : ''}">${_lac != null ? _lac : 0}滴</span></div>`;
       }
@@ -3665,12 +3662,12 @@ function getHistoricalLactase(ds) {
   if (ds === '2026-10-04') return 7;                                  // 10月4日 7 滴
   return null;                                                        // 10月4日之后无历史补充，依赖实际记录
 }
-// 某日乳糖酶量（滴）：优先取当天喝奶记录里录入的乳糖酶之和，否则回退到历史补充规则
+// 某日乳糖酶量（滴）：乳糖酶按「每天一次给药」记录，故取当天喝奶记录里录入的乳糖酶之最小值（只算一次），无当日记录则回退到历史补充规则
 function getLactaseByDate(ds) {
   const recs = getRecordsByDate(ds);   // v3.5.79 统一过滤脏记录
-  let sum = 0, has = false;
-  (recs || []).forEach(r => { if (r && r.type === 'milk' && r.lactase != null) { sum += Number(r.lactase); has = true; } });
-  if (has) return sum;
+  let min = Infinity, has = false;
+  (recs || []).forEach(r => { if (r && r.type === 'milk' && r.lactase != null) { const v = Number(r.lactase); if (!isNaN(v)) { min = Math.min(min, v); has = true; } } });
+  if (has) return min;
   return getHistoricalLactase(ds);
 }
 // 某日记录的体重（kg）：bodyHistory 里该日期有值才返回，否则 null（曲线在该日断开）
