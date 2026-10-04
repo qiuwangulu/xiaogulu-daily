@@ -1231,7 +1231,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.86'; // 成长里程碑标题图标 🌟->🏆(与历史弹窗今日成就一致), 成长标签页图标保持 🌟 不变; 修复同步完成重渲染时分析弹窗标签被重置回「吃睡」导致窗口跳动(openAnalysis 保留当前激活标签); index.html 缓存参数升 v3.5.86
+const APP_VERSION = 'v3.5.87'; // 新增乳糖酶：管理弹窗默认值(>=0整数滴,默认7)、添加弹窗喝奶活动乳糖酶字段(支持语音)、分析弹窗健康分类新增「体重变化」双轴图(左体重kg蓝实线带点刻度同体重趋势/右乳糖酶橘虚线0~8)与「大便与喝奶时间差变化」双轴图(左间隔分钟蓝实线带点/右乳糖酶橘虚线,去干预竖线); 历史乳糖酶补充(9/7及前0、9/8~9/14为8、9/15~9/27为7、9/28~10/3为6、10/4为7); index.html 缓存参数升 v3.5.87
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -1405,7 +1405,7 @@ function renderAddList(filterText) {
 
     let inputsHtml = '';
     if (act.type === 'milk') {
-      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">奶量:</label><input type="number" step="1" min="1" id="adinp_${act.id}" value="${getDefaultMilkAmount()}"><span class="unit">ml</span></div>`;
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">奶量:</label><input type="number" step="1" min="1" id="adinp_${act.id}" value="${getDefaultMilkAmount()}"><span class="unit">ml</span></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">乳糖酶:</label><input type="number" step="1" min="0" id="adinp_${act.id}_lactase" value="${getDefaultLactase()}"><span class="unit">滴</span></div>`;
     } else if (act.type === 'sleep') {
       // 睡眠：开始时间 + 时长（X h Y min）
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">时长:</label><input type="number" min="0" id="adinp_${act.id}_dur_h" placeholder="0" style="width:50px;"><span class="unit">h</span><input type="number" min="0" max="59" id="adinp_${act.id}_dur_m" placeholder="0" style="width:50px;margin-left:8px;"><span class="unit">min</span></div>`;
@@ -1524,6 +1524,8 @@ function confirmAdd() {
     if (act.type === 'milk') {
       record.milkTime = recTime;
       const el = document.getElementById(`adinp_${id}`); const _mv = el ? parseFloat(String(el.value).trim()) : NaN; record.milkAmount = (!isNaN(_mv) && Math.round(_mv) > 0) ? Math.max(1, Math.round(_mv)) : getDefaultMilkAmount();
+      // 乳糖酶：>=0 整数、不能为空，非法/空时回退到管理弹窗默认值
+      const lel = document.getElementById(`adinp_${id}_lactase`); const _lv = lel ? parseInt(String(lel.value).trim(), 10) : NaN; record.lactase = (!isNaN(_lv) && _lv >= 0) ? _lv : getDefaultLactase();
     } else if (act.type === 'sleep') {
       record.sleepStartTime = recTime;
       const dhEl = document.getElementById(`adinp_${id}_dur_h`); const dmEl = document.getElementById(`adinp_${id}_dur_m`);
@@ -1766,7 +1768,7 @@ const VOICE_RULES = [
       else if (/血/.test(zone)) st = '便血';
       return { params: { poopStatus: st } };
     } },
-  { id: 'milk', re: /喂奶|喝[了完]?奶|吃[了完]?奶|毫升奶|奶粉|奶喝完|亲喂/,
+  { id: 'milk', re: /喂奶|喝[了完]?奶|吃[了完]?奶|毫升奶|奶粉|奶喝完|亲喂|乳糖酶/,
     parse: (zone) => {
       let amount = null;
       const re = /(\d+(?:\.\d+)?|[零一二两三四五六七八九十百千]+)/g; let m;
@@ -1779,7 +1781,15 @@ const VOICE_RULES = [
         const n = cnNum(m[0]);
         if (n !== null && n >= 20 && n <= 400) { amount = Math.round(n); break; }
       }
-      return amount === null ? { params: { milkAmount: getDefaultMilkAmount() }, warn: true } : { params: { milkAmount: amount } };
+      // 乳糖酶：优先「乳糖酶N」，其次「N滴」
+      let lactase = null;
+      const lm = zone.match(/乳糖酶[^0-9]{0,4}(\d+(?:\.\d+)?)/);
+      if (lm) lactase = Math.round(parseFloat(lm[1]));
+      else { const dm = zone.match(/(\d+(?:\.\d+)?)\s*滴/); if (dm) lactase = Math.round(parseFloat(dm[1])); }
+      const params = { milkAmount: amount === null ? getDefaultMilkAmount() : amount };
+      if (lactase !== null) params.lactase = lactase;
+      // 仅当奶量与乳糖酶都没听清时才标记待补
+      return { params, warn: amount === null && lactase === null };
     } },
   { id: 'sleep', re: /睡着了|睡觉了?|睡了|小睡|午睡|睡了一|睡眠|哄睡|补觉/,
     parse: (zone, ctx) => {
@@ -2424,6 +2434,7 @@ function renderVoiceItems(unmatched) {
         ${isDur
           ? `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">${pd.label}:</label><input type="number" min="0" id="vinh_${i}" value="${dh}" style="width:50px;"><span class="unit">h</span><input type="number" min="0" max="59" id="vinm_${i}" value="${dm}" style="width:50px;margin-left:8px;"><span class="unit">min</span></div>`
           : (pd ? `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">${pd.label}:</label><input type="number" min="${pd.min}" step="${pd.step}" value="${pd.value != null ? pd.value : ''}" id="vin_${i}"><span class="unit">${pd.unit}</span></div>` : '')}
+        ${(it.actId === 'milk' && it.params.lactase !== undefined) ? `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">乳糖酶:</label><input type="number" min="0" step="1" value="${it.params.lactase}" id="vilact_${i}"><span class="unit">滴</span></div>` : ''}
         ${sfBlock}
       </div>`;
     });
@@ -2477,7 +2488,7 @@ function confirmVoiceAdd() {
     const act = ACTIVITIES.find(a => a.id === it.actId); if (!act) return;
     const p = it.params;
     const record = { type: it.actId, name: act.name, time: timeStr, recTime: it.recTime, timestamp: ts, note: p.note || '', updatedAt: Date.now() };
-    if (act.type === 'milk') { record.milkTime = it.recTime; record.milkAmount = Math.max(1, Math.round(p.milkAmount || getDefaultMilkAmount())); }
+    if (act.type === 'milk') { record.milkTime = it.recTime; record.milkAmount = Math.max(1, Math.round(p.milkAmount || getDefaultMilkAmount())); const lel = document.getElementById('vilact_' + i); const _lv = lel && lel.value !== '' && !isNaN(parseFloat(lel.value)) ? parseFloat(lel.value) : (p.lactase != null ? p.lactase : null); record.lactase = (_lv != null && _lv >= 0) ? Math.max(0, Math.round(_lv)) : getDefaultLactase(); }
     else if (act.type === 'sleep') { record.sleepStartTime = it.recTime; record.duration = Math.max(0, Math.round(p.duration || 0)); }
     else if (act.type === 'drinkWater') { record.drinkTime = it.recTime; }
     else if (act.type === 'poop') { record.poopTime = it.recTime; record.poopStatus = p.poopStatus || '正常'; }
@@ -2816,6 +2827,31 @@ function saveMilkDefault() {
   try { syncUpload('config'); } catch (e) {}   // 同步给家人设备
   showToast('奶量默认值已设为 ' + r + 'ml');
 }
+// 乳糖酶默认值（滴）：添加弹窗中喝奶的预填数值，可在管理弹窗修改，必须 >=0 的整数且不能为空
+const LACTASE_DEFAULT_KEY = 'lactaseDefaultDrops';
+const LACTASE_DEFAULT_FALLBACK = 7;
+function getDefaultLactase() {
+  const v = parseInt(localStorage.getItem(LACTASE_DEFAULT_KEY), 10);
+  return (!isNaN(v) && v >= 0) ? v : LACTASE_DEFAULT_FALLBACK;
+}
+function setDefaultLactase(v) { localStorage.setItem(LACTASE_DEFAULT_KEY, String(v)); }
+// 输入框失焦/回车时保存：必须 >=0 整数且不能为空，非法值恢复上次有效值并提示
+function saveLactaseDefault() {
+  const el = document.getElementById('lactaseDefaultInput');
+  if (!el) return;
+  const raw = String(el.value || '').trim();
+  const v = parseInt(raw, 10);
+  if (raw === '' || isNaN(v) || v < 0) {
+    el.value = getDefaultLactase();
+    showToast('乳糖酶默认值需为 ≥0 的整数');
+    return;
+  }
+  if (v === Number(localStorage.getItem(LACTASE_DEFAULT_KEY))) { el.value = v; return; }
+  setDefaultLactase(v);
+  el.value = v;
+  try { syncUpload('config'); } catch (e) {}   // 同步给家人设备
+  showToast('乳糖酶默认值已设为 ' + v + '滴');
+}
 function openManage() {
   // 每次打开都从 localStorage 重新加载，保证显示最新值（包括上次关闭时即时修改的内容）
   loadHiddenActivities();
@@ -2831,6 +2867,11 @@ function openManage() {
         `<span class="mi-value"><input type="number" inputmode="numeric" min="1" step="1" id="milkDefaultInput" ` +
         `value="${getDefaultMilkAmount()}" onchange="saveMilkDefault()" onblur="saveMilkDefault()" ` +
         `onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"><span class="mi-unit">ml</span></span></div>`;
+      // 乳糖酶默认值（滴）：>=0 整数、不能为空，单位 滴，预设默认 7
+      html += `<div class="manage-item"><span class="manage-name" style="font-size:14px;">🍼 乳糖酶默认值</span>` +
+        `<span class="mi-value"><input type="number" inputmode="numeric" min="0" step="1" id="lactaseDefaultInput" ` +
+        `value="${getDefaultLactase()}" onchange="saveLactaseDefault()" onblur="saveLactaseDefault()" ` +
+        `onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"><span class="mi-unit">滴</span></span></div>`;
     }
   });
   list.innerHTML = html;
@@ -3193,6 +3234,7 @@ function collectPoopGapSeries() {
     if (!g) return;                         // 当天没大便（或没有可参照的喝奶）→ 排除该数据点
     const p = ds.split('-');
     out.push({
+      ds: ds,
       label: `${parseInt(p[1], 10)}/${parseInt(p[2], 10)}`,
       value: g.avg,
       count: g.count,
@@ -3605,6 +3647,148 @@ function makeBarChart(data, opts) {
   });
   return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
     grid + ylabels + xlabels + bars + stdSvg + tip + `</svg></div>`;
+}
+// ==================== 乳糖酶：历史补充 + 每日取值 ====================
+// v3.5.87 历史乳糖酶补充规则（按日期区间给定每日乳糖酶滴数）
+function getHistoricalLactase(ds) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ds || '')) return null;
+  if (ds <= '2026-09-07') return 0;                                   // 9月7日及之前均为 0
+  if (ds >= '2026-09-08' && ds <= '2026-09-14') return 8;             // 9月8日 ~ 9月14日 8 滴
+  if (ds >= '2026-09-15' && ds <= '2026-09-27') return 7;             // 9月15日 ~ 9月27日 7 滴
+  if (ds >= '2026-09-28' && ds <= '2026-10-03') return 6;             // 9月28日 ~ 10月3日 6 滴
+  if (ds === '2026-10-04') return 7;                                  // 10月4日 7 滴
+  return null;                                                        // 10月4日之后无历史补充，依赖实际记录
+}
+// 某日乳糖酶量（滴）：优先取当天喝奶记录里录入的乳糖酶之和，否则回退到历史补充规则
+function getLactaseByDate(ds) {
+  const recs = getRecordsByDate(ds);   // v3.5.79 统一过滤脏记录
+  let sum = 0, has = false;
+  (recs || []).forEach(r => { if (r && r.type === 'milk' && r.lactase != null) { sum += Number(r.lactase); has = true; } });
+  if (has) return sum;
+  return getHistoricalLactase(ds);
+}
+// 某日记录的体重（kg）：bodyHistory 里该日期有值才返回，否则 null（曲线在该日断开）
+function weightRecordedOn(ds) {
+  const rec = getBodyHistory().find(x => x.d === ds);
+  return (rec && rec.w != null) ? rec.w : null;
+}
+// 双纵轴折线图：左轴=左侧指标（蓝实线带点），右轴=乳糖酶量滴（橘色虚线，固定 0~8 step2）
+// 用于「体重变化」与「大便与喝奶时间差变化」两张图（两条线共用同一横轴日期域，便于上下对照）
+// leftData / rightData：与 makeLineChart 同构的 { ds, label, value, t } 数组，value 为 null 时该线在该点断开
+function makeLactaseDualChart(leftData, rightData, opts) {
+  const title = opts.title;
+  const leftUnit = opts.leftUnit || '', rightUnit = opts.rightUnit || '滴';
+  const leftColor = opts.leftColor || '#7da8e6';
+  const rightColor = opts.rightColor || '#ff9f43';
+  const leftFmt = opts.leftFmt || (v => v);
+  const rightFmt = opts.rightFmt || (v => v);
+  const leftLabel = opts.leftLabel || '左轴';
+  const rightLabel = opts.rightLabel || '乳糖酶';
+  const legend = `<span style="float:right;font-size:10px;color:#b2bec3;margin-right:4px;">` +
+    `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${leftColor};margin-right:2px;vertical-align:middle;"></span>${leftLabel} ` +
+    `<span style="display:inline-block;width:9px;height:3px;background:${rightColor};margin-right:2px;vertical-align:middle;margin-left:6px;"></span>${rightLabel}</span>`;
+  const head = `<div class="chart-card"><div class="chart-title">${title}${legend}</div>`;
+  const n = leftData.length;
+  if (n === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
+  const W = 360, H = 168, PL = 40, PR = 54, PT = 22, PB = 24;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  // 横轴：数据点带时间戳时按日期间隔线性等分（与体重/身高图一致）
+  const tArr = leftData.map(d => d.t).filter(t => t != null);
+  const hasT = tArr.length === n && n > 1 && Math.max(...tArr) > Math.min(...tArr);
+  const tMin = hasT ? Math.min(...tArr) : 0, tMax = hasT ? Math.max(...tArr) : 1;
+  // —— 左轴刻度 ——
+  const leftValid = leftData.filter(d => d.value != null).map(d => d.value);
+  let lMin, lMax, lTicks;
+  if (opts.leftMin !== undefined && opts.leftStep) {            // 固定下限+步长（如体重趋势：min 3 step 1）
+    const base = leftValid.length ? Math.max(...leftValid) : (opts.leftMin || 0);
+    lMin = opts.leftMin;
+    lMax = Math.ceil(base / opts.leftStep) * opts.leftStep;
+    if (lMax <= lMin) lMax = lMin + opts.leftStep;
+    lTicks = []; for (let v = lMin; v <= lMax + 1e-6; v += opts.leftStep) lTicks.push(Math.round(v * 10) / 10);
+  } else {                                                      // 自适应（如大便间隔分钟）
+    if (leftValid.length === 0) { lMin = 0; lMax = 1; }
+    else {
+      const dMin = Math.min(...leftValid), dMax = Math.max(...leftValid);
+      if (dMax === dMin) { const p = Math.abs(dMax) * 0.1 || 1; lMin = Math.max(0, dMin - p); lMax = dMax + p; }
+      else { const pad = (dMax - dMin) * 0.15; lMin = Math.max(0, dMin - pad); lMax = dMax + pad; }
+    }
+    lTicks = [lMin, (lMin + lMax) / 2, lMax];
+  }
+  // —— 右轴刻度（固定 0~8 step2）——
+  const rMin = 0, rMax = 8, rStep = 2;
+  const rTicks = [0, 2, 4, 6, 8];
+  const xf = i => {
+    if (hasT) return PL + (iw * (leftData[i].t - tMin)) / (tMax - tMin);
+    return PL + (n <= 1 ? iw / 2 : (iw * i) / (n - 1));
+  };
+  const yL = v => PT + ih - ((v - lMin) / (lMax - lMin)) * ih;
+  const yR = v => PT + ih - ((v - rMin) / (rMax - rMin)) * ih;
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  const mkMtip = id => `<g id="${id}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.45)" stroke-width="0.5"/><text class="tiptext" font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
+  const leftTipId = 'mtip' + (++_chartTipSeq);
+  const rightTipId = 'mtip' + (++_chartTipSeq);
+  // 网格线 + 左轴刻度（蓝）
+  let grid = '', ylabels = '';
+  lTicks.forEach(v => {
+    const gy = yL(v).toFixed(1);
+    grid += `<line class="gridln" x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${leftColor}" font-size="9" text-anchor="end">${leftFmt(Math.round(v * 10) / 10)}</text>`;
+  });
+  // 右轴刻度（橘）
+  rTicks.forEach(v => {
+    const gy = yR(v).toFixed(1);
+    ylabels += `<text x="${W - PR + 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${rightColor}" font-size="9" text-anchor="start">${rightFmt(v)}</text>`;
+  });
+  ylabels += `<text x="${PL - 5}" y="13" fill="${leftColor}" font-size="8.5" font-weight="bold" text-anchor="end">${leftUnit}</text>`;
+  ylabels += `<text x="${W - PR + 5}" y="13" fill="${rightColor}" font-size="8.5" font-weight="bold" text-anchor="start">${rightUnit}</text>`;
+  // x 轴标签（keyDates 模式：首末 + 每月25号，按时间轴位置渲染，不依赖数据点）
+  let xlabels = '';
+  if (opts.xTickMode === 'keyDates' && hasT) {
+    const keyMap = new Map();
+    const fmtTs = ts => { const dt = new Date(ts); return `${dt.getUTCMonth() + 1}/${dt.getUTCDate()}`; };
+    keyMap.set(tMin, fmtTs(tMin)); keyMap.set(tMax, fmtTs(tMax));
+    let cur = new Date(tMin);
+    cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth(), 25));
+    if (cur.getTime() <= tMin) cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 25));
+    while (cur.getTime() < tMax) { keyMap.set(cur.getTime(), fmtTs(cur.getTime())); cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 25)); }
+    Array.from(keyMap.keys()).sort((a, b) => a - b).forEach(ts => {
+      const x = (PL + (iw * (ts - tMin)) / (tMax - tMin)).toFixed(1);
+      xlabels += `<text x="${x}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${keyMap.get(ts)}</text>`;
+    });
+  } else {
+    const step = Math.max(1, Math.ceil(n / 7));
+    leftData.forEach((d, i) => { if (i % step !== 0 && i !== n - 1) return; xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${d.label}</text>`; });
+  }
+  // 左线（蓝实线带点，断开于 null）
+  const clipId = 'dclip' + (++_chartTipSeq);
+  let lPath = '', lDots = '', started = false;
+  leftData.forEach((d, i) => {
+    if (d.value == null) { started = false; return; }
+    const px = xf(i).toFixed(2), py = yL(d.value).toFixed(2);
+    lPath += (started ? 'L' : 'M') + px + ' ' + py + ' '; started = true;
+    const tx = opts.leftTipText ? opts.leftTipText(d) : (leftFmt(d.value) + leftUnit);
+    const lb = esc(d.label);
+    lDots += `<circle cx="${px}" cy="${py}" r="3" fill="${leftColor}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
+      `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" data-cx="${px}" data-cy="${py}" onclick="chartTip(this,'${leftTipId}','${lb}','${esc(tx)}')"/>`;
+  });
+  // 右线（橘色虚线带点，断开于 null，裁剪到绘图区）
+  let rPath = '', rDots = '', rStarted = false;
+  rightData.forEach((d, i) => {
+    if (d.value == null) { rStarted = false; return; }
+    const px = xf(i).toFixed(2), py = yR(d.value).toFixed(2);
+    rPath += (rStarted ? 'L' : 'M') + px + ' ' + py + ' '; rStarted = true;
+    const tx = opts.rightTipText ? opts.rightTipText(d) : (rightFmt(d.value) + rightUnit);
+    const lb = esc(d.label);
+    rDots += `<circle cx="${px}" cy="${py}" r="3" fill="${rightColor}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
+      `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" data-cx="${px}" data-cy="${py}" onclick="chartTip(this,'${rightTipId}','${lb}','${esc(tx)}')"/>`;
+  });
+  return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
+    `<defs><clipPath id="${clipId}"><rect x="${PL}" y="${PT}" width="${iw}" height="${ih}"/></clipPath></defs>` +
+    grid + ylabels + xlabels +
+    `<g clip-path="url(#${clipId})">` +
+      `<path d="${lPath.trim()}" fill="none" stroke="${leftColor}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` +
+      `<path d="${rPath.trim()}" fill="none" stroke="${rightColor}" stroke-width="2" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"/>` +
+    `</g>` + lDots + rDots + mkMtip(leftTipId) + mkMtip(rightTipId) + `</svg></div>`;
 }
 // v3.5.78 奶量及次数合并图：双轴柱状图
 //   左轴 = 奶量(ml)，蓝色柱(#7da8e6)；右轴 = 次数(次)，绿色柱(#2ecc71)
@@ -4211,12 +4395,6 @@ function openAnalysis() {
   const sleepData = days.map(d => ({ label: d.label, value: dailySleepHours(d.ds) }));
   const poopData = days.map(d => { const info = dailyPoopInfo(d.ds); return { label: d.label, value: info ? info.count : null, statuses: info ? info.statuses : null }; });
   const poopGapPts = collectPoopGapSeries();
-  const gapMarks = getInterventionMarks().map(m => {
-    const t = Date.parse(m.date);
-    if (isNaN(t)) return null;
-    const p = m.date.split('-');
-    return { t: t, text: `${parseInt(p[1], 10)}/${parseInt(p[2], 10)} ${m.label || ''}`.trim() };
-  }).filter(Boolean);
   // 2) 体重/身高曲线（相同数值只保留最早日期；横轴按日期间隔等分）
   const hist = getBodyHistory();
   const weightPts = dedupeBodySeries(hist.map(x => ({ d: x.d, v: x.w })));
@@ -4241,18 +4419,31 @@ function openAnalysis() {
   html += makeSolidFoodAnalysis();    // 辅食情况（环形统计 + 时间轴）
   html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] }); // 睡眠时长（v3.5.81 并入吃睡分类最下方）
   html += `</div>`;
-  // —— 健康：大便次数 + 大便时间 ——
+  // —— 健康：大便次数 + 大便与喝奶时间差(双轴) + 体重变化(双轴) ——
   html += `<div class="tab-panel" data-panel="health" style="display:none">`;
   html += makeBarChart(poopData, { title: '💩 大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
-  // v3.5.71 间隔趋势：截止昨天的全部历史，折线图（无大便的日子不画点），并用竖线标出「加乳糖酶」等干预时间点
-  // v3.5.72 y 轴口径：大便时间 − 早于它的最近一次喝奶时间（分钟）
-  html += makeLineChart(poopGapPts, {
-    title: '💩 大便时间（与喝奶间隔，截至昨日）',
-    unit: '分钟', color: '#8fbc8f',
-    fmt: v => String(Math.round(v)),
+  // v3.5.87 大便与喝奶时间差变化（截止昨日）：左=间隔分钟(蓝实线带点)，右=乳糖酶量(橘虚线)；去掉干预竖线
+  const lactaseGap = poopGapPts.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: getLactaseByDate(p.ds) }));
+  html += makeLactaseDualChart(poopGapPts, lactaseGap, {
+    title: '💩 大便与喝奶时间差变化（截止昨日）',
+    leftLabel: '间隔分钟', leftUnit: '分钟', leftColor: '#7da8e6', leftFmt: v => String(Math.round(v)),
+    rightLabel: '乳糖酶', rightUnit: '滴', rightColor: '#ff9f43', rightFmt: v => String(v),
     xTickMode: 'keyDates',
-    tipText: d => (d.count > 1 ? `${d.value}分钟 · ${d.count}次平均` : `${d.value}分钟`),
-    markers: gapMarks
+    leftTipText: d => (d.count > 1 ? `${d.value}分钟 · ${d.count}次平均` : `${d.value}分钟`),
+    rightTipText: d => `${d.value}滴`
+  });
+  // v3.5.87 体重变化（与上方大便图同横轴，便于上下对照）：左=体重kg(蓝实线带点，刻度同体重趋势)，右=乳糖酶量(橘虚线)
+  //         最新日期若体重为空，左线自然断开（不画线）
+  const weightDualLeft = poopGapPts.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: weightRecordedOn(p.ds) }));
+  const weightDualRight = poopGapPts.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: getLactaseByDate(p.ds) }));
+  html += makeLactaseDualChart(weightDualLeft, weightDualRight, {
+    title: '⚖️ 体重变化',
+    leftLabel: '体重', leftUnit: 'kg', leftColor: '#7da8e6', leftFmt: v => v.toFixed(1),
+    leftMin: 3, leftStep: 1,
+    rightLabel: '乳糖酶', rightUnit: '滴', rightColor: '#ff9f43', rightFmt: v => String(v),
+    xTickMode: 'keyDates',
+    leftTipText: d => `${d.value}kg`,
+    rightTipText: d => `${d.value}滴`
   });
   html += `</div>`;
   // —— 成长：体重趋势 + 身高趋势 + 成长里程碑 ——
