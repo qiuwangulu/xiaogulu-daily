@@ -158,6 +158,24 @@
   #analysisTabBar .cat-tag .cat-icon { font-size: 16px; }
   #analysisTabBar .cat-tag .cat-label { font-size: 14px; }
 
+  /* ===== v3.5.94 管理弹窗分类标签（设置 / 活动） ===== */
+  #manageTabBar { display: flex; gap: 12px; margin: 8px 0 4px 0; }
+  #manageTabBar .cat-tag {
+    flex: 1 1 0; min-width: 0;
+    flex-direction: row; justify-content: center; gap: 6px;
+    padding: 6px 8px; font-size: 14px;
+  }
+  #manageTabBar .cat-tag .cat-icon { font-size: 16px; }
+  #manageTabBar .cat-tag .cat-label { font-size: 14px; }
+  .manage-tab-panel { display: block; }
+  /* v3.5.94 选项区插槽：内缩 + 左侧细线，视觉上从属于上方的活动开关 */
+  .manage-opt-slot {
+    margin: 2px 0 8px 0;
+    padding: 2px 0 4px 12px;
+    border-left: 2px solid rgba(9,132,227,0.25);
+  }
+  body.theme-day .manage-opt-slot { border-left-color: rgba(9,132,227,0.3); }
+
   /* ===== 活动卡片 ===== */
   .cards-grid {
     display: flex; flex-direction: column;
@@ -1531,6 +1549,12 @@
     <button class="modal-close" onclick="hideModal('manageModal')">&times;</button>
     <div class="modal-title">&#9881; 管理</div>
     <div class="modal-version" id="appVersionTag"></div>
+    <!-- v3.5.94 管理弹窗分两类：设置（只读/云端同步/语音识别/订阅推送）、活动（活动开关+各项选项） -->
+    <div class="manage-tab-bar" id="manageTabBar">
+      <div class="cat-tag active" data-mtab="settings" onclick="switchManageTab('settings')"><span class="cat-icon">⚙️</span><span class="cat-label">设置</span></div>
+      <div class="cat-tag" data-mtab="acts" onclick="switchManageTab('acts')"><span class="cat-icon">🏃</span><span class="cat-label">活动</span></div>
+    </div>
+    <div class="manage-tab-panel" data-mpanel="settings">
     <div class="sync-section">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0 0 0;">
         <div class="cos-title" style="margin:0;">🔒 只读模式</div>
@@ -1540,6 +1564,29 @@
         </label>
       </div>
       <div style="font-size:14px;color:#b2bec3;padding:4px 0 8px 0;">开启后隐藏编辑/删除和添加按钮</div>
+    </div>
+    <div class="sync-section" id="syncSection">
+      <div class="cos-title">☁️ 云端同步</div>
+      <div class="sync-status-row"><span class="sync-dot off" id="syncDotManage"></span><span id="syncStatusTextManage">未配置</span></div>
+      <div class="sync-btn-row">
+        <button class="btn btn-primary" onclick="hideModal('manageModal');openSyncSettings()">同步设置</button>
+        <button class="btn" onclick="syncPullAllAndRefresh()">立即同步</button>
+      </div>
+      <div class="sync-btn-row" style="margin-top:8px;">
+        <button class="btn" style="font-size:12px;padding:6px 10px;" onclick="restoreTodayFromBackup()">↩️ 从备份恢复今日数据</button>
+      </div>
+      <div style="font-size:11px;color:#b2bec3;margin-top:4px;">每次从云端拉取前会自动备份本地数据；若同步后数据异常，可点击上方按钮恢复</div>
+    </div>
+    <div class="sync-section">
+      <div class="cos-title">🎤 语音识别</div>
+      <div class="xf-config-row"><label>APP ID:</label><input type="password" id="xfAppidInput" placeholder="APP ID" autocomplete="off"></div>
+      <div class="xf-config-row"><label>API Key:</label><input type="password" id="xfApiKeyInput" placeholder="API Key" autocomplete="off"></div>
+      <div class="xf-config-row"><label>API Secret:</label><input type="password" id="xfApiSecretInput" placeholder="API Secret" autocomplete="off"></div>
+      <div class="push-token-row" style="justify-content: flex-end;">
+        <label class="xf-see-row"><input type="checkbox" id="xfSeeToggle" onchange="toggleXfyunSee()"><span style="font-size:13px;color:#b2bec3;">显示明文</span></label>
+        <button class="btn btn-primary" onclick="saveXfyunConfig()">保存</button>
+      </div>
+      <div class="push-token-hint" id="xfDefaultHint"></div>
     </div>
     <div class="sync-section">
       <div class="cos-title">📮 订阅推送</div>
@@ -1557,30 +1604,9 @@
       </div>
       <div class="push-token-hint">pushplus.plus → 发送消息 → 一对多消息 → 群组编码填到这里，家人扫码入群即可同步接收成就提醒<br><b>重要：</b>多台设备都开着本应用时会各自推送一遍造成重复。<b>请只在一台设备（如妈妈的手机）勾选「由本设备负责推送」</b>，其他设备取消勾选即可。取消勾选的设备仍可正常记录与查看，只是不再发推送。</div>
     </div>
-    <div class="sync-section">
-      <div class="cos-title">🎤 语音识别</div>
-      <div class="xf-config-row"><label>APP ID:</label><input type="password" id="xfAppidInput" placeholder="APP ID" autocomplete="off"></div>
-      <div class="xf-config-row"><label>API Key:</label><input type="password" id="xfApiKeyInput" placeholder="API Key" autocomplete="off"></div>
-      <div class="xf-config-row"><label>API Secret:</label><input type="password" id="xfApiSecretInput" placeholder="API Secret" autocomplete="off"></div>
-      <div class="push-token-row" style="justify-content: flex-end;">
-        <label class="xf-see-row"><input type="checkbox" id="xfSeeToggle" onchange="toggleXfyunSee()"><span style="font-size:13px;color:#b2bec3;">显示明文</span></label>
-        <button class="btn btn-primary" onclick="saveXfyunConfig()">保存</button>
-      </div>
-      <div class="push-token-hint" id="xfDefaultHint"></div>
     </div>
+    <div class="manage-tab-panel" data-mpanel="acts" style="display:none;">
     <div class="manage-list" id="manageList"></div>
-    <div class="custom-options-section" id="customOptionsSection"></div>
-    <div class="sync-section" id="syncSection">
-      <div class="cos-title">☁️ 云端同步</div>
-      <div class="sync-status-row"><span class="sync-dot off" id="syncDotManage"></span><span id="syncStatusTextManage">未配置</span></div>
-      <div class="sync-btn-row">
-        <button class="btn btn-primary" onclick="hideModal('manageModal');openSyncSettings()">同步设置</button>
-        <button class="btn" onclick="syncPullAllAndRefresh()">立即同步</button>
-      </div>
-      <div class="sync-btn-row" style="margin-top:8px;">
-        <button class="btn" style="font-size:12px;padding:6px 10px;" onclick="restoreTodayFromBackup()">↩️ 从备份恢复今日数据</button>
-      </div>
-      <div style="font-size:11px;color:#b2bec3;margin-top:4px;">每次从云端拉取前会自动备份本地数据；若同步后数据异常，可点击上方按钮恢复</div>
     </div>
     <!-- v3.5.69 底部固定操作条：选项区很长，滚到最底下也能一键关闭（选项为即时保存，无需"保存"按钮） -->
     <div class="manage-footer">
@@ -1690,8 +1716,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.93"></script>
-<script src="app-config.js?v=v3.5.93"></script>
-<script src="app.js?v=v3.5.93"></script>
+<script src="std-config.js?v=v3.5.94"></script>
+<script src="app-config.js?v=v3.5.94"></script>
+<script src="app.js?v=v3.5.94"></script>
 </body>
 </html>

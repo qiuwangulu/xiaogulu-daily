@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.93'; // 分析弹窗三图(奶量趋势/大便时间差/体重变化)左侧轴刻度与文字改为主题色(深色模式白/浅色模式黑),左折线仍为蓝色#7da8e6; 至此左右两侧轴文字均为主题色、折线分别为蓝/橙; index.html 缓存参数升 v3.5.93
+const APP_VERSION = 'v3.5.94'; // 浅色模式下大便时间差/体重变化左线加 dataline/chart-dot class,与奶量趋势蓝色统一为#0984e3; 管理弹窗新增「设置」「活动」两分类(设置=只读模式/云端同步/语音识别/订阅推送,活动=活动开关+各项选项),大运动/精细动作/辅食选项区移到对应活动开关的下一行; index.html 缓存参数升 v3.5.94
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2865,30 +2865,50 @@ function saveLactaseDefault() {
   try { syncUpload('config'); } catch (e) {}   // 同步给家人设备
   showToast('乳糖酶默认值已设为 ' + v + '滴');
 }
-function openManage() {
-  // 每次打开都从 localStorage 重新加载，保证显示最新值（包括上次关闭时即时修改的内容）
-  loadHiddenActivities();
-  loadCustomOptions();
-  const list = document.getElementById('manageList');
+// v3.5.94 管理弹窗分类：settings=设置（只读/云端同步/语音识别/订阅推送）、acts=活动（活动开关+各项选项）
+let currentManageTab = 'settings';
+function switchManageTab(tab) {
+  currentManageTab = tab;
+  document.querySelectorAll('#manageTabBar .cat-tag').forEach(t => t.classList.toggle('active', t.dataset.mtab === tab));
+  document.querySelectorAll('.manage-tab-panel').forEach(p => {
+    p.style.display = p.dataset.mpanel === tab ? 'block' : 'none';
+  });
+  const box = document.querySelector('#manageModal .modal-box');
+  if (box) box.scrollTop = 0;
+}
+// v3.5.94 活动列表：喝奶下方接奶量/乳糖酶默认值；大运动/精细动作/辅食开关的下一行接各自选项区插槽
+function buildManageListHTML() {
   let html = '';
   ACTIVITIES.forEach(act => {
     const visible = !hiddenActivities.includes(act.id);
     html += `<div class="manage-item"><span class="manage-name">${act.icon} ${act.name}</span><div class="toggle-switch ${visible?'on':''}" data-id="${act.id}" onclick="toggleManage('${act.id}')"></div></div>`;
-    // 喝奶开关下方紧跟「奶量默认值」输入框
     if (act.id === 'milk') {
       html += `<div class="manage-item"><span class="manage-name" style="font-size:14px;">🍼 奶量默认值（水量）</span>` +
         `<span class="mi-value"><input type="number" inputmode="numeric" min="1" step="1" id="milkDefaultInput" ` +
         `value="${getDefaultMilkAmount()}" onchange="saveMilkDefault()" onblur="saveMilkDefault()" ` +
         `onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"><span class="mi-unit">ml</span></span></div>`;
-      // 乳糖酶默认值（滴）：>=0 整数、不能为空，单位 滴，预设默认 7
       html += `<div class="manage-item"><span class="manage-name" style="font-size:14px;">🍼 乳糖酶默认值</span>` +
         `<span class="mi-value"><input type="number" inputmode="numeric" min="0" step="1" id="lactaseDefaultInput" ` +
         `value="${getDefaultLactase()}" onchange="saveLactaseDefault()" onblur="saveLactaseDefault()" ` +
         `onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"><span class="mi-unit">滴</span></span></div>`;
     }
+    // v3.5.94 三个可自定义选项的活动：选项区紧跟在该开关的下一行
+    if (act.id === 'solidFood' || act.id === 'grossMotor' || act.id === 'fineMotor') {
+      html += `<div class="manage-opt-slot" data-opt-for="${act.id}"></div>`;
+    }
   });
-  list.innerHTML = html;
+  return html;
+}
+function openManage() {
+  // 每次打开都从 localStorage 重新加载，保证显示最新值（包括上次关闭时即时修改的内容）
+  loadHiddenActivities();
+  loadCustomOptions();
+  const list = document.getElementById('manageList');
+  // v3.5.94 活动列表（选项区插到大运动/精细动作/辅食开关的下一行）
+  list.innerHTML = buildManageListHTML();
   renderCustomOptionsSection();
+  // v3.5.94 恢复上次所在分类
+  switchManageTab(currentManageTab);
   document.getElementById('readOnlyToggle').checked = isReadOnlyMode();
   loadPushTokenUI();
   loadPushTopicUI();
@@ -2928,33 +2948,44 @@ function toggleManage(id) {
   renderCards();
 }
 function renderCustomOptionsSection() {
-  const section = document.getElementById('customOptionsSection');
-  let html = '';
+  // v3.5.94 三个选项区各自渲染到对应活动开关下一行的插槽（大运动/精细动作/辅食）
   // v3.5.69 明确告知：选项即改即存（本地 + 云端），不会因为换天/刷新而丢失
   const savedTip = `<span class="cos-saved">✓ 已永久保存</span>`;
   const esc = o => String(o).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const tag = (o, fn) => `<span class="custom-tag">${esc(o)}<span class="tag-remove" onclick="${fn}('${esc(o).replace(/'/g,"\\'")}')">×</span></span>`;
-  html += `<div class="cos-title-row"><div class="cos-title">🤸 大运动选项</div>${savedTip}</div>`;
-  html += `<div class="custom-options-tags">`;
-  grossMotorOptions.forEach(o => { html += tag(o, 'removeGrossMotorOpt'); });
-  html += `</div>`;
-  html += `<div class="custom-add-row"><input type="text" id="newGrossMotorOpt" placeholder="新增选项" onkeydown="if(event.key==='Enter'){event.preventDefault();addGrossMotorOpt();}"><button class="btn btn-primary" onclick="addGrossMotorOpt()">添加</button></div>`;
-  html += '<div style="height:14px;"></div>';
-  html += `<div class="cos-title-row"><div class="cos-title">✋ 精细动作选项</div>${savedTip}</div>`;
-  html += `<div class="custom-options-tags">`;
-  fineMotorOptions.forEach(o => { html += tag(o, 'removeFineMotorOpt'); });
-  html += `</div>`;
-  html += `<div class="custom-add-row"><input type="text" id="newFineMotorOpt" placeholder="新增选项" onkeydown="if(event.key==='Enter'){event.preventDefault();addFineMotorOpt();}"><button class="btn btn-primary" onclick="addFineMotorOpt()">添加</button></div>`;
-  html += '<div style="height:14px;"></div>';
-  // v3.5.74 辅食食物选项（条目较多，容器限高可滚动）
-  html += `<div class="cos-title-row"><div class="cos-title">🥣 辅食食物选项</div>${savedTip}</div>`;
-  html += `<div class="custom-options-tags sf-tags">`;
-  solidFoodOptions.forEach(o => { html += tag(o, 'removeSolidFoodOpt'); });
-  html += `</div>`;
-  html += `<div class="custom-add-row"><input type="text" id="newSolidFoodOpt" placeholder="新增食物" onkeydown="if(event.key==='Enter'){event.preventDefault();addSolidFoodOpt();}"><button class="btn btn-primary" onclick="addSolidFoodOpt()">添加</button></div>`;
-  html += `<div style="height:12px;"></div>`;
-  html += `<div class="custom-add-row"><button class="btn" style="flex:1;font-size:13px;" onclick="openResetOptionsConfirm()">🔄 恢复默认选项</button></div>`;
-  section.innerHTML = html;
+  // 大运动
+  const grossSlot = document.querySelector('.manage-opt-slot[data-opt-for="grossMotor"]');
+  if (grossSlot) {
+    let h = `<div class="cos-title-row"><div class="cos-title">🤸 大运动选项</div>${savedTip}</div>`;
+    h += `<div class="custom-options-tags">`;
+    grossMotorOptions.forEach(o => { h += tag(o, 'removeGrossMotorOpt'); });
+    h += `</div>`;
+    h += `<div class="custom-add-row"><input type="text" id="newGrossMotorOpt" placeholder="新增选项" onkeydown="if(event.key==='Enter'){event.preventDefault();addGrossMotorOpt();}"><button class="btn btn-primary" onclick="addGrossMotorOpt()">添加</button></div>`;
+    grossSlot.innerHTML = h;
+  }
+  // 精细动作
+  const fineSlot = document.querySelector('.manage-opt-slot[data-opt-for="fineMotor"]');
+  if (fineSlot) {
+    let h = `<div class="cos-title-row"><div class="cos-title">✋ 精细动作选项</div>${savedTip}</div>`;
+    h += `<div class="custom-options-tags">`;
+    fineMotorOptions.forEach(o => { h += tag(o, 'removeFineMotorOpt'); });
+    h += `</div>`;
+    h += `<div class="custom-add-row"><input type="text" id="newFineMotorOpt" placeholder="新增选项" onkeydown="if(event.key==='Enter'){event.preventDefault();addFineMotorOpt();}"><button class="btn btn-primary" onclick="addFineMotorOpt()">添加</button></div>`;
+    fineSlot.innerHTML = h;
+    // 恢复默认选项按钮放在最后一个选项区之后
+    fineSlot.insertAdjacentHTML('afterend',
+      `<div class="custom-add-row" style="margin-top:14px;"><button class="btn" style="flex:1;font-size:13px;" onclick="openResetOptionsConfirm()">🔄 恢复默认选项</button></div>`);
+  }
+  // 辅食食物（v3.5.74 条目较多，容器限高可滚动）
+  const solidSlot = document.querySelector('.manage-opt-slot[data-opt-for="solidFood"]');
+  if (solidSlot) {
+    let h = `<div class="cos-title-row"><div class="cos-title">🥣 辅食食物选项</div>${savedTip}</div>`;
+    h += `<div class="custom-options-tags sf-tags">`;
+    solidFoodOptions.forEach(o => { h += tag(o, 'removeSolidFoodOpt'); });
+    h += `</div>`;
+    h += `<div class="custom-add-row"><input type="text" id="newSolidFoodOpt" placeholder="新增食物" onkeydown="if(event.key==='Enter'){event.preventDefault();addSolidFoodOpt();}"><button class="btn btn-primary" onclick="addSolidFoodOpt()">添加</button></div>`;
+    solidSlot.innerHTML = h;
+  }
 }
 function _optLenLimit(val) {
   if (val.length > 12) { showToast('选项名最多 12 个字'); return false; }
@@ -3799,7 +3830,7 @@ function makeLactaseDualChart(leftData, rightData, opts) {
     lPath += (started ? 'L' : 'M') + px + ' ' + py + ' '; started = true;
     const tx = opts.leftTipText ? opts.leftTipText(d) : (leftFmt(d.value) + leftUnit);
     const lb = esc(d.label);
-    lDots += `<circle cx="${px}" cy="${py}" r="3" fill="${leftColor}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
+    lDots += `<circle class="chart-dot" cx="${px}" cy="${py}" r="3" fill="${leftColor}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
       `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" data-cx="${px}" data-cy="${py}" onclick="chartTip(this,'${leftTipId}','${lb}','${esc(tx)}')"/>`;
   });
   // 右线（橙色虚线 rightLineColor；轴刻度/文字为主题色 rightColor；不带可见数据点；断开于 null，裁剪到绘图区）
@@ -3817,7 +3848,7 @@ function makeLactaseDualChart(leftData, rightData, opts) {
     `<defs><clipPath id="${clipId}"><rect x="${PL}" y="${PT}" width="${iw}" height="${ih}"/></clipPath></defs>` +
     grid + ylabels + xlabels +
     `<g clip-path="url(#${clipId})">` +
-      `<path d="${lPath.trim()}" fill="none" stroke="${leftColor}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` +
+      `<path class="dataline" d="${lPath.trim()}" fill="none" stroke="${leftColor}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` +
       `<path d="${rPath.trim()}" fill="none" stroke="${rightLineColor}" stroke-width="2" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"/>` +
     `</g>` + lDots + rDots + mkMtip(leftTipId) + mkMtip(rightTipId) + `</svg></div>`;
 }
