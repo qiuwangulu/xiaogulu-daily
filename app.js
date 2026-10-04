@@ -1009,7 +1009,7 @@ function renderCards(newestIds) {
         const readOnly = isReadOnlyMode();
         const editDeleteHtml = readOnly ? '' : `<span class="rec-edit" onclick="event.stopPropagation();openEditRecord('${r.type}',${r.timestamp})"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><span class="rec-delete" onclick="event.stopPropagation();deleteRecord('${r.type}',${r.timestamp})"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6"/><path d="M14 10v6"/></svg></span>`;
         bodyHtml += `<div class="record-tag${isNewest ? ' newest' : ''}" data-timestamp="${r.timestamp}" data-type="${r.type}">
-          <div class="rec-left"><span class="rec-time">${time}</span><span class="rec-detail">${formatRecordBrief(r)}</span></div>
+          <div class="rec-left"><span class="rec-time">${time}</span><span class="rec-detail">${formatRecordBrief(r, getTodayDateStr())}</span></div>
           ${editDeleteHtml}
         </div>`;
       });
@@ -1021,9 +1021,19 @@ function renderCards(newestIds) {
   });
 }
 
-function formatRecordBrief(r) {
+function formatRecordBrief(r, ds) {
   let base = '';
-  if (r.type === 'milk') { if (r.milkAmount > 0) base = r.milkAmount + 'ml'; if (r.lactase != null) base += ' · 乳糖酶' + r.lactase + '滴'; }
+  if (r.type === 'milk') {
+    if (r.milkAmount > 0) base = r.milkAmount + 'ml';
+    // v3.5.90 乳糖酶量：优先用记录自身的 lactase；老记录（v3.5.87 之前录入、无该字段）回退到「当日乳糖酶量」（历史补充规则）
+    let lac = (r.lactase != null) ? r.lactase : null;
+    if (lac == null) {
+      let d = ds;
+      if (!d && r.timestamp) { const dt = new Date(Number(r.timestamp)); if (!isNaN(dt.getTime())) d = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`; }
+      if (d) lac = getLactaseByDate(d);
+    }
+    if (lac != null) base += ' · 乳糖酶' + lac + '滴';
+  }
   else if (r.type === 'poop') { base = r.poopStatus || ''; }
   else if (r.type === 'supplement') { base = (r.supplementTypes||[]).join('/'); if (r.supplementAmount > 0) base += ' ' + r.supplementAmount + '粒'; }
   else if (r.type === 'solidFood') { base = (r.solidFoods||[]).join('、'); if (r.solidFoodAmount > 0) base += ' ' + r.solidFoodAmount + 'g'; if (r.afterMeal) base += ' · 饭后' + r.afterMeal; }
@@ -1231,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.89'; // 乳糖酶聚合改为「当日取一次最小值」(getLactaseByDate由求和改最小值,图表/日报口径一致); 去掉首页总览乳糖酶; 首页与历史弹窗喝奶活动框每条记录显示对应乳糖酶量(formatRecordBrief); 日报乳糖酶显示当日单次最小值; index.html 缓存参数升 v3.5.89
+const APP_VERSION = 'v3.5.90'; // 首页/历史老奶记录(无lactase字段)回退显示当日乳糖酶量(formatRecordBrief加ds参数); 体重变化图左线加 leftConnectNulls 跨空档连成折线并保留数据点; index.html 缓存参数升 v3.5.90
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2663,7 +2673,7 @@ function loadHistory() {
     html += `<div class="history-record">` +
       `<div class="history-rec-main">` +
         `<div class="rec-time">${r.recTime || r.time}</div>` +
-        `<div class="rec-detail">${r.name}: ${formatRecordBrief(r)}</div>` +
+        `<div class="rec-detail">${r.name}: ${formatRecordBrief(r, ds)}</div>` +
       `</div>` +
       `<div class="history-rec-ops">` +
         `<span class="rec-edit" onclick="openEditRecord('${t}', ${ts}, '${ds}')" title="编辑"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>` +
@@ -3773,11 +3783,11 @@ function makeLactaseDualChart(leftData, rightData, opts) {
     const step = Math.max(1, Math.ceil(n / 7));
     leftData.forEach((d, i) => { if (i % step !== 0 && i !== n - 1) return; xlabels += `<text x="${xf(i).toFixed(1)}" y="${H - 8}" fill="#fff" font-size="9" text-anchor="middle">${d.label}</text>`; });
   }
-  // 左线（蓝实线带点，断开于 null）
+  // 左线（蓝实线带点）：默认断开于 null；opts.leftConnectNulls=true 时跨空档连线（如体重变化，仅有测体重的几天有值）
   const clipId = 'dclip' + (++_chartTipSeq);
   let lPath = '', lDots = '', started = false;
   leftData.forEach((d, i) => {
-    if (d.value == null) { started = false; return; }
+    if (d.value == null) { if (!opts.leftConnectNulls) started = false; return; }
     const px = xf(i).toFixed(2), py = yL(d.value).toFixed(2);
     lPath += (started ? 'L' : 'M') + px + ' ' + py + ' '; started = true;
     const tx = opts.leftTipText ? opts.leftTipText(d) : (leftFmt(d.value) + leftUnit);
@@ -4455,6 +4465,7 @@ function openAnalysis() {
     title: '⚖️ 体重变化',
     leftLabel: '体重', leftUnit: 'kg', leftColor: '#7da8e6', leftFmt: v => v.toFixed(1),
     leftScaleFactor: { min: 0.8, max: 1.2 },   // v3.5.88 左轴刻度 = 本段最小体重*0.8 ~ 最大体重*1.2
+    leftConnectNulls: true,                     // v3.5.90 体重按折线连接各测量点（仅测体重的几天有值，跨空档连线），保留数据点
     rightLabel: '乳糖酶', rightUnit: '滴', rightColor: '#ff9f43', rightFmt: v => String(v),
     xTickMode: 'keyDates',
     leftTipText: d => `${d.value}kg`,
