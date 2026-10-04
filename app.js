@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.91'; // 分析弹窗三张图右侧(乳糖酶/单次平均)线·轴·图例改为主题色(深色白/浅色黑,原橙#ff9f43); 体重变化图左轴刻度改为 0.9*最小~1.1*最大; 体重变化标题加「(截止昨日)」; 首页活动框记录详情可自动换行; index.html 缓存参数升 v3.5.91
+const APP_VERSION = 'v3.5.92'; // 分析弹窗三图(奶量趋势/大便时间差/体重变化)右侧折线恢复橙色#ff9f43(图例色块同步),右侧轴刻度与文字仍为主题色(深色模式白/浅色模式黑); index.html 缓存参数升 v3.5.92
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3692,16 +3692,18 @@ function makeLactaseDualChart(leftData, rightData, opts) {
   const title = opts.title;
   const leftUnit = opts.leftUnit || '', rightUnit = opts.rightUnit || '滴';
   const leftColor = opts.leftColor || '#7da8e6';
-  // v3.5.91 右侧线·右侧轴·图例改为主题色：深色模式白色、浅色模式黑色（原橙色 #ff9f43）
+  // v3.5.91 右侧轴（刻度+文字）改为主题色：深色模式白色、浅色模式黑色
   // 与 applyTheme 的 body.theme-day 判定保持一致（图表在弹窗打开时渲染，取当前主题）
   const rightColor = document.body.classList.contains('theme-day') ? '#111111' : '#ffffff';
+  // v3.5.92 右侧折线单独用橙色（轴文字仍为主题色）
+  const rightLineColor = opts.rightLineColor || '#ff9f43';
   const leftFmt = opts.leftFmt || (v => v);
   const rightFmt = opts.rightFmt || (v => v);
   const leftLabel = opts.leftLabel || '左轴';
   const rightLabel = opts.rightLabel || '乳糖酶';
   const legend = `<span style="float:right;font-size:10px;color:#b2bec3;margin-right:4px;">` +
     `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${leftColor};margin-right:2px;vertical-align:middle;"></span>${leftLabel} ` +
-    `<span style="display:inline-block;width:9px;height:3px;background:${rightColor};margin-right:2px;vertical-align:middle;margin-left:6px;"></span>${rightLabel}</span>`;
+    `<span style="display:inline-block;width:9px;height:3px;background:${rightLineColor};margin-right:2px;vertical-align:middle;margin-left:6px;"></span>${rightLabel}</span>`;
   const head = `<div class="chart-card"><div class="chart-title">${title}${legend}</div>`;
   const n = leftData.length;
   if (n === 0) return head + `<div class="chart-empty">暂无数据</div></div>`;
@@ -3797,7 +3799,7 @@ function makeLactaseDualChart(leftData, rightData, opts) {
     lDots += `<circle cx="${px}" cy="${py}" r="3" fill="${leftColor}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
       `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" data-cx="${px}" data-cy="${py}" onclick="chartTip(this,'${leftTipId}','${lb}','${esc(tx)}')"/>`;
   });
-  // 右线（主题色虚线：深色模式白/浅色模式黑，不带可见数据点；断开于 null，裁剪到绘图区）
+  // 右线（橙色虚线 rightLineColor；轴刻度/文字为主题色 rightColor；不带可见数据点；断开于 null，裁剪到绘图区）
   // v3.5.88 乳糖酶线仅保留透明点击热区（便于查看数值），不再绘制圆点
   let rPath = '', rDots = '', rStarted = false;
   rightData.forEach((d, i) => {
@@ -3813,7 +3815,7 @@ function makeLactaseDualChart(leftData, rightData, opts) {
     grid + ylabels + xlabels +
     `<g clip-path="url(#${clipId})">` +
       `<path d="${lPath.trim()}" fill="none" stroke="${leftColor}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` +
-      `<path d="${rPath.trim()}" fill="none" stroke="${rightColor}" stroke-width="2" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"/>` +
+      `<path d="${rPath.trim()}" fill="none" stroke="${rightLineColor}" stroke-width="2" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"/>` +
     `</g>` + lDots + rDots + mkMtip(leftTipId) + mkMtip(rightTipId) + `</svg></div>`;
 }
 // v3.5.78 奶量及次数合并图：双轴柱状图
@@ -4183,11 +4185,13 @@ function milkAxisRange(minV, maxV, loF, hiF) {
 }
 function makeMilkTrendChart() {
   const data = collectMilkTrendData();
-  // v3.5.91 右侧（单次平均）线·右侧轴·图例改为主题色：深色模式白色、浅色模式黑色（原橙色 #ff9f43）
+  // v3.5.91 右侧轴（刻度+文字）改为主题色：深色模式白色、浅色模式黑色
   const rightColor = document.body.classList.contains('theme-day') ? '#111111' : '#ffffff';
+  // v3.5.92 右侧折线与数据点单独用橙色（轴文字仍为主题色）
+  const rightLineColor = '#ff9f43';
   const legend = `<span style="float:right;font-size:10px;color:#b2bec3;margin-right:4px;">` +
     `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#7da8e6;margin-right:2px;vertical-align:middle;"></span>总奶量 ` +
-    `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${rightColor};margin-right:2px;vertical-align:middle;"></span>单次平均</span>`;
+    `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${rightLineColor};margin-right:2px;vertical-align:middle;"></span>单次平均</span>`;
   const head = `<div class="chart-card"><div class="chart-title">🍼 奶量趋势（截至昨日）${legend}</div>`;
   const n = data.length;
   if (n === 0) return head + `<div class="chart-empty">暂无奶量数据</div></div>`;
@@ -4239,7 +4243,7 @@ function makeMilkTrendChart() {
     const px = xf(d.t).toFixed(1);
     const pyT = yT(d.total), pyA = yA(d.avg);
     dots += `<circle cx="${px}" cy="${pyT.toFixed(1)}" r="2" fill="#7da8e6" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
-    dots += `<circle cx="${px}" cy="${pyA.toFixed(1)}" r="2" fill="${rightColor}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
+    dots += `<circle cx="${px}" cy="${pyA.toFixed(1)}" r="2" fill="${rightLineColor}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
     if (i % hitStep !== 0 && i !== n - 1) return;
     const [ , mo, dd ] = d.ds.split('-');
     const lb = `${parseInt(mo)}/${parseInt(dd)}`;
@@ -4257,7 +4261,7 @@ function makeMilkTrendChart() {
     grid + ylabels + xlabels +
     `<g clip-path="url(#${clipId})">` +
       `<path class="dataline" d="M${pathT}" fill="none" stroke="#7da8e6" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` +
-      `<path d="M${pathA}" fill="none" stroke="${rightColor}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` +
+      `<path d="M${pathA}" fill="none" stroke="${rightLineColor}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` +
     `</g>` + dots + tip + `</svg></div>`;
 }
 function makeMilestoneTimeline() {
