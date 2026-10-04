@@ -928,6 +928,9 @@ function updateOverview(skipPush) {
     html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶:</span><span class="ov-value">暂无记录</span></div>`;
   }
   html += `<div class="overview-item"><span class="ov-label">水+奶量:</span><span class="ov-value">${Math.round(totalMilk * 1.12)} ml</span></div>`;
+  // v3.5.88 首页概览新增当日乳糖酶量（滴），口径与健康分类图表一致
+  const _lacToday = getLactaseByDate(getTodayDateStr());
+  html += `<div class="overview-item"><span class="ov-label">🍼 乳糖酶:</span><span class="ov-value">${_lacToday != null ? _lacToday : 0} 滴</span></div>`;
   html += '</div>';
 
   const achArr = computeAchievements(records);
@@ -1231,7 +1234,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.87'; // 新增乳糖酶：管理弹窗默认值(>=0整数滴,默认7)、添加弹窗喝奶活动乳糖酶字段(支持语音)、分析弹窗健康分类新增「体重变化」双轴图(左体重kg蓝实线带点刻度同体重趋势/右乳糖酶橘虚线0~8)与「大便与喝奶时间差变化」双轴图(左间隔分钟蓝实线带点/右乳糖酶橘虚线,去干预竖线); 历史乳糖酶补充(9/7及前0、9/8~9/14为8、9/15~9/27为7、9/28~10/3为6、10/4为7); index.html 缓存参数升 v3.5.87
+const APP_VERSION = 'v3.5.88'; // 首页概览+日报新增当日乳糖酶量(滴); 分析健康「乳糖酶线」去掉数据点(仅保留透明点击热区),「体重变化」左轴刻度改为该段日期体重 min*0.8~max*1.2(左线蓝实线带点); 大便次数图虚线固定为3; 分析弹窗标签页字号 12->14; 数据修复:清除10/2、10/3误注入测试记录(各1奶+1便,已写删除墓碑收敛); index.html 缓存参数升 v3.5.88
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2587,6 +2590,9 @@ function openReport() {
         const base = s ? s.totalMilk : 0;
         const mixed = Math.round(base * 1.12);
         html += `<div class="report-item"><span class="report-label">${act.icon} 喝奶（水+奶）</span><span class="report-value${isZero?' zero':''}">${mixed}ml</span></div>`;
+        // v3.5.88 日报新增当日乳糖酶量（滴），口径与健康分类图表一致
+        const _lac = getLactaseByDate(getTodayDateStr());
+        html += `<div class="report-item"><span class="report-label">${act.icon} 乳糖酶</span><span class="report-value${(!_lac) ? ' zero' : ''}">${_lac != null ? _lac : 0}滴</span></div>`;
       }
     });
     html += '</div>';
@@ -3705,6 +3711,17 @@ function makeLactaseDualChart(leftData, rightData, opts) {
     lMax = Math.ceil(base / opts.leftStep) * opts.leftStep;
     if (lMax <= lMin) lMax = lMin + opts.leftStep;
     lTicks = []; for (let v = lMin; v <= lMax + 1e-6; v += opts.leftStep) lTicks.push(Math.round(v * 10) / 10);
+  } else if (opts.leftScaleFactor) {                            // v3.5.88 体重变化：刻度 = 本段最小体重*0.8 ~ 最大体重*1.2（5 等分）
+    if (leftValid.length === 0) { lMin = 0; lMax = 1; lTicks = [0, 1]; }
+    else {
+      const dMin = Math.min(...leftValid), dMax = Math.max(...leftValid);
+      lMin = dMin * opts.leftScaleFactor.min;
+      lMax = dMax * opts.leftScaleFactor.max;
+      if (lMax <= lMin) lMax = lMin + 1;
+      lTicks = [];
+      const N = 4;
+      for (let i = 0; i <= N; i++) lTicks.push(Math.round((lMin + (lMax - lMin) * i / N) * 10) / 10);
+    }
   } else {                                                      // 自适应（如大便间隔分钟）
     if (leftValid.length === 0) { lMin = 0; lMax = 1; }
     else {
@@ -3771,7 +3788,8 @@ function makeLactaseDualChart(leftData, rightData, opts) {
     lDots += `<circle cx="${px}" cy="${py}" r="3" fill="${leftColor}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
       `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" data-cx="${px}" data-cy="${py}" onclick="chartTip(this,'${leftTipId}','${lb}','${esc(tx)}')"/>`;
   });
-  // 右线（橘色虚线带点，断开于 null，裁剪到绘图区）
+  // 右线（橘色虚线，不带可见数据点；断开于 null，裁剪到绘图区）
+  // v3.5.88 乳糖酶线仅保留透明点击热区（便于查看数值），不再绘制圆点
   let rPath = '', rDots = '', rStarted = false;
   rightData.forEach((d, i) => {
     if (d.value == null) { rStarted = false; return; }
@@ -3779,8 +3797,7 @@ function makeLactaseDualChart(leftData, rightData, opts) {
     rPath += (rStarted ? 'L' : 'M') + px + ' ' + py + ' '; rStarted = true;
     const tx = opts.rightTipText ? opts.rightTipText(d) : (rightFmt(d.value) + rightUnit);
     const lb = esc(d.label);
-    rDots += `<circle cx="${px}" cy="${py}" r="3" fill="${rightColor}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>` +
-      `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" data-cx="${px}" data-cy="${py}" onclick="chartTip(this,'${rightTipId}','${lb}','${esc(tx)}')"/>`;
+    rDots += `<circle class="chart-hit" cx="${px}" cy="${py}" r="11" fill="transparent" data-cx="${px}" data-cy="${py}" onclick="chartTip(this,'${rightTipId}','${lb}','${esc(tx)}')"/>`;
   });
   return head + `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
     `<defs><clipPath id="${clipId}"><rect x="${PL}" y="${PT}" width="${iw}" height="${ih}"/></clipPath></defs>` +
@@ -4405,7 +4422,7 @@ function openAnalysis() {
   const milkStdRows = days.map(d => getStdRow(MILK_STD, d.ds));
   const countStdRows = days.map(d => getStdRow(MILK_COUNT_STD, d.ds));
   const sleepStdRows = days.map(d => getStdRow(SLEEP_STD, d.ds));
-  const poopStdRows = days.map(d => getStdRow(POOP_STD, d.ds));
+  // v3.5.88 大便次数图虚线固定为 3，不再按月龄取 POOP_STD（poopStdRows 已移除）
   // ===== 分析弹窗分区标签页（v3.5.81）：吃睡 / 健康 / 成长，样式与首页分类一致 =====
   html += `<div class="category-bar" id="analysisTabBar">` +
     `<div class="cat-tag active" data-tab="feed" onclick="switchAnalysisTab('feed')"><span class="cat-icon">🍼</span><span class="cat-label">吃睡</span></div>` +
@@ -4421,7 +4438,8 @@ function openAnalysis() {
   html += `</div>`;
   // —— 健康：大便次数 + 大便与喝奶时间差(双轴) + 体重变化(双轴) ——
   html += `<div class="tab-panel" data-panel="health" style="display:none">`;
-  html += makeBarChart(poopData, { title: '💩 大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopStdRows.map(r => r.max) }] });
+  // v3.5.88 大便次数图虚线固定为 3（原按当月龄 POOP_STD.max，5月龄为7）
+  html += makeBarChart(poopData, { title: '💩 大便次数（近15天）', unit: '次', color: '#7da8e6', tickStep: 1, tipText: d => `${d.value}次 · ${(d.statuses||[]).join('/')}`, stdLines: [{ values: poopData.map(() => 3) }] });
   // v3.5.87 大便与喝奶时间差变化（截止昨日）：左=间隔分钟(蓝实线带点)，右=乳糖酶量(橘虚线)；去掉干预竖线
   const lactaseGap = poopGapPts.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: getLactaseByDate(p.ds) }));
   html += makeLactaseDualChart(poopGapPts, lactaseGap, {
@@ -4439,7 +4457,7 @@ function openAnalysis() {
   html += makeLactaseDualChart(weightDualLeft, weightDualRight, {
     title: '⚖️ 体重变化',
     leftLabel: '体重', leftUnit: 'kg', leftColor: '#7da8e6', leftFmt: v => v.toFixed(1),
-    leftMin: 3, leftStep: 1,
+    leftScaleFactor: { min: 0.8, max: 1.2 },   // v3.5.88 左轴刻度 = 本段最小体重*0.8 ~ 最大体重*1.2
     rightLabel: '乳糖酶', rightUnit: '滴', rightColor: '#ff9f43', rightFmt: v => String(v),
     xTickMode: 'keyDates',
     leftTipText: d => `${d.value}kg`,
