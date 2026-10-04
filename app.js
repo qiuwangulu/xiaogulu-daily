@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.92'; // 分析弹窗三图(奶量趋势/大便时间差/体重变化)右侧折线恢复橙色#ff9f43(图例色块同步),右侧轴刻度与文字仍为主题色(深色模式白/浅色模式黑); index.html 缓存参数升 v3.5.92
+const APP_VERSION = 'v3.5.93'; // 分析弹窗三图(奶量趋势/大便时间差/体重变化)左侧轴刻度与文字改为主题色(深色模式白/浅色模式黑),左折线仍为蓝色#7da8e6; 至此左右两侧轴文字均为主题色、折线分别为蓝/橙; index.html 缓存参数升 v3.5.93
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3692,6 +3692,9 @@ function makeLactaseDualChart(leftData, rightData, opts) {
   const title = opts.title;
   const leftUnit = opts.leftUnit || '', rightUnit = opts.rightUnit || '滴';
   const leftColor = opts.leftColor || '#7da8e6';
+  // v3.5.93 左侧轴（刻度+文字）改为主题色：深色模式白色、浅色模式黑色；左折线仍为蓝色 leftColor
+  // 与右侧轴同理（rightColor 为轴文字色、rightLineColor 为折线色）
+  const leftAxisColor = document.body.classList.contains('theme-day') ? '#111111' : '#ffffff';
   // v3.5.91 右侧轴（刻度+文字）改为主题色：深色模式白色、浅色模式黑色
   // 与 applyTheme 的 body.theme-day 判定保持一致（图表在弹窗打开时渲染，取当前主题）
   const rightColor = document.body.classList.contains('theme-day') ? '#111111' : '#ffffff';
@@ -3755,19 +3758,19 @@ function makeLactaseDualChart(leftData, rightData, opts) {
   const mkMtip = id => `<g id="${id}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.45)" stroke-width="0.5"/><text class="tiptext" font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
   const leftTipId = 'mtip' + (++_chartTipSeq);
   const rightTipId = 'mtip' + (++_chartTipSeq);
-  // 网格线 + 左轴刻度（蓝）
+  // 网格线 + 左轴刻度（轴文字为leftAxisColor 主题色；对应折线为 leftColor 蓝）
   let grid = '', ylabels = '';
   lTicks.forEach(v => {
     const gy = yL(v).toFixed(1);
     grid += `<line class="gridln" x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
-    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${leftColor}" font-size="9" text-anchor="end">${leftFmt(Math.round(v * 10) / 10)}</text>`;
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${leftAxisColor}" font-size="9" text-anchor="end">${leftFmt(Math.round(v * 10) / 10)}</text>`;
   });
-  // 右轴刻度（橘）
+  // 右轴刻度（轴文字为rightColor 主题色；对应折线为 rightLineColor 橙）
   rTicks.forEach(v => {
     const gy = yR(v).toFixed(1);
     ylabels += `<text x="${W - PR + 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${rightColor}" font-size="9" text-anchor="start">${rightFmt(v)}</text>`;
   });
-  ylabels += `<text x="${PL - 5}" y="13" fill="${leftColor}" font-size="8.5" font-weight="bold" text-anchor="end">${leftUnit}</text>`;
+  ylabels += `<text x="${PL - 5}" y="13" fill="${leftAxisColor}" font-size="8.5" font-weight="bold" text-anchor="end">${leftUnit}</text>`;
   ylabels += `<text x="${W - PR + 5}" y="13" fill="${rightColor}" font-size="8.5" font-weight="bold" text-anchor="start">${rightUnit}</text>`;
   // x 轴标签（keyDates 模式：首末 + 每月25号，按时间轴位置渲染，不依赖数据点）
   let xlabels = '';
@@ -4185,6 +4188,8 @@ function milkAxisRange(minV, maxV, loF, hiF) {
 }
 function makeMilkTrendChart() {
   const data = collectMilkTrendData();
+  // v3.5.93 左侧轴（刻度+总量ml）改为主题色：深色模式白色、浅色模式黑色；总奶量折线仍为蓝色 #7da8e6
+  const leftAxisColor = document.body.classList.contains('theme-day') ? '#111111' : '#ffffff';
   // v3.5.91 右侧轴（刻度+文字）改为主题色：深色模式白色、浅色模式黑色
   const rightColor = document.body.classList.contains('theme-day') ? '#111111' : '#ffffff';
   // v3.5.92 右侧折线与数据点单独用橙色（轴文字仍为主题色）
@@ -4214,10 +4219,10 @@ function makeMilkTrendChart() {
   pcts.forEach(p => {
     const gy = (PT + ih - ih * p).toFixed(1);
     grid += `<line class="gridln" x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
-    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="#fff" font-size="9" text-anchor="end">${Math.round(rT.min + (rT.max - rT.min) * p)}</text>`;
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${leftAxisColor}" font-size="9" text-anchor="end">${Math.round(rT.min + (rT.max - rT.min) * p)}</text>`;
     ylabels += `<text x="${W - PR + 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${rightColor}" font-size="9" text-anchor="start">${Math.round(rA.min + (rA.max - rA.min) * p)}</text>`;
   });
-  ylabels += `<text x="${PL - 5}" y="13" fill="#fff" font-size="8.5" font-weight="bold" text-anchor="end">总量ml</text>`;
+  ylabels += `<text x="${PL - 5}" y="13" fill="${leftAxisColor}" font-size="8.5" font-weight="bold" text-anchor="end">总量ml</text>`;
   ylabels += `<text x="${W - PR + 5}" y="13" fill="${rightColor}" font-size="8.5" font-weight="bold" text-anchor="start">单次ml</text>`;
 
   // 横轴日期标签：首末 + 抽稀，最多约 7 个
