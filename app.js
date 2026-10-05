@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.100'; // ①AI 里程碑归类:DeepSeek 默认模型 deepseek-chat 已退役→改为 deepseek-flash; ②服务商下拉框底色改为与程序内其他 select(.add-inputs select)一致(深色 rgba(0,0,0,0.3)/浅色 #ffffff+蓝边,移除原内联 #2d3436); index.html 缓存参数升 v3.5.100
+const APP_VERSION = 'v3.5.101'; // ①DeepSeek 默认模型由 deepseek-flash 修正为官方当前名 deepseek-v4-flash,并在设置模型名字段默认显示(切换服务商也同步默认); ②AI 归类 API Key 改为「永不显示明文」(同订阅推送:有值显示掩码XF_MASK,勾选显示明文也只显示掩码;聚焦清空/失焦恢复;保存时掩码不覆盖真密钥); index.html 缓存参数升 v3.5.101
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3070,27 +3070,57 @@ function saveManage() { saveHiddenActivities(); renderCategoryBar(); renderCards
 function loadAITagUI() {
   let cfg = {}; try { cfg = JSON.parse(localStorage.getItem('ai_tag_cfg') || '{}'); } catch {}
   const prov = document.getElementById('aiTagProvider'); if (prov) prov.value = cfg.provider || 'deepseek';
-  const keyEl = document.getElementById('aiTagKey'); if (keyEl) keyEl.value = cfg.apiKey || '';
-  const modelEl = document.getElementById('aiTagModel'); if (modelEl) modelEl.value = cfg.model || '';
+  // v3.5.101 模型名默认显示服务商默认值（如 DeepSeek→deepseek-v4-flash），不再留空
+  const modelEl = document.getElementById('aiTagModel');
+  if (modelEl) modelEl.value = (cfg.model && cfg.model.trim()) ? cfg.model.trim() : ((LLM_PROVIDERS[prov.value] || {}).model || '');
   const baseEl = document.getElementById('aiTagBase'); if (baseEl) baseEl.value = cfg.base || '';
   if (prov) onAITagProviderChange();
+  // v3.5.101 API Key 永不显示明文（同订阅推送规则）：有值则显示掩码，勾选「显示明文」也只显示掩码
+  const keyEl = document.getElementById('aiTagKey');
+  const see = document.getElementById('aiTagSee');
+  if (keyEl) {
+    if (see) see.checked = false;
+    keyEl.type = 'password';
+    keyEl.value = cfg.apiKey ? XF_MASK : '';
+    bindAITagKeyMaskEvents();
+  }
   const hint = document.getElementById('aiTagHint'); if (hint) hint.textContent = '';
 }
 function onAITagProviderChange() {
   const prov = document.getElementById('aiTagProvider');
   const baseRow = document.getElementById('aiTagBaseRow');
   if (prov && baseRow) baseRow.style.display = (prov.value === 'custom') ? 'flex' : 'none';
+  // v3.5.101 切换服务商时同步把模型名默认成该服务商的默认值（用户未自定义时）
+  const modelEl = document.getElementById('aiTagModel');
+  if (modelEl && (!modelEl.value || !modelEl.value.trim())) {
+    modelEl.value = ((LLM_PROVIDERS[prov.value] || {}).model || '');
+  }
+}
+function bindAITagKeyMaskEvents() {
+  const el = document.getElementById('aiTagKey');
+  if (!el || el._maskBound) return; el._maskBound = true;
+  // 聚焦时若显示的是掩码则清空，方便输入新密钥；失焦若为空则恢复掩码显示
+  el.addEventListener('focus', function() { if (this.value === XF_MASK) this.value = ''; });
+  el.addEventListener('blur', function() {
+    const saved = (() => { try { return JSON.parse(localStorage.getItem('ai_tag_cfg') || '{}').apiKey; } catch { return ''; } })();
+    if (!this.value.trim()) this.value = saved ? XF_MASK : '';
+  });
 }
 function toggleAITagSee() {
+  // v3.5.101 即使勾选「显示明文」也只切换输入框类型，但值始终是掩码（同订阅推送），真实密钥不落地显示
   const ck = document.getElementById('aiTagSee');
   const el = document.getElementById('aiTagKey');
   if (el && ck) el.type = ck.checked ? 'text' : 'password';
 }
 function saveAITagConfig() {
   const prov = document.getElementById('aiTagProvider').value;
-  const apiKey = document.getElementById('aiTagKey').value.trim();
+  let apiKey = document.getElementById('aiTagKey').value.trim();
   const model = document.getElementById('aiTagModel').value.trim();
   const base = document.getElementById('aiTagBase').value.trim();
+  // v3.5.101 若输入框仍是掩码（用户未改密钥），保留已保存的真实密钥，避免被掩码覆盖
+  if (apiKey === XF_MASK) {
+    try { apiKey = JSON.parse(localStorage.getItem('ai_tag_cfg') || '{}').apiKey || ''; } catch { apiKey = ''; }
+  }
   if (!apiKey) { showToast('请填写 API Key'); return; }
   if (prov === 'custom' && !base) { showToast('自定义需填写接口地址'); return; }
   localStorage.setItem('ai_tag_cfg', JSON.stringify({ provider: prov, apiKey, model, base }));
@@ -4129,7 +4159,7 @@ function classifyMilestone(text) {
 // ============ v3.5.99 里程碑大模型智能归类（用户自带密钥，本地直连，失败/未配置回退规则） ============
 // 服务商：DeepSeek / 通义千问 已验证浏览器可直连（CORS 放行）；OpenAI 浏览器直连被 CORS 拦截，需走「自定义」+ 代理
 const LLM_PROVIDERS = {
-  deepseek: { name: 'DeepSeek', base: 'https://api.deepseek.com/v1/chat/completions', model: 'deepseek-flash' },
+  deepseek: { name: 'DeepSeek', base: 'https://api.deepseek.com/v1/chat/completions', model: 'deepseek-v4-flash' },
   qwen:     { name: '通义千问', base: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-plus' },
   custom:   { name: '自定义',   base: '', model: '' }
 };
