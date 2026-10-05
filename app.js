@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.94'; // 浅色模式下大便时间差/体重变化左线加 dataline/chart-dot class,与奶量趋势蓝色统一为#0984e3; 管理弹窗新增「设置」「活动」两分类(设置=只读模式/云端同步/语音识别/订阅推送,活动=活动开关+各项选项),大运动/精细动作/辅食选项区移到对应活动开关的下一行; index.html 缓存参数升 v3.5.94
+const APP_VERSION = 'v3.5.95'; // 体重变化图横轴改为「大便间隔日 ∪ 该时间范围内的体重记录日」,修复"当天没大便时录的体重在图上丢点"(如 9/27 的 6.7kg); index.html 缓存参数升 v3.5.95
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3716,6 +3716,34 @@ function weightRecordedOn(ds) {
   const rec = getBodyHistory().find(x => x.d === ds);
   return (rec && rec.w != null) ? rec.w : null;
 }
+// v3.5.95 体重变化图的横轴日期序列
+//   背景：该图原先完全跟随「大便与喝奶时间差」的日期序列取点，导致「当天没有大便」的日子
+//         即使录了体重（例如 9/27 量得 6.7kg）也不会出现在图上。
+//   规则：以大便间隔序列为基准（保持与上图同横轴、便于上下对照），再把落在该时间范围内、
+//         录有体重的日期并进来。范围上界放宽到「昨日」（与图标题"截止昨日"口径一致），
+//         这样“最后一次大便之后才量的体重”也不会丢点；完全没有大便记录时退化为
+//         「全部体重点」，避免整图空白。
+function buildWeightDualAxis(base) {
+  const list = Array.isArray(base) ? base : [];
+  const mk = ds => { const p = String(ds).split('-'); return { ds: ds, label: `${parseInt(p[1], 10)}/${parseInt(p[2], 10)}`, t: Date.parse(ds) }; };
+  const map = new Map();
+  list.forEach(p => map.set(p.t, { ds: p.ds, label: p.label, t: p.t }));
+  const ts = list.map(p => p.t).filter(t => !isNaN(t));
+  const lo = ts.length ? Math.min(...ts) : null;
+  let hi = ts.length ? Math.max(...ts) : null;
+  if (hi != null) {                                        // 右界至少到昨日（与图标题口径一致）
+    const todayTs = Date.parse(getTodayDateStr());
+    if (!isNaN(todayTs)) hi = Math.max(hi, todayTs - 86400000);
+  }
+  getBodyHistory().forEach(x => {
+    if (!x || !x.d || x.w == null) return;                 // 只取真正录了体重的日期
+    const t = Date.parse(x.d);
+    if (isNaN(t)) return;
+    if (lo != null && (t < lo || t > hi)) return;          // 限定在图示时间范围内，不改变横轴跨度
+    if (!map.has(t)) { const p = mk(x.d); if (!isNaN(p.t)) map.set(p.t, p); }
+  });
+  return Array.from(map.values()).sort((a, b) => a.t - b.t);
+}
 // 双纵轴折线图：左轴=左侧指标（蓝实线带点），右轴=乳糖酶量滴（橘色虚线，固定 0~8 step2）
 // 用于「体重变化」与「大便与喝奶时间差变化」两张图（两条线共用同一横轴日期域，便于上下对照）
 // leftData / rightData：与 makeLineChart 同构的 { ds, label, value, t } 数组，value 为 null 时该线在该点断开
@@ -4503,8 +4531,10 @@ function openAnalysis() {
   });
   // v3.5.87 体重变化（与上方大便图同横轴，便于上下对照）：左=体重kg(蓝实线带点，刻度同体重趋势)，右=乳糖酶量(橘虚线)
   //         最新日期若体重为空，左线自然断开（不画线）
-  const weightDualLeft = poopGapPts.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: weightRecordedOn(p.ds) }));
-  const weightDualRight = poopGapPts.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: getLactaseByDate(p.ds) }));
+  // v3.5.95 横轴改为「大便间隔日 ∪ 该范围内的体重记录日」：修掉"没大便那天量的体重在图上消失"的问题
+  const weightAxis = buildWeightDualAxis(poopGapPts);
+  const weightDualLeft = weightAxis.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: weightRecordedOn(p.ds) }));
+  const weightDualRight = weightAxis.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: getLactaseByDate(p.ds) }));
   html += makeLactaseDualChart(weightDualLeft, weightDualRight, {
     title: '⚖️ 体重变化（截止昨日）',
     leftLabel: '体重', leftUnit: 'kg', leftColor: '#7da8e6', leftFmt: v => v.toFixed(1),
