@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.99'; // 里程碑新增大模型智能归类:设置面板新增「AI 里程碑归类」(服务商DeepSeek/通义/自定义+APIKey+模型+测试),密钥仅存localStorage不落云端;openAnalysis规则渲染后异步用LLM回写分类/短标签(按provider+model+文本缓存,失败/无配置回退规则); index.html 缓存参数升 v3.5.99
+const APP_VERSION = 'v3.5.100'; // ①AI 里程碑归类:DeepSeek 默认模型 deepseek-chat 已退役→改为 deepseek-flash; ②服务商下拉框底色改为与程序内其他 select(.add-inputs select)一致(深色 rgba(0,0,0,0.3)/浅色 #ffffff+蓝边,移除原内联 #2d3436); index.html 缓存参数升 v3.5.100
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4129,7 +4129,7 @@ function classifyMilestone(text) {
 // ============ v3.5.99 里程碑大模型智能归类（用户自带密钥，本地直连，失败/未配置回退规则） ============
 // 服务商：DeepSeek / 通义千问 已验证浏览器可直连（CORS 放行）；OpenAI 浏览器直连被 CORS 拦截，需走「自定义」+ 代理
 const LLM_PROVIDERS = {
-  deepseek: { name: 'DeepSeek', base: 'https://api.deepseek.com/v1/chat/completions', model: 'deepseek-chat' },
+  deepseek: { name: 'DeepSeek', base: 'https://api.deepseek.com/v1/chat/completions', model: 'deepseek-flash' },
   qwen:     { name: '通义千问', base: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-plus' },
   custom:   { name: '自定义',   base: '', model: '' }
 };
