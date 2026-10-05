@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.97'; // 图例名称调整:大便时间差蓝标"间隔分钟"→"时间差",大便时间差与体重变化橘标"乳糖酶"→"乳糖酶量"; index.html 缓存参数升 v3.5.97
+const APP_VERSION = 'v3.5.98'; // ①编辑记录弹窗标题去粗体、字号14; ②成长里程碑新增否定词识别(MS_NEG_RE/_msIdx),"不尖叫""没发烧""不会翻身"等被否定的关键词不再当作达成里程碑; index.html 缓存参数升 v3.5.98
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4024,6 +4024,21 @@ const MILESTONE_BADGE_GROUPS = [
 //    强词命中优先，没有强词才看弱词；都没有则回退为截取原文。
 const MS_SIMPLIFY_MIN = 2;
 const MS_SIMPLIFY_MAX = 8;
+// v3.5.97 否定词：关键词若紧接在否定词之后（如「不尖叫」「没发烧」「不会翻身」），是在描述"没有发生"，
+//   不应作为该行为的达成里程碑（否则「半夜不尖叫、拉屎1天就恢复正常了」会被识别成「尖叫」）。
+//   否定词后允许跟一个能愿/副词（会/能/要/再/太…），以覆盖「不会翻身」「还没学会站」等写法。
+const MS_NEG_RE = /(?:不|没|未|别|无|非|莫|勿)(?:会|能|要|想|肯|敢|再|有|太|算|得|是|怎么)?$/;
+// 关键词在文本中第一处「非否定」出现的位置；全部被否定则返回 -1
+function _msIdx(text, kw) {
+  let from = 0;
+  while (true) {
+    const i = text.indexOf(kw, from);
+    if (i === -1) return -1;
+    const pre = text.slice(Math.max(0, i - 4), i);   // 看关键词前最多 4 个字是否以否定结构结尾
+    if (!MS_NEG_RE.test(pre)) return i;
+    from = i + 1;
+  }
+}
 function simplifyMilestone(text, domain) {
   const t = String(text || '');
   const len = t.length || 1;
@@ -4031,7 +4046,7 @@ function simplifyMilestone(text, domain) {
   const scan = list => {
     for (const kw of (list || [])) {
       if (kw.length < MS_SIMPLIFY_MIN) continue;
-      const idx = t.indexOf(kw);
+      const idx = _msIdx(t, kw);
       if (idx === -1) continue;
       const key = [(idx / len) < 0.5 ? 0 : 1, -kw.length];   // 前半句优先，其次取长
       if (!bestKey || key[0] < bestKey[0] || (key[0] === bestKey[0] && key[1] < bestKey[1])) {
@@ -4052,7 +4067,7 @@ function _msDomainScore(text, list, factor) {
   const len = text.length || 1;
   let s = 0;
   for (const kw of (list || [])) {
-    const idx = text.indexOf(kw);
+    const idx = _msIdx(text, kw);                 // v3.5.97 被否定的关键词（如「不尖叫」）不计分
     if (idx === -1) continue;
     const posW = (idx / len) < 0.5 ? 2 : 1;      // 前半句通常是主题，权重翻倍
     s += kw.length * kw.length * posW * factor;
