@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.95'; // 体重变化图横轴改为「大便间隔日 ∪ 该时间范围内的体重记录日」,修复"当天没大便时录的体重在图上丢点"(如 9/27 的 6.7kg); index.html 缓存参数升 v3.5.95
+const APP_VERSION = 'v3.5.96'; // 主题蓝统一：新增 chartBlue() 让图例圆点与图线同源(深色#7da8e6/浅色#0984e3),修复"大便时间差/体重变化/奶量趋势/奶量及次数"在浅色模式下图例蓝(#7da8e6)与图线蓝(#0984e3)不一致; index.html 缓存参数升 v3.5.96
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3744,13 +3744,17 @@ function buildWeightDualAxis(base) {
   });
   return Array.from(map.values()).sort((a, b) => a.t - b.t);
 }
+// v3.5.95 主题蓝：深色模式浅蓝 #7da8e6（深底可读），浅色模式深蓝 #0984e3（白底可读）。
+//   图线（.dataline/.chart-dot，浅色模式由 CSS 覆盖为 #0984e3）与图例圆点必须同源，
+//   否则浅色模式下图例蓝(#7da8e6)与图线蓝(#0984e3)不一致。
+function chartBlue() { return document.body.classList.contains('theme-day') ? '#0984e3' : '#7da8e6'; }
 // 双纵轴折线图：左轴=左侧指标（蓝实线带点），右轴=乳糖酶量滴（橘色虚线，固定 0~8 step2）
 // 用于「体重变化」与「大便与喝奶时间差变化」两张图（两条线共用同一横轴日期域，便于上下对照）
 // leftData / rightData：与 makeLineChart 同构的 { ds, label, value, t } 数组，value 为 null 时该线在该点断开
 function makeLactaseDualChart(leftData, rightData, opts) {
   const title = opts.title;
   const leftUnit = opts.leftUnit || '', rightUnit = opts.rightUnit || '滴';
-  const leftColor = opts.leftColor || '#7da8e6';
+  const leftColor = opts.leftColor || chartBlue();
   // v3.5.93 左侧轴（刻度+文字）改为主题色：深色模式白色、浅色模式黑色；左折线仍为蓝色 leftColor
   // 与右侧轴同理（rightColor 为轴文字色、rightLineColor 为折线色）
   const leftAxisColor = document.body.classList.contains('theme-day') ? '#111111' : '#ffffff';
@@ -3886,7 +3890,7 @@ function makeLactaseDualChart(leftData, rightData, opts) {
 function makeMilkCountComboChart(milkData, countData, milkStdRows) {
   const title = '🍼 奶量及次数（水+奶，近15天）';
   const legend = `<span style="float:right;font-size:10px;color:#b2bec3;margin-right:4px;">` +
-    `<span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#7da8e6;margin-right:2px;vertical-align:middle;"></span>奶量 ` +
+    `<span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:${chartBlue()};margin-right:2px;vertical-align:middle;"></span>奶量 ` +
     `<span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#ff9f43;margin-right:2px;vertical-align:middle;"></span>次数</span>`;
   const head = `<div class="chart-card"><div class="chart-title">${title}${legend}</div>`;
   const hasMilk = milkData.some(d => d.value != null);
@@ -4254,7 +4258,7 @@ function makeMilkTrendChart() {
   // v3.5.92 右侧折线与数据点单独用橙色（轴文字仍为主题色）
   const rightLineColor = '#ff9f43';
   const legend = `<span style="float:right;font-size:10px;color:#b2bec3;margin-right:4px;">` +
-    `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#7da8e6;margin-right:2px;vertical-align:middle;"></span>总奶量 ` +
+    `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${chartBlue()};margin-right:2px;vertical-align:middle;"></span>总奶量 ` +
     `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${rightLineColor};margin-right:2px;vertical-align:middle;"></span>单次平均</span>`;
   const head = `<div class="chart-card"><div class="chart-title">🍼 奶量趋势（截至昨日）${legend}</div>`;
   const n = data.length;
@@ -4306,7 +4310,7 @@ function makeMilkTrendChart() {
   data.forEach((d, i) => {
     const px = xf(d.t).toFixed(1);
     const pyT = yT(d.total), pyA = yA(d.avg);
-    dots += `<circle cx="${px}" cy="${pyT.toFixed(1)}" r="2" fill="#7da8e6" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
+    dots += `<circle cx="${px}" cy="${pyT.toFixed(1)}" r="2" fill="${chartBlue()}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
     dots += `<circle cx="${px}" cy="${pyA.toFixed(1)}" r="2" fill="${rightLineColor}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
     if (i % hitStep !== 0 && i !== n - 1) return;
     const [ , mo, dd ] = d.ds.split('-');
@@ -4324,7 +4328,7 @@ function makeMilkTrendChart() {
     `<defs><clipPath id="${clipId}"><rect x="${PL}" y="${PT}" width="${iw}" height="${ih}"/></clipPath></defs>` +
     grid + ylabels + xlabels +
     `<g clip-path="url(#${clipId})">` +
-      `<path class="dataline" d="M${pathT}" fill="none" stroke="#7da8e6" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` +
+      `<path class="dataline" d="M${pathT}" fill="none" stroke="${chartBlue()}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` +
       `<path d="M${pathA}" fill="none" stroke="${rightLineColor}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` +
     `</g>` + dots + tip + `</svg></div>`;
 }
@@ -4523,7 +4527,7 @@ function openAnalysis() {
   const lactaseGap = poopGapPts.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: getLactaseByDate(p.ds) }));
   html += makeLactaseDualChart(poopGapPts, lactaseGap, {
     title: '💩 大便与喝奶时间差变化（截止昨日）',
-    leftLabel: '间隔分钟', leftUnit: '分钟', leftColor: '#7da8e6', leftFmt: v => String(Math.round(v)),
+    leftLabel: '间隔分钟', leftUnit: '分钟', leftFmt: v => String(Math.round(v)),
     rightLabel: '乳糖酶', rightUnit: '滴', rightFmt: v => String(v),
     xTickMode: 'keyDates',
     leftTipText: d => (d.count > 1 ? `${d.value}分钟 · ${d.count}次平均` : `${d.value}分钟`),
@@ -4537,7 +4541,7 @@ function openAnalysis() {
   const weightDualRight = weightAxis.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: getLactaseByDate(p.ds) }));
   html += makeLactaseDualChart(weightDualLeft, weightDualRight, {
     title: '⚖️ 体重变化（截止昨日）',
-    leftLabel: '体重', leftUnit: 'kg', leftColor: '#7da8e6', leftFmt: v => v.toFixed(1),
+    leftLabel: '体重', leftUnit: 'kg', leftFmt: v => v.toFixed(1),
     leftScaleFactor: { min: 0.9, max: 1.1 },   // v3.5.91 左轴刻度 = 本段最小体重*0.9 ~ 最大体重*1.1
     leftConnectNulls: true,                     // v3.5.90 体重按折线连接各测量点（仅测体重的几天有值，跨空档连线），保留数据点
     rightLabel: '乳糖酶', rightUnit: '滴', rightFmt: v => String(v),
