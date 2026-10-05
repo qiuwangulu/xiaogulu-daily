@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.102'; // ①确认 DeepSeek 默认模型名 deepseek-v4-flash(设置模型名字段默认显示,切换服务商同步默认); ②AI 归类 DeepSeek 密钥改为「家庭云端加密同步」(AES-GCM/PBKDF2 同记录加密存 family_config._ai_deepseek_key),启动拉取解密为默认密钥,设置 API Key 显掩码且勾选显示明文也只显掩码,本机可填密钥覆盖; index.html 缓存参数升 v3.5.102
+const APP_VERSION = 'v3.5.103'; // 修复语音速记确认报错(ReferenceError: i is not defined):confirmVoiceAdd 内喝奶分支读取乳糖酶输入框 id 误用未定义的 i(v3.5.87 加乳糖酶时漏改),应为当前 forEach 的下标 viIdx; index.html 缓存参数升 v3.5.103
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2498,7 +2498,7 @@ function confirmVoiceAdd() {
     const act = ACTIVITIES.find(a => a.id === it.actId); if (!act) return;
     const p = it.params;
     const record = { type: it.actId, name: act.name, time: timeStr, recTime: it.recTime, timestamp: ts, note: p.note || '', updatedAt: Date.now() };
-    if (act.type === 'milk') { record.milkTime = it.recTime; record.milkAmount = Math.max(1, Math.round(p.milkAmount || getDefaultMilkAmount())); const lel = document.getElementById('vilact_' + i); const _lv = lel && lel.value !== '' && !isNaN(parseFloat(lel.value)) ? parseFloat(lel.value) : (p.lactase != null ? p.lactase : null); record.lactase = (_lv != null && _lv >= 0) ? Math.max(0, Math.round(_lv)) : getDefaultLactase(); }
+    if (act.type === 'milk') { record.milkTime = it.recTime; record.milkAmount = Math.max(1, Math.round(p.milkAmount || getDefaultMilkAmount())); const lel = document.getElementById('vilact_' + viIdx); const _lv = lel && lel.value !== '' && !isNaN(parseFloat(lel.value)) ? parseFloat(lel.value) : (p.lactase != null ? p.lactase : null); record.lactase = (_lv != null && _lv >= 0) ? Math.max(0, Math.round(_lv)) : getDefaultLactase(); }
     else if (act.type === 'sleep') { record.sleepStartTime = it.recTime; record.duration = Math.max(0, Math.round(p.duration || 0)); }
     else if (act.type === 'drinkWater') { record.drinkTime = it.recTime; }
     else if (act.type === 'poop') { record.poopTime = it.recTime; record.poopStatus = p.poopStatus || '正常'; }
