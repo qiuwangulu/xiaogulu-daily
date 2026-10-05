@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.96'; // 主题蓝统一：新增 chartBlue() 让图例圆点与图线同源(深色#7da8e6/浅色#0984e3),修复"大便时间差/体重变化/奶量趋势/奶量及次数"在浅色模式下图例蓝(#7da8e6)与图线蓝(#0984e3)不一致; index.html 缓存参数升 v3.5.96
+const APP_VERSION = 'v3.5.97'; // 图例名称调整:大便时间差蓝标"间隔分钟"→"时间差",大便时间差与体重变化橘标"乳糖酶"→"乳糖酶量"; index.html 缓存参数升 v3.5.97
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4527,8 +4527,8 @@ function openAnalysis() {
   const lactaseGap = poopGapPts.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: getLactaseByDate(p.ds) }));
   html += makeLactaseDualChart(poopGapPts, lactaseGap, {
     title: '💩 大便与喝奶时间差变化（截止昨日）',
-    leftLabel: '间隔分钟', leftUnit: '分钟', leftFmt: v => String(Math.round(v)),
-    rightLabel: '乳糖酶', rightUnit: '滴', rightFmt: v => String(v),
+    leftLabel: '时间差', leftUnit: '分钟', leftFmt: v => String(Math.round(v)),
+    rightLabel: '乳糖酶量', rightUnit: '滴', rightFmt: v => String(v),
     xTickMode: 'keyDates',
     leftTipText: d => (d.count > 1 ? `${d.value}分钟 · ${d.count}次平均` : `${d.value}分钟`),
     rightTipText: d => `${d.value}滴`
@@ -4544,7 +4544,7 @@ function openAnalysis() {
     leftLabel: '体重', leftUnit: 'kg', leftFmt: v => v.toFixed(1),
     leftScaleFactor: { min: 0.9, max: 1.1 },   // v3.5.91 左轴刻度 = 本段最小体重*0.9 ~ 最大体重*1.1
     leftConnectNulls: true,                     // v3.5.90 体重按折线连接各测量点（仅测体重的几天有值，跨空档连线），保留数据点
-    rightLabel: '乳糖酶', rightUnit: '滴', rightFmt: v => String(v),
+    rightLabel: '乳糖酶量', rightUnit: '滴', rightFmt: v => String(v),
     xTickMode: 'keyDates',
     leftTipText: d => `${d.value}kg`,
     rightTipText: d => `${d.value}滴`
