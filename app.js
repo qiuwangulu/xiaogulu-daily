@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.98'; // ①编辑记录弹窗标题去粗体、字号14; ②成长里程碑新增否定词识别(MS_NEG_RE/_msIdx),"不尖叫""没发烧""不会翻身"等被否定的关键词不再当作达成里程碑; index.html 缓存参数升 v3.5.98
+const APP_VERSION = 'v3.5.99'; // 里程碑新增大模型智能归类:设置面板新增「AI 里程碑归类」(服务商DeepSeek/通义/自定义+APIKey+模型+测试),密钥仅存localStorage不落云端;openAnalysis规则渲染后异步用LLM回写分类/短标签(按provider+model+文本缓存,失败/无配置回退规则); index.html 缓存参数升 v3.5.99
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2914,6 +2914,7 @@ function openManage() {
   loadPushTopicUI();
   loadPushSenderUI();
   loadXfyunConfigUI();
+  loadAITagUI();
   updateReadOnlySlider();
   showModal('manageModal');
 }
@@ -3065,6 +3066,46 @@ function doResetCustomOptions() {
   showToast('已恢复默认选项');
 }
 function saveManage() { saveHiddenActivities(); renderCategoryBar(); renderCards(); hideModal('manageModal'); showToast('已保存'); }
+// v3.5.99 AI 里程碑归类配置（用户自带密钥，localStorage 设备级，不落云端）
+function loadAITagUI() {
+  let cfg = {}; try { cfg = JSON.parse(localStorage.getItem('ai_tag_cfg') || '{}'); } catch {}
+  const prov = document.getElementById('aiTagProvider'); if (prov) prov.value = cfg.provider || 'deepseek';
+  const keyEl = document.getElementById('aiTagKey'); if (keyEl) keyEl.value = cfg.apiKey || '';
+  const modelEl = document.getElementById('aiTagModel'); if (modelEl) modelEl.value = cfg.model || '';
+  const baseEl = document.getElementById('aiTagBase'); if (baseEl) baseEl.value = cfg.base || '';
+  if (prov) onAITagProviderChange();
+  const hint = document.getElementById('aiTagHint'); if (hint) hint.textContent = '';
+}
+function onAITagProviderChange() {
+  const prov = document.getElementById('aiTagProvider');
+  const baseRow = document.getElementById('aiTagBaseRow');
+  if (prov && baseRow) baseRow.style.display = (prov.value === 'custom') ? 'flex' : 'none';
+}
+function toggleAITagSee() {
+  const ck = document.getElementById('aiTagSee');
+  const el = document.getElementById('aiTagKey');
+  if (el && ck) el.type = ck.checked ? 'text' : 'password';
+}
+function saveAITagConfig() {
+  const prov = document.getElementById('aiTagProvider').value;
+  const apiKey = document.getElementById('aiTagKey').value.trim();
+  const model = document.getElementById('aiTagModel').value.trim();
+  const base = document.getElementById('aiTagBase').value.trim();
+  if (!apiKey) { showToast('请填写 API Key'); return; }
+  if (prov === 'custom' && !base) { showToast('自定义需填写接口地址'); return; }
+  localStorage.setItem('ai_tag_cfg', JSON.stringify({ provider: prov, apiKey, model, base }));
+  showToast('已保存 AI 归类配置');
+}
+async function testAITagConfig() {
+  const cfg = getAITagConfig();
+  const hint = document.getElementById('aiTagHint');
+  if (!cfg) { if (hint) hint.textContent = '请先填写并保存 API Key'; return; }
+  if (hint) hint.textContent = '测试中…';
+  const r = await classifyMilestoneLLM('宝宝今天第一次自己翻身了，好开心', cfg);
+  if (hint) hint.textContent = r
+    ? ('✓ 返回：' + (r.label || '—') + '（' + msDomainById(r.domainId).name + '）')
+    : '✗ 调用失败（检查密钥 / 网络 / CORS；OpenAI 需走自定义+代理）';
+}
 
 /* ==================== 日报复制 ==================== */
 function buildReportText() {
@@ -4085,6 +4126,91 @@ function classifyMilestone(text) {
   }
   return best || MILESTONE_OTHER;
 }
+// ============ v3.5.99 里程碑大模型智能归类（用户自带密钥，本地直连，失败/未配置回退规则） ============
+// 服务商：DeepSeek / 通义千问 已验证浏览器可直连（CORS 放行）；OpenAI 浏览器直连被 CORS 拦截，需走「自定义」+ 代理
+const LLM_PROVIDERS = {
+  deepseek: { name: 'DeepSeek', base: 'https://api.deepseek.com/v1/chat/completions', model: 'deepseek-chat' },
+  qwen:     { name: '通义千问', base: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-plus' },
+  custom:   { name: '自定义',   base: '', model: '' }
+};
+const AI_TAG_CFG_KEY = 'ai_tag_cfg';
+// 读取 AI 归类配置；无密钥或必要字段缺失返回 null（此时调用方应使用规则分类）
+function getAITagConfig() {
+  try {
+    const c = JSON.parse(localStorage.getItem(AI_TAG_CFG_KEY) || '{}');
+    if (!c || !c.apiKey) return null;
+    const p = LLM_PROVIDERS[c.provider] || LLM_PROVIDERS.deepseek;
+    const base = (c.provider === 'custom') ? (c.base || '') : p.base;
+    const model = (c.model && c.model.trim()) ? c.model.trim() : p.model;
+    if (!base || !model) return null;
+    return { base, model, apiKey: c.apiKey, provider: c.provider || 'deepseek' };
+  } catch { return null; }
+}
+function msDomainById(id) { return MILESTONE_DOMAINS.find(d => d.id === id) || MILESTONE_OTHER; }
+// 统一的 OpenAI 兼容 chat/completions 调用；任何异常/非 200/解析失败都返回 null（由上层回退规则）
+async function callChatCompletions(cfg, messages) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 9000);
+  try {
+    const res = await fetch(cfg.base, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.apiKey },
+      body: JSON.stringify({ model: cfg.model, messages: messages, temperature: 0.2, response_format: { type: 'json_object' } }),
+      signal: ctrl.signal
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    const content = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+    if (!content) return null;
+    return JSON.parse(content);
+  } catch { return null; }
+  finally { clearTimeout(timer); }
+}
+// 按 provider+model+文本 哈希缓存，避免不同模型结果互相覆盖
+function msLLMCacheKey(text, cfg) {
+  let h = 0; for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+  return 'msllm:' + cfg.provider + ':' + cfg.model + ':' + (h >>> 0);
+}
+// 单条文本调 LLM 归类：返回 {domainId, label} 或 null。命中缓存直接返回
+async function classifyMilestoneLLM(text, cfg) {
+  const cacheKey = msLLMCacheKey(text, cfg);
+  try { const c = localStorage.getItem(cacheKey); if (c) return JSON.parse(c); } catch {}
+  const domainList = MILESTONE_DOMAINS.map(d => d.name).concat([MILESTONE_OTHER.name]).join('、');
+  const sys = '你是婴儿成长里程碑分类助手。用户会给你一段育儿记录文本，请判断它最贴合哪个成长领域，并提取一个不超过6个汉字的简短标签概括核心成就。\n'
+    + '可选领域（必须严格从中选一个，输出其准确名称）：' + domainList + '。\n'
+    + '只输出 JSON，格式：{"domain":"领域名称","label":"简短标签"}。'
+    + '若文本主要是日常流水账（如"喝了150ml奶""睡了2小时"），选「成长点滴」并给一个中性标签。';
+  const out = await callChatCompletions(cfg, [
+    { role: 'system', content: sys },
+    { role: 'user', content: String(text || '') }
+  ]);
+  if (!out || !out.domain) return null;
+  const label = (out.label && String(out.label).trim()) ? String(out.label).trim().slice(0, 8) : null;
+  const dom = MILESTONE_DOMAINS.find(d => d.name === out.domain) || MILESTONE_OTHER;   // v3.5.99 LLM 返回领域名称，按名称匹配
+  const result = { domainId: dom.id, label: label };
+  try { localStorage.setItem(cacheKey, JSON.stringify(result)); } catch {}
+  return result;
+}
+// 规则先渲染，再异步用 LLM 回写分类/短标签；无配置或全失败则保持规则结果不动
+async function enrichMilestonesWithLLM(items) {
+  const cfg = getAITagConfig();
+  if (!cfg || !items || !items.length) return;
+  const unique = []; const seen = new Set();
+  for (const it of items) { if (!seen.has(it.text)) { seen.add(it.text); unique.push(it); } }
+  let changed = false;
+  await Promise.allSettled(unique.map(async it => {
+    const r = await classifyMilestoneLLM(it.text, cfg);
+    if (!r) return;
+    const dom = msDomainById(r.domainId);
+    for (const x of items) { if (x.text !== it.text) continue; x.domain = dom; if (r.label) x.label = r.label; }
+    changed = true;
+  }));
+  if (!changed) return;
+  const badgesEl = document.getElementById('milestoneBadges');
+  if (badgesEl) badgesEl.innerHTML = renderMilestoneBadges(items);
+  const tlEl = document.getElementById('milestoneTimeline');
+  if (tlEl) tlEl.innerHTML = renderMilestoneInner();
+}
 // 月龄 + 距上次满月的天数（如 4月龄11天）
 function getAgeDetail(ds) {
   const [y, m, d] = ds.split('-').map(Number);
@@ -4140,13 +4266,13 @@ let _msBadgeOpen = -1;        // 当前展开的徽章索引，-1 = 无
 function renderMilestoneBadges(items) {
   _msBadgeHits = [];
   _msBadgeOpen = -1;
-  let html = '<div class="ms-badges">';
+  let html = '<div class="ms-badges" id="milestoneBadges">';
   MILESTONE_BADGE_GROUPS.forEach((g, idx) => {
     // items 已按日期倒序 → 第一个命中的即为该类别最新达成的首次成就
     const hit = items.find(i => i.isFirst && g.domains.indexOf(i.domain.id) !== -1);
     if (hit) {
       _msBadgeHits[idx] = hit;
-      const short = simplifyMilestone(hit.text, hit.domain);
+      const short = (hit.label && hit.label.trim()) ? hit.label.trim() : simplifyMilestone(hit.text, hit.domain);
       html += `<div class="ms-badge" style="--msbd:${g.color};background:linear-gradient(160deg, ${g.color}2e, ${g.color}0d)" onclick="toggleMilestoneBadge(${idx})">` +
         `<span class="ms-badge-em">${g.icon}</span>` +
         `<div class="ms-badge-nm">${short.replace(/</g, '&lt;')}</div>` +
@@ -4576,6 +4702,8 @@ function openAnalysis() {
   // v3.5.86 渲染后恢复到重渲染前激活的标签（首次打开无历史激活则维持默认「吃睡」）
   if (_prevTab && _prevTab !== 'feed') { try { switchAnalysisTab(_prevTab); } catch (e) {} }
   showModal('analysisModal');
+  // v3.5.99 规则已渲染里程碑，异步用大模型回写分类/短标签（无配置或失败则保持规则结果）
+  enrichMilestonesWithLLM(_milestoneItems);
   // v3.5.82 各分类面板统一高度，切换标签时弹窗不跳动
   requestAnimationFrame(() => equalizeAnalysisPanels());
 }
