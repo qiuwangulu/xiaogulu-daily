@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.101'; // ①DeepSeek 默认模型由 deepseek-flash 修正为官方当前名 deepseek-v4-flash,并在设置模型名字段默认显示(切换服务商也同步默认); ②AI 归类 API Key 改为「永不显示明文」(同订阅推送:有值显示掩码XF_MASK,勾选显示明文也只显示掩码;聚焦清空/失焦恢复;保存时掩码不覆盖真密钥); index.html 缓存参数升 v3.5.101
+const APP_VERSION = 'v3.5.102'; // ①确认 DeepSeek 默认模型名 deepseek-v4-flash(设置模型名字段默认显示,切换服务商同步默认); ②AI 归类 DeepSeek 密钥改为「家庭云端加密同步」(AES-GCM/PBKDF2 同记录加密存 family_config._ai_deepseek_key),启动拉取解密为默认密钥,设置 API Key 显掩码且勾选显示明文也只显掩码,本机可填密钥覆盖; index.html 缓存参数升 v3.5.102
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3075,14 +3075,21 @@ function loadAITagUI() {
   if (modelEl) modelEl.value = (cfg.model && cfg.model.trim()) ? cfg.model.trim() : ((LLM_PROVIDERS[prov.value] || {}).model || '');
   const baseEl = document.getElementById('aiTagBase'); if (baseEl) baseEl.value = cfg.base || '';
   if (prov) onAITagProviderChange();
-  // v3.5.101 API Key 永不显示明文（同订阅推送规则）：有值则显示掩码，勾选「显示明文」也只显示掩码
+  // v3.5.101/102 API Key 永不显示明文（同订阅推送规则）：本机覆盖密钥 或 家庭云端默认密钥 存在即显示掩码；
+  // 勾选「显示明文」也只显示掩码（toggleAITagSee 强制）；真实密钥仅运行时内存用，绝不明文展示
   const keyEl = document.getElementById('aiTagKey');
   const see = document.getElementById('aiTagSee');
   if (keyEl) {
     if (see) see.checked = false;
     keyEl.type = 'password';
-    keyEl.value = cfg.apiKey ? XF_MASK : '';
+    keyEl.value = (cfg.apiKey || _cloudAITagKey) ? XF_MASK : '';
     bindAITagKeyMaskEvents();
+    // 云端默认密钥可能尚未加载完：加载完成后若仍为空且云端有密钥则补显掩码
+    if (!_cloudAITagKeyLoaded) {
+      loadCloudAITagKey().then(() => { if (keyEl && !keyEl.value.trim() && _cloudAITagKey) keyEl.value = XF_MASK; }).catch(() => {});
+    }
+    const hint = document.getElementById('aiTagHint');
+    if (hint && _cloudAITagKey && !cfg.apiKey) hint.textContent = '● 当前使用家庭云端默认密钥（已加密同步，不可见明文）';
   }
   const hint = document.getElementById('aiTagHint'); if (hint) hint.textContent = '';
 }
@@ -3114,17 +3121,18 @@ function toggleAITagSee() {
 }
 function saveAITagConfig() {
   const prov = document.getElementById('aiTagProvider').value;
-  let apiKey = document.getElementById('aiTagKey').value.trim();
+  const rawKey = document.getElementById('aiTagKey').value.trim();
   const model = document.getElementById('aiTagModel').value.trim();
   const base = document.getElementById('aiTagBase').value.trim();
-  // v3.5.101 若输入框仍是掩码（用户未改密钥），保留已保存的真实密钥，避免被掩码覆盖
-  if (apiKey === XF_MASK) {
-    try { apiKey = JSON.parse(localStorage.getItem('ai_tag_cfg') || '{}').apiKey || ''; } catch { apiKey = ''; }
-  }
-  if (!apiKey) { showToast('请填写 API Key'); return; }
+  let cfg = {}; try { cfg = JSON.parse(localStorage.getItem(AI_TAG_CFG_KEY) || '{}'); } catch {}
+  // v3.5.102 掩码/空 = 未改密钥：保留本机覆盖密钥；本机也没有则回落家庭云端默认（不写本地密钥）
+  let apiKey = (rawKey === XF_MASK || !rawKey) ? (cfg.apiKey || '') : rawKey;
   if (prov === 'custom' && !base) { showToast('自定义需填写接口地址'); return; }
-  localStorage.setItem('ai_tag_cfg', JSON.stringify({ provider: prov, apiKey, model, base }));
-  showToast('已保存 AI 归类配置');
+  localStorage.setItem(AI_TAG_CFG_KEY, JSON.stringify({ provider: prov, apiKey, model, base }));
+  // v3.5.102 提示当前生效的密钥来源
+  if (apiKey) showToast('已保存 AI 归类配置（本机覆盖密钥）');
+  else if (_cloudAITagKey) showToast('已保存（使用家庭云端默认密钥）');
+  else showToast('已保存（未设置密钥，将回退规则分类）');
 }
 async function testAITagConfig() {
   const cfg = getAITagConfig();
@@ -4164,16 +4172,40 @@ const LLM_PROVIDERS = {
   custom:   { name: '自定义',   base: '', model: '' }
 };
 const AI_TAG_CFG_KEY = 'ai_tag_cfg';
-// 读取 AI 归类配置；无密钥或必要字段缺失返回 null（此时调用方应使用规则分类）
+// v3.5.102 家庭云端默认密钥（已解密，仅存运行时内存，绝不落本地明文/也不在任何 UI 明文显示）
+// 与记录同为 AES-GCM/PBKDF2 端到端加密，用 family_code+family_salt 派生密钥；
+// 存放在 family_config 的 config_key=_ai_deepseek_key，仅家人（知家庭码者）可解密。
+let _cloudAITagKey = '';
+let _cloudAITagKeyLoaded = false;
+const AI_CLOUD_KEY_CFG = '_ai_deepseek_key';
+async function loadCloudAITagKey() {
+  _cloudAITagKey = '';
+  if (!isSyncReady()) return; // 未配置同步则不尝试（也不置已加载标记，便于后续重试）
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${AI_CLOUD_KEY_CFG}&select=encrypted_data,iv`);
+    if (rows.length > 0 && rows[0].encrypted_data && rows[0].iv) {
+      _cloudAITagKey = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
+      console.log('[AI] 已加载家庭云端默认密钥');
+    } else {
+      console.log('[AI] 家庭云端无默认密钥');
+    }
+  } catch (e) { console.warn('[AI] 云端默认密钥加载失败:', e); }
+  finally { _cloudAITagKeyLoaded = true; }
+}
+// 读取 AI 归类配置；优先"本机覆盖密钥"，否则回落"家庭云端默认密钥"；都无则 null（回退规则分类）
 function getAITagConfig() {
   try {
     const c = JSON.parse(localStorage.getItem(AI_TAG_CFG_KEY) || '{}');
-    if (!c || !c.apiKey) return null;
-    const p = LLM_PROVIDERS[c.provider] || LLM_PROVIDERS.deepseek;
-    const base = (c.provider === 'custom') ? (c.base || '') : p.base;
+    const localKey = (c && c.apiKey) ? c.apiKey : '';
+    const apiKey = localKey || _cloudAITagKey; // v3.5.102 本机覆盖优先，否则用云端默认
+    if (!apiKey) return null;
+    const provider = c.provider || 'deepseek';
+    const p = LLM_PROVIDERS[provider] || LLM_PROVIDERS.deepseek;
+    const base = (provider === 'custom') ? (c.base || '') : p.base;
     const model = (c.model && c.model.trim()) ? c.model.trim() : p.model;
     if (!base || !model) return null;
-    return { base, model, apiKey: c.apiKey, provider: c.provider || 'deepseek' };
+    return { base, model, apiKey, provider };
   } catch { return null; }
 }
 function msDomainById(id) { return MILESTONE_DOMAINS.find(d => d.id === id) || MILESTONE_OTHER; }
@@ -5340,6 +5372,8 @@ async function initSync() {
       } catch (e) { console.warn('salt同步失败:', e); }
     }
     updateSyncUI();
+    // v3.5.102 启动即加载家庭云端默认 AI 密钥（加密同步），供 LLM 归类使用
+    try { await loadCloudAITagKey(); } catch (e) { console.warn('[AI] 启动加载云端密钥失败:', e); }
     // v3.5.10 启动自动双向同步：复用 syncPullAll 内置的冲突判定与 v3.5.6 备份保护
     // - cloudTs > localTs：拉取云端覆盖本地（覆盖前自动备份 records_<ds>_bak）
     // - localTs > cloudTs：本地有未上传修改 → 自动反推云端（满足"家人打开即看到更新"+"本地修改自动同步"）
