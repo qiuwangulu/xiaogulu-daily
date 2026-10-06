@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.104'; // 成长里程碑顶部徽章宽度放大:.ms-badges 由 grid 3等分改为横向 flex(徽章按内容自适应宽度,保底 min-width:104px),.ms-badge-nm 去 word-break:break-all 改 white-space:nowrap(标题单行不换行,修掉被硬断成竖排两行),放不下时整行可横向滑动; index.html 缓存参数升 v3.5.104
+const APP_VERSION = 'v3.5.105'; // 成长里程碑徽章刷新频率控制:新增 shouldRefreshMilestones()(距上次刷新>=14天且当天已过凌晨1点才允许刷新),makeMilestoneTimeline 支持徽章缓存(非刷新窗口用 loadMilestoneBadgeCache,不重算不调AI),openAnalysis 仅在刷新窗口调用 enrichMilestonesWithLLM 并 saveMilestoneBadgeCache; 时间轴始终全量规则渲染; index.html 缓存参数升 v3.5.105
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4323,6 +4323,44 @@ let _milestoneItems = [];
 let _milestoneExpanded = false;
 const MILESTONE_PREVIEW = 5;
 
+// ============ v3.5.105 里程碑徽章刷新频率控制：每 14 天凌晨 1 点窗口才刷新，其他时间沿用缓存 ============
+const MS_BADGE_CACHE_KEY = 'ms_badge_cache';
+const MS_BADGE_LAST_KEY = 'ms_badge_last_update';
+// 是否到了「刷新徽章」的窗口：距上次刷新 >= 14 天，且当天已过凌晨 1 点（锚定刷新时刻，避免跨日午夜误触发）
+function shouldRefreshMilestones(now) {
+  now = now || Date.now();
+  const last = Number(localStorage.getItem(MS_BADGE_LAST_KEY) || 0);
+  if (now - last < 14 * 86400000) return false;   // 未到 14 天
+  if (new Date(now).getHours() < 1) return false;  // 当天凌晨 1 点前不触发
+  return true;
+}
+// 把当前里程碑分类结果（含 AI/规则 domain 与 label）缓存到本地，并刷新「上次刷新时间」
+function saveMilestoneBadgeCache(items) {
+  try {
+    const data = (items || []).map(it => ({
+      text: it.text, date: it.date, isFirst: it.isFirst,
+      ageMonths: it.ageMonths, ageDays: it.ageDays,
+      label: it.label || null, domainId: it.domain ? it.domain.id : 'other'
+    }));
+    localStorage.setItem(MS_BADGE_CACHE_KEY, JSON.stringify({ ts: Date.now(), items: data }));
+    localStorage.setItem(MS_BADGE_LAST_KEY, String(Date.now()));
+  } catch {}
+}
+// 读取上次刷新的徽章分类结果；无缓存返回 null（此时回落为当前规则结果）
+function loadMilestoneBadgeCache() {
+  try {
+    const raw = localStorage.getItem(MS_BADGE_CACHE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !Array.isArray(obj.items)) return null;
+    return obj.items.map(it => ({
+      text: it.text, date: it.date, isFirst: it.isFirst,
+      ageMonths: it.ageMonths, ageDays: it.ageDays,
+      label: it.label, domain: msDomainById(it.domainId)
+    }));
+  } catch { return null; }
+}
+
 // 徽章行：三大类别各取一条「最新达成的首次」成就，简化描述 + 完整日期；点击看全文
 let _msBadgeHits = [];        // 徽章对应的原始条目（供点击展开）
 let _msBadgeOpen = -1;        // 当前展开的徽章索引，-1 = 无
@@ -4536,9 +4574,11 @@ function makeMilkTrendChart() {
       `<path d="M${pathA}" fill="none" stroke="${rightLineColor}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` +
     `</g>` + dots + tip + `</svg></div>`;
 }
-function makeMilestoneTimeline() {
+// v3.5.105 useCacheBadge=true：徽章沿用上次缓存（非刷新窗口，不重算/不调 AI）；false 或缓存缺失时退化为当前 items（刷新窗口或首次）
+function makeMilestoneTimeline(useCacheBadge) {
   const items = collectMilestones();
   _milestoneItems = items;
+  const badgeItems = (useCacheBadge ? loadMilestoneBadgeCache() : null) || items;
   const head = `<div class="chart-card"><div class="chart-title">🏆 成长里程碑</div>`;
   if (!items.length) {
     return head + `<div class="chart-empty">还没有成就记录<br><span style="font-size:12px;opacity:.7">记录时写点什么，比如「第一次翻身」</span></div></div>`;
@@ -4546,7 +4586,7 @@ function makeMilestoneTimeline() {
   const firstCount = items.filter(i => i.isFirst).length;
   const nowAge = getAgeDetail(getTodayDateStr());
   const stat = `<div class="ms-stat">当前 ${nowAge.months}月龄${nowAge.days > 0 ? nowAge.days + '天' : ''} · 共 ${items.length} 条 · ${firstCount} 个「第一次」</div>`;
-  return head + stat + renderMilestoneBadges(items) +
+  return head + stat + renderMilestoneBadges(badgeItems) +
     `<div id="milestoneBadgeDetail"></div>` +
     `<div class="ms-timeline" id="milestoneTimeline">${renderMilestoneInner()}</div></div>`;
 }
@@ -4758,15 +4798,18 @@ function openAnalysis() {
   html += `<div class="tab-panel" data-panel="grow" style="display:none">`;
   html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT }, zoomTiers: { min: 3, step: 1 } });
   html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT }, zoomTiers: { min: 50, step: 5 } });
-  html += makeMilestoneTimeline();   // 成长里程碑时间轴
+  const _msRefresh = shouldRefreshMilestones();
+  html += makeMilestoneTimeline(!_msRefresh);   // 成长里程碑时间轴（非刷新窗口徽章用缓存；刷新窗口/首次用当前并稍后调 AI）
   html += `</div>`;
   content.innerHTML = html;
   bindChartTipDismiss();
   // v3.5.86 渲染后恢复到重渲染前激活的标签（首次打开无历史激活则维持默认「吃睡」）
   if (_prevTab && _prevTab !== 'feed') { try { switchAnalysisTab(_prevTab); } catch (e) {} }
   showModal('analysisModal');
-  // v3.5.99 规则已渲染里程碑，异步用大模型回写分类/短标签（无配置或失败则保持规则结果）
-  enrichMilestonesWithLLM(_milestoneItems);
+  // v3.5.105 仅在「刷新窗口」才调用 AI/规则回写并重算徽章；其他时间沿用缓存（不调 AI、不重算）
+  if (_msRefresh) {
+    enrichMilestonesWithLLM(_milestoneItems).then(() => saveMilestoneBadgeCache(_milestoneItems));
+  }
   // v3.5.82 各分类面板统一高度，切换标签时弹窗不跳动
   requestAnimationFrame(() => equalizeAnalysisPanels());
 }
