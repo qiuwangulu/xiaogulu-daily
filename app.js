@@ -1241,7 +1241,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.103'; // 修复语音速记确认报错(ReferenceError: i is not defined):confirmVoiceAdd 内喝奶分支读取乳糖酶输入框 id 误用未定义的 i(v3.5.87 加乳糖酶时漏改),应为当前 forEach 的下标 viIdx; index.html 缓存参数升 v3.5.103
+const APP_VERSION = 'v3.5.104'; // 成长里程碑顶部徽章宽度放大:.ms-badges 由 grid 3等分改为横向 flex(徽章按内容自适应宽度,保底 min-width:104px),.ms-badge-nm 去 word-break:break-all 改 white-space:nowrap(标题单行不换行,修掉被硬断成竖排两行),放不下时整行可横向滑动; index.html 缓存参数升 v3.5.104
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4269,7 +4269,8 @@ async function enrichMilestonesWithLLM(items) {
   }));
   if (!changed) return;
   const badgesEl = document.getElementById('milestoneBadges');
-  if (badgesEl) badgesEl.innerHTML = renderMilestoneBadges(items);
+  // v3.5.104 renderMilestoneBadges 返回的是自带 id 的整块，用 outerHTML 替换（原用 innerHTML 会造成同 id 嵌套 = 重复 ID）
+  if (badgesEl) badgesEl.outerHTML = renderMilestoneBadges(items);
   const tlEl = document.getElementById('milestoneTimeline');
   if (tlEl) tlEl.innerHTML = renderMilestoneInner();
 }

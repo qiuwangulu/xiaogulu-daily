@@ -1021,14 +1021,18 @@
     padding: 9px 0 3px; cursor: pointer; -webkit-tap-highlight-color: transparent;
   }
   /* 徽章行（三大关注类别） */
-  .ms-badges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  /* v3.5.104 徽章宽度放大：原 3 列等分（每列仅 1/3 屏宽 + word-break:break-all）会把标题硬断成竖排两行；
+     改为横向 flex，徽章按内容自适应宽度（保底 min-width），标题单行不换行，放不下时整行可横向滑动 */
+  .ms-badges { display: flex; gap: 8px; margin-bottom: 14px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .ms-badges::-webkit-scrollbar { display: none; }
   .ms-badge {
-    border-radius: 13px; padding: 10px 5px 8px; text-align: center; position: relative;
+    flex: 1 0 auto; min-width: 104px;
+    border-radius: 13px; padding: 10px 12px 8px; text-align: center; position: relative;
     border: 1px solid var(--msbd, #74b9ff);   /* 渐变底色由 JS 内联，避免新颜色函数兼容问题 */
   }
   .ms-badge .ms-badge-em { font-size: 20px; line-height: 1; margin-bottom: 5px; display: block; }
-  .ms-badge .ms-badge-nm { font-size: 11.5px; color: #dfe6e9; font-weight: 600; line-height: 1.3; word-break: break-all; }
-  .ms-badge .ms-badge-dt { font-size: 9px; color: rgba(255,255,255,0.45); margin-top: 3px; }
+  .ms-badge .ms-badge-nm { font-size: 12px; color: #dfe6e9; font-weight: 600; line-height: 1.3; white-space: nowrap; }
+  .ms-badge .ms-badge-dt { font-size: 9px; color: rgba(255,255,255,0.45); margin-top: 3px; white-space: nowrap; }
   .ms-badge.empty { border-style: dashed; border-color: rgba(255,255,255,0.14); background: rgba(255,255,255,0.025); }
   .ms-badge.empty .ms-badge-em { opacity: 0.4; }
   .ms-badge.empty .ms-badge-nm { color: rgba(255,255,255,0.35); font-weight: 500; }
@@ -1738,8 +1742,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.103"></script>
-<script src="app-config.js?v=v3.5.103"></script>
-<script src="app.js?v=v3.5.103"></script>
+<script src="std-config.js?v=v3.5.104"></script>
+<script src="app-config.js?v=v3.5.104"></script>
+<script src="app.js?v=v3.5.104"></script>
 </body>
 </html>
