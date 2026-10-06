@@ -123,6 +123,15 @@
   .overview-achievement .ov-icon { font-size: 15px; flex-shrink: 0; }
   .overview-achievement .ov-text { flex: 1; color: #ffeaa7; }
   .overview-achievement .ov-text .ov-label { color: #fff; }
+  /* v3.5.106 总览内「日报」小组件（点击弹窗看完整日报） */
+  .ov-report-pill {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+    padding: 6px 14px; border-radius: 20px; cursor: pointer;
+    background: rgba(116,185,255,0.12); border: 1px solid rgba(116,185,255,0.45);
+    color: #74b9ff; font-size: 13.5px; font-weight: 600; transition: all .15s;
+  }
+  .ov-report-pill:active { transform: scale(.96); background: rgba(116,185,255,0.22); }
+  .ov-report-pill .pill-chev { opacity: .8; }
 
   /* ===== 分类侧边栏 ===== */
   .category-bar {
@@ -726,6 +735,68 @@
   .report-item.note-item .note-text { display: block; color: #dfe6e9; font-weight: 400; white-space: pre-wrap; word-break: break-word; }
   .report-empty { text-align: center; color: #636e72; padding: 24px 0; font-size: 16px; }
 
+  /* ===== 备忘录 ===== */
+  .memo-input-row { display: flex; gap: 8px; align-items: stretch; margin-bottom: 12px; }
+  .memo-textarea {
+    flex: 1; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 12px; color: #fff; font-size: 15px; padding: 10px 12px; resize: none;
+    outline: none; min-height: 46px; font-family: inherit;
+  }
+  .memo-textarea:focus { border-color: rgba(116,185,255,0.6); }
+  .memo-add { background: #25375f; border: 1px solid #b2bec3; color: #b2bec3; border-radius: 12px;
+    padding: 0 16px; font-size: 15px; cursor: pointer; font-weight: 600; }
+  .memo-add:active { transform: scale(.96); }
+  .memo-section-title { font-size: 14px; font-weight: 700; color: #fff; margin: 14px 0 8px;
+    display: flex; justify-content: space-between; align-items: center; }
+  .memo-section-title .cnt { color: #74b9ff; font-size: 13px; }
+  .memo-empty { text-align: center; color: #636e72; padding: 16px 0; font-size: 14px; }
+  .memo-item { display: flex; align-items: flex-start; gap: 10px; padding: 11px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .memo-check {
+    width: 22px; height: 22px; border: 2px solid rgba(255,255,255,0.3); border-radius: 6px;
+    flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; color: #fff; margin-top: 1px; transition: all .15s;
+  }
+  .memo-check.done { background: #667eea; border-color: #667eea; }
+  .memo-content { flex: 1; font-size: 15px; color: #dfe6e9; line-height: 1.45; word-break: break-word; overflow-wrap: anywhere; }
+  .memo-edit-input { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(116,185,255,0.5);
+    border-radius: 8px; color: #fff; font-size: 15px; padding: 8px 10px; outline: none; font-family: inherit; }
+  .memo-mini-save { color: #55efc4; font-size: 14px; cursor: pointer; padding: 0 6px; flex-shrink: 0; }
+  .memo-mini-cancel { color: #b2bec3; font-size: 14px; cursor: pointer; padding: 0 4px; flex-shrink: 0; }
+  .memo-date { font-size: 12px; color: #74b9ff; margin-top: 3px; }
+  /* 备忘录内编辑/删除按钮样式复用首页卡片（与 .record-tag/.history-record 一致） */
+  .memo-item .rec-edit, .memo-done-item .rec-edit,
+  .memo-item .rec-delete, .memo-done-item .rec-delete {
+    width: 24px; height: 24px; cursor: pointer; padding: 2px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    opacity: 0.7; transition: opacity 0.2s; background: transparent; border: none; margin-left: 8px;
+  }
+  .memo-item .rec-edit svg, .memo-done-item .rec-edit svg,
+  .memo-item .rec-delete svg, .memo-done-item .rec-delete svg {
+    width: 100%; height: 100%; display: block; stroke: #fff; stroke-width: 1.6; fill: none;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .memo-item .rec-edit:active, .memo-done-item .rec-edit:active,
+  .memo-item .rec-delete:active, .memo-done-item .rec-delete:active { opacity: 1; }
+  .memo-item .rec-edit:active svg, .memo-done-item .rec-edit:active svg { stroke: #74b9ff; }
+  .memo-item .rec-delete:active svg, .memo-done-item .rec-delete:active svg { stroke: #e74c3c; }
+  /* 已办：默认折叠，可点击展开 */
+  .memo-done-head {
+    display: flex; align-items: center; gap: 6px; cursor: pointer; color: #b2bec3;
+    font-size: 14px; font-weight: 700; padding: 12px 0 6px; margin-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .memo-done-head .chev { transition: transform .2s; display: inline-block; }
+  .memo-done-head.open .chev { transform: rotate(90deg); }
+  .memo-done-body { display: none; }
+  .memo-done-body.open { display: block; }
+  .memo-done-item { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .memo-done-item .memo-content { color: #9aa3ad; text-decoration: line-through; }
+  /* v3.5.106 备忘录弹窗打开时，复用底部现有「语音」按钮：将其所在底栏抬到弹窗之上，隐藏「添加」避免歧义 */
+  body.memo-open .bottom-bar { z-index: 400; }
+  body.memo-open #fabBtn { display: none; }
+  #memoModal .modal-box { padding-bottom: 160px; }
+
   /* ===== 历史 ===== */
   .history-date-row {
     display: flex; gap: 10px; align-items: center;
@@ -1244,6 +1315,25 @@
   body.theme-day .report-value { color: #d68910; }
   body.theme-day .report-item.note-item .note-text { color: #3d4852; }
 
+  /* ===== 备忘录（浅色皮肤） ===== */
+  body.theme-day .memo-textarea { background: #ffffff; border-color: rgba(9,132,227,0.25); color: #3d4852; }
+  body.theme-day .memo-textarea::placeholder { color: rgba(61,72,82,0.4); }
+  body.theme-day .memo-textarea:focus { border-color: rgba(9,132,227,0.5); }
+  body.theme-day .memo-section-title { color: #3d4852; }
+  body.theme-day .memo-section-title .cnt { color: #0984e3; }
+  body.theme-day .memo-content { color: #3d4852; }
+  body.theme-day .memo-edit-input { background: #f5f8fa; border-color: rgba(9,132,227,0.4); color: #3d4852; }
+  body.theme-day .memo-item { border-bottom-color: rgba(9,132,227,0.08); }
+  body.theme-day .memo-check { border-color: rgba(61,72,82,0.3); }
+  body.theme-day .memo-check.done { background: #0984e3; border-color: #0984e3; }
+  body.theme-day .memo-done-item { border-bottom-color: rgba(9,132,227,0.08); }
+  body.theme-day .memo-done-item .memo-content { color: #8395a7; }
+  body.theme-day .memo-date { color: #0984e3; }
+  body.theme-day .memo-done-head { color: #3d4852; border-top-color: rgba(9,132,227,0.12); }
+  body.theme-day .memo-mini-cancel { color: #636e72; }
+  body.theme-day .memo-item .rec-edit svg, body.theme-day .memo-done-item .rec-edit svg,
+  body.theme-day .memo-item .rec-delete svg, body.theme-day .memo-done-item .rec-delete svg { stroke: #3d4852; }
+
   /* ===== 历史与日期选择器 ===== */
   body.theme-day .dp-month-nav .dp-month-label { color: #0984e3; }
   body.theme-day .dp-nav-btn { background: rgba(9,132,227,0.12); color: #0984e3; border-color: rgba(9,132,227,0.35); }
@@ -1450,9 +1540,9 @@
   </div>
   <div class="divider"></div>
   <div class="nav-row">
-    <div class="nav-item" onclick="openReport()">
-      <span class="nav-icon">&#128200;</span>
-      <span class="nav-label">日报</span>
+    <div class="nav-item" onclick="openMemo()">
+      <span class="nav-icon">&#128221;</span>
+      <span class="nav-label">备忘录</span>
     </div>
     <div class="nav-item" onclick="openHistory()">
       <span class="nav-icon">&#128197;</span>
@@ -1473,11 +1563,28 @@
 <div class="modal-overlay" id="reportModal" onclick="closeModal(event,'reportModal')">
   <div class="modal-box" onclick="event.stopPropagation()">
     <button class="modal-close" onclick="hideModal('reportModal')">&times;</button>
-    <div class="modal-title">&#128200; 今日日报</div>
+    <div class="modal-title">&#128200; 日报</div>
     <div id="reportContent"></div>
     <div class="copy-float">
       <button class="btn btn-success" onclick="copyReport()">复制</button>
     </div>
+  </div>
+</div>
+<!-- 备忘录 -->
+<div class="modal-overlay" id="memoModal" onclick="if(event.target===this)closeMemo()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="closeMemo()">&times;</button>
+    <div class="modal-title">&#128221; 备忘录</div>
+    <div class="memo-input-row">
+      <textarea class="memo-textarea" id="memoInput" placeholder="输入待办事项…（也可用底部「语音」按钮录入）"></textarea>
+      <button class="memo-add" onclick="addMemo()">添加</button>
+    </div>
+    <div class="memo-section-title">待办事项 <span class="cnt" id="memoTodoCnt">0</span></div>
+    <div id="memoTodoList"></div>
+    <div class="memo-done-head" id="memoDoneHead" onclick="toggleMemoDoneExpand()">
+      <span class="chev">▶</span><span>✅ 已办事项</span><span class="cnt" id="memoDoneCnt">0</span>
+    </div>
+    <div class="memo-done-body" id="memoDoneBody"></div>
   </div>
 </div>
 <!-- 历史 -->
@@ -1742,8 +1849,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.105"></script>
-<script src="app-config.js?v=v3.5.105"></script>
-<script src="app.js?v=v3.5.105"></script>
+<script src="std-config.js?v=v3.5.106"></script>
+<script src="app-config.js?v=v3.5.106"></script>
+<script src="app.js?v=v3.5.106"></script>
 </body>
 </html>

@@ -937,6 +937,9 @@ function updateOverview(skipPush) {
     html += `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> 无</span></div>`;
   }
 
+  // v3.5.106 总览内「日报」小组件：点击弹窗看完整日报（图标同修改前，不显示条数）
+  html += `<div class="ov-report-pill" onclick="openReport()">&#128200; 日报 <span class="pill-chev">&#8250;</span></div>`;
+
   bar.innerHTML = html;
   // 推送检查改为脏位标记，由统一调度器延迟合并执行
   // 这消除了"一次操作触发多次 updateOverview → 多次独立推送检查"的并发根因
@@ -1241,7 +1244,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.105'; // 成长里程碑徽章刷新频率控制:新增 shouldRefreshMilestones()(距上次刷新>=14天且当天已过凌晨1点才允许刷新),makeMilestoneTimeline 支持徽章缓存(非刷新窗口用 loadMilestoneBadgeCache,不重算不调AI),openAnalysis 仅在刷新窗口调用 enrichMilestonesWithLLM 并 saveMilestoneBadgeCache; 时间轴始终全量规则渲染; index.html 缓存参数升 v3.5.105
+const APP_VERSION = 'v3.5.106'; // ①日报由底部导航移入总览胶囊小组件(图标同前,点击弹窗看完整日报,不显示条数);②底部导航原日报位置改为备忘录(待办增删改+勾选完成折叠到已办默认折叠可展开带年月日,编辑/删除按钮样式复用首页卡片 rec-edit/rec-delete);③复用底部现有语音按钮:备忘录打开时语音文本回填备忘录输入框(否则仍走活动解析); index.html 缓存参数升 v3.5.106
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2255,6 +2258,13 @@ function finishVoiceRecognition() {
   setVoiceState('idle');
   if (_voiceHoldCanceled) { _voiceHoldCanceled = false; return; }
   if (voiceFinalText) {
+    // v3.5.106 备忘录打开时，复用底部语音按钮：识别文本直接回填备忘录输入框（不进活动解析）
+    const memoModal = document.getElementById('memoModal');
+    if (memoModal && memoModal.classList.contains('show')) {
+      const ta = document.getElementById('memoInput');
+      if (ta) { ta.value = (ta.value ? ta.value + (ta.value.endsWith('\n') ? '' : ' ') : '') + voiceFinalText; ta.focus(); }
+      return;
+    }
     const r = parseVoiceText(voiceFinalText);
     voiceItems = r.items;
     showVoiceModal(voiceFinalText, r.unmatched);
@@ -2368,8 +2378,8 @@ function enableFastTap(el, handler) {
   }, { passive: false });
 }
 function bindFastTaps() {
-  // 底部导航：日报 / 历史 / 分析 / 管理（添加按钮已在 HTML 内联 ontouchstart 兜底）
-  const navs = { openReport: openReport, openHistory: openHistory, openAnalysis: openAnalysis, openManage: openManage };
+  // 底部导航：备忘录 / 历史 / 分析 / 管理（添加按钮已在 HTML 内联 ontouchstart 兜底；日报已移入总览胶囊）
+  const navs = { openMemo: openMemo, openHistory: openHistory, openAnalysis: openAnalysis, openManage: openManage };
   document.querySelectorAll('.nav-item').forEach(el => {
     const fn = el.getAttribute('onclick') || '';
     const m = fn.match(/(\w+)\s*\(\)/);
@@ -3180,6 +3190,96 @@ function copyTextToClipboard(text) {
   else fallbackCopyText(text);
 }
 function fallbackCopyText(text) { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); showToast('已复制到剪贴板'); } catch { showToast('复制失败'); } document.body.removeChild(ta); }
+
+/* ==================== 备忘录 ==================== */
+const MEMO_KEY = 'memo_data_v1';
+let _memoSeq = 0;
+let _memoEditingId = null;
+function getMemos() {
+  try { const d = JSON.parse(localStorage.getItem(MEMO_KEY) || '{}'); const items = Array.isArray(d.items) ? d.items : []; _memoSeq = items.reduce((m, x) => Math.max(m, x.id || 0), 0); return items; }
+  catch { return []; }
+}
+function saveMemos(items) { localStorage.setItem(MEMO_KEY, JSON.stringify({ items })); }
+function _memoNextId() { return ++_memoSeq; }
+function _escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); }
+function _escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+const MEMO_EDIT_SVG = '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const MEMO_DEL_SVG = '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6"/><path d="M14 10v6"/></svg>';
+
+function openMemo() {
+  _memoEditingId = null;
+  const ta = document.getElementById('memoInput'); if (ta) ta.value = '';
+  document.body.classList.add('memo-open');
+  renderMemo();
+  showModal('memoModal');
+}
+function closeMemo() {
+  document.body.classList.remove('memo-open');
+  _memoEditingId = null;
+  hideModal('memoModal');
+}
+function renderMemo() {
+  const items = getMemos();
+  const todos = items.filter(i => !i.done);
+  const dones = items.filter(i => i.done);
+  const tl = document.getElementById('memoTodoList');
+  const dl = document.getElementById('memoDoneBody');
+  document.getElementById('memoTodoCnt').textContent = todos.length;
+  document.getElementById('memoDoneCnt').textContent = dones.length;
+  if (!tl) return;
+  tl.innerHTML = todos.length ? '' : '<div class="memo-empty">暂无待办，添加一条吧～</div>';
+  todos.forEach(it => {
+    if (_memoEditingId === it.id) {
+      tl.innerHTML += `<div class="memo-item">
+        <div class="memo-check" onclick="toggleMemoDone(${it.id})"></div>
+        <input class="memo-edit-input" id="mei_${it.id}" value="${_escAttr(it.text)}">
+        <span class="memo-mini-save" onclick="saveMemoEdit(${it.id})">保存</span>
+        <span class="memo-mini-cancel" onclick="cancelMemoEdit()">取消</span>
+      </div>`;
+    } else {
+      tl.innerHTML += `<div class="memo-item">
+        <div class="memo-check" onclick="toggleMemoDone(${it.id})"></div>
+        <div class="memo-content">${_escHtml(it.text)}</div>
+        <span class="rec-edit" onclick="startMemoEdit(${it.id})" title="编辑">${MEMO_EDIT_SVG}</span>
+        <span class="rec-delete" onclick="deleteMemo(${it.id})" title="删除">${MEMO_DEL_SVG}</span>
+      </div>`;
+    }
+  });
+  dl.innerHTML = dones.map(it => `<div class="memo-item memo-done-item">
+      <div class="memo-check done" onclick="toggleMemoDone(${it.id})">✓</div>
+      <div style="flex:1;min-width:0;"><div class="memo-content">${_escHtml(it.text)}</div><div class="memo-date">${_escHtml(it.date || '')}</div></div>
+      <span class="rec-delete" onclick="deleteMemo(${it.id})" title="删除">${MEMO_DEL_SVG}</span>
+    </div>`).join('');
+}
+function addMemo() {
+  const ta = document.getElementById('memoInput'); if (!ta) return;
+  const v = ta.value.trim();
+  if (!v) { showToast('请输入内容'); return; }
+  const items = getMemos();
+  items.unshift({ id: _memoNextId(), text: v, done: false, date: '' });
+  saveMemos(items); ta.value = ''; renderMemo();
+}
+function toggleMemoDone(id) {
+  const items = getMemos(); const i = items.findIndex(x => x.id === id); if (i < 0) return;
+  if (!items[i].done) { const it = items[i]; it.done = true; it.date = getTodayDateStr(); items.splice(i, 1); items.unshift(it); }
+  else { items[i].done = false; items[i].date = ''; }
+  saveMemos(items); renderMemo();
+}
+function startMemoEdit(id) { _memoEditingId = id; renderMemo(); const el = document.getElementById('mei_' + id); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
+function saveMemoEdit(id) {
+  const el = document.getElementById('mei_' + id); if (!el) return;
+  const v = el.value.trim(); if (!v) { showToast('内容不能为空'); return; }
+  const items = getMemos(); const i = items.findIndex(x => x.id === id); if (i < 0) return;
+  items[i].text = v; _memoEditingId = null; saveMemos(items); renderMemo();
+}
+function cancelMemoEdit() { _memoEditingId = null; renderMemo(); }
+function deleteMemo(id) {
+  const items = getMemos().filter(x => x.id !== id); saveMemos(items); renderMemo();
+}
+function toggleMemoDoneExpand() {
+  const h = document.getElementById('memoDoneHead'), b = document.getElementById('memoDoneBody');
+  if (h && b) { h.classList.toggle('open'); b.classList.toggle('open'); }
+}
 
 /* ==================== 数据分析 ==================== */
 function getBodyHistory() {
