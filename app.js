@@ -328,17 +328,17 @@ function handlePhotoUpload(e) {
   r.readAsDataURL(f);
 }
 function loadPhoto() {
-  const img = document.getElementById('babyPhoto'), ph = document.getElementById('photoPlaceholder');
-  // v3.5.109 头像改为固定 AI 入口（无上传照片元素）：无元素时直接返回，避免空引用
-  if (!img || !ph) return;
-  const userPhoto = localStorage.getItem('babyPhoto');
+  const img = document.getElementById('babyPhoto');
+  if (!img) return;                       // 无照片元素（如 AI 入口内）则跳过
+  const ph = document.getElementById('photoPlaceholder');
   const day = document.body.classList.contains('theme-day');
-  // 没上传过照片：白天皮肤用小咕噜默认照，夜间用原默认照（夜间皮肤不变）
-  let du = userPhoto || (day ? DEFAULT_PHOTO_DAY : DEFAULT_PHOTO_DATA);
+  // v3.5.110 头像为固定照片：浅色用 photo-day.webp，深色用 photo-data.webp，随主题自动切换
+  const du = day ? DEFAULT_PHOTO_DAY : DEFAULT_PHOTO_DATA;
   if (du) {
     if (img.getAttribute('src') !== du) img.src = du;
-    img.classList.remove('hidden'); ph.classList.add('hidden');
-  } else { img.classList.add('hidden'); ph.classList.remove('hidden'); }
+    img.classList.remove('hidden');
+    if (ph) ph.classList.add('hidden');
+  } else if (ph) { img.classList.add('hidden'); ph.classList.remove('hidden'); }
 }
 
 function loadHiddenActivities() {
@@ -1248,7 +1248,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.109'; // 新增 AI 育儿问答(AI 入口=去上传的头像,点开底部抽屉:对话+知识库);①头像外框与「👆 AI育儿」胶囊底色=添加按钮底色(#25375f 深/#0984e3 浅),胶囊不加外框;②日报胶囊右移并改添加按钮底色;index.html 缓存参数升 v3.5.109
+const APP_VERSION = 'v3.5.110'; // ①头像改回小咕噜原照片(浅色 photo-day/深色 photo-data,随主题切换)并缩回修改前尺寸;②日报胶囊+头像外框+「👆AI育儿」胶囊底色统一为「选中的全部标签」底色(深 #24375c / 浅 #d8e9fa,浅色文字 #0984e3);③AI 对话页改微信式输入:话筒图标(首页语音同款SVG)置于输入框内右侧、去掉发送按钮、回车发送;④左上角「带横线圆圈」按钮开左侧抽屉存放历史对话,关闭 AI 页自动归档当前对话并清空,切知识库不清空;⑤知识库启动自动与家庭云双向同步,条目右侧编辑/删除改用首页同款 SVG 图标,空列表时不再显示操作说明; index.html 缓存参数升 v3.5.110
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4375,18 +4375,28 @@ const KB_CATS = ['奶粉喂养','辅食','睡眠','早教','穿衣','户外','�
 const KB_KEY = 'ai_kb_v1';
 const KB_CLOUD_KEY = '_ai_kb';
 const AI_CHAT_KEY = 'ai_chat_v1';
-const AI_CHAT_CAP = 10;            // 对话本地仅留最近 10 条
+const AI_CHAT_CAP = 10;            // 单次对话本地仅留最近 10 条
+const AI_HIST_KEY = 'ai_chat_history_v1';
+const AI_HIST_CAP = 30;            // 历史对话最多保留 30 段
 let KB = [];
 let KB_FILTER = '全部';
 let AI_CHAT = [];
+let AI_HIST = [];
 let tokenExceeded = false;
 let aiRecog = null, aiRecording = false;
 
 function aiInit() {
   try { AI_CHAT = JSON.parse(localStorage.getItem(AI_CHAT_KEY) || '[]'); } catch { AI_CHAT = []; }
   if (!Array.isArray(AI_CHAT)) AI_CHAT = [];
+  try { AI_HIST = JSON.parse(localStorage.getItem(AI_HIST_KEY) || '[]'); } catch { AI_HIST = []; }
+  if (!Array.isArray(AI_HIST)) AI_HIST = [];
   loadKBLocal();
-  if (isSyncReady()) { loadKBCloud().catch(() => {}); } // 云端同步（异步，不阻塞首屏）
+  // v3.5.110 知识库自动双向同步家庭云：启动即拉取；云端为空而本地有内容时上推
+  if (isSyncReady()) {
+    loadKBCloud()
+      .then(had => { if (!had && KB.length) return saveKBCloud(); })
+      .catch(() => {});
+  }
 }
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
@@ -4395,15 +4405,68 @@ function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;
 function openAI() {
   const overlay = document.getElementById('aiOverlay'); if (!overlay) return;
   overlay.classList.add('show');
-  renderTokenBanner(); renderAIMsgs(); renderKb(); updateKbCntLine();
+  renderTokenBanner(); renderAIMsgs(); renderKb(); updateKbCntLine(); renderAIHistory();
 }
-function closeAI() { const o = document.getElementById('aiOverlay'); if (o) o.classList.remove('show'); stopAIVoice(); }
+// v3.5.110 关闭弹窗：自动把当前对话归档进「历史对话」并清空当前对话
+function closeAI() {
+  archiveAIChat();
+  const o = document.getElementById('aiOverlay'); if (o) o.classList.remove('show');
+  toggleAIDrawer(false);
+  stopAIVoice();
+}
 function switchAITab(t) {
   document.querySelectorAll('.ai-tab').forEach(x => x.classList.toggle('on', x.dataset.tab === t));
   const pc = document.getElementById('pane-chat'), pk = document.getElementById('pane-kb');
   if (pc) pc.classList.toggle('on', t === 'chat');
   if (pk) pk.classList.toggle('on', t === 'kb');
-  if (t === 'kb') { renderKb(); updateKbCntLine(); }
+  if (t === 'kb') { renderKb(); updateKbCntLine(); }   // 切到知识库不清空当前对话
+}
+
+/* ---------- 历史对话抽屉 ---------- */
+function toggleAIDrawer(show) {
+  const d = document.getElementById('aiDrawer'), m = document.getElementById('aiDrawerMask');
+  if (!d || !m) return;
+  const on = show === undefined ? !d.classList.contains('show') : !!show;
+  d.classList.toggle('show', on);
+  m.classList.toggle('show', on);
+  if (on) renderAIHistory();
+}
+function saveAIHistory() {
+  if (AI_HIST.length > AI_HIST_CAP) AI_HIST = AI_HIST.slice(0, AI_HIST_CAP);
+  try { localStorage.setItem(AI_HIST_KEY, JSON.stringify(AI_HIST)); } catch (e) {}
+}
+function archiveAIChat() {
+  if (!AI_CHAT.length) return;
+  const firstUser = AI_CHAT.find(m => m.role === 'me');
+  AI_HIST.unshift({
+    id: 'h' + Date.now(),
+    time: new Date().toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
+    preview: firstUser ? firstUser.text.slice(0, 40) : '（无内容）',
+    msgs: AI_CHAT.slice()
+  });
+  saveAIHistory();
+  AI_CHAT = [];
+  try { localStorage.removeItem(AI_CHAT_KEY); } catch (e) {}
+  renderAIMsgs();
+}
+function renderAIHistory() {
+  const box = document.getElementById('aiHistList'); if (!box) return;
+  if (!AI_HIST.length) { box.innerHTML = '<div class="ai-hist-empty">还没有历史对话。<br>关闭 AI 育儿页面时，当前对话会自动存到这里。</div>'; return; }
+  box.innerHTML = AI_HIST.map((h, i) => (
+    `<div class="ai-hist-item" data-i="${i}">`
+    + `<div class="ai-hist-time">🕘 ${escapeHtml(h.time)}</div>`
+    + `<div class="ai-hist-prev">${escapeHtml(h.preview)}</div>`
+    + `<div class="ai-hist-body">${h.msgs.map(m => `<div class="ai-hist-msg"><b>${m.role === 'me' ? '我' : 'AI'}</b> ${escapeHtml(m.text)}</div>`).join('')}</div>`
+    + `</div>`
+  )).join('');
+  box.querySelectorAll('.ai-hist-item').forEach(el => {
+    el.addEventListener('click', () => el.classList.toggle('open'));
+  });
+}
+function clearAIHistory() {
+  if (!AI_HIST.length) return;
+  if (!confirm('确定清空全部历史对话？此操作不可恢复。')) return;
+  AI_HIST = []; saveAIHistory(); renderAIHistory();
 }
 
 /* ---------- token 上限提示 ---------- */
@@ -4478,6 +4541,13 @@ async function sendAIMsg() {
   AI_CHAT.push({ role: 'ai', text: reply }); saveAIChat(); renderAIMsgs();
 }
 function clearAIChat() { AI_CHAT = []; saveAIChat(); renderAIMsgs(); }
+// 回车发送（Shift+Enter 换行）
+function aiInputKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    sendAIMsg();
+  }
+}
 
 /* ---------- 知识库（7 类 + 综合兜底；AI 自动分类；加密同步家庭云） ---------- */
 function loadKBLocal() { try { KB = JSON.parse(localStorage.getItem(KB_KEY) || '[]'); } catch { KB = []; } if (!Array.isArray(KB)) KB = []; }
@@ -4544,21 +4614,27 @@ function renderKb() {
     return `<div class="ai-kb-item"><div class="kb-body">`
       + `<span class="ai-kb-tag" onclick="reTagKb(${realIdx})" title="点此改分类">🤖 ${escapeHtml(x.cat)}</span>`
       + `<div class="kb-txt">${escapeHtml(x.text)}</div></div>`
-      + `<span class="kb-ops"><span onclick="editKb(${realIdx})" title="编辑">✎</span><span onclick="delKb(${realIdx})" title="删除">🗑</span></span></div>`;
+      + `<span class="rec-edit" onclick="editKb(${realIdx})" title="编辑">${MEMO_EDIT_SVG}</span>`
+      + `<span class="rec-delete" onclick="delKb(${realIdx})" title="删除">${MEMO_DEL_SVG}</span></div>`;
   }).join('');
 }
 function updateKbCntLine() { const el = document.getElementById('kbCntLine'); if (el) el.textContent = '知识库 ' + KB.length + ' 条'; }
 async function loadKBCloud() {
-  if (!isSyncReady() || KB.length > 0) return;   // 本地已有则以本地为编辑源，不覆盖
+  if (!isSyncReady()) return false;
   try {
-    const key = await getCryptoKey(); if (!key) return;
+    const key = await getCryptoKey(); if (!key) return false;
     const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${KB_CLOUD_KEY}&select=encrypted_data,iv`);
     if (rows.length > 0 && rows[0].encrypted_data && rows[0].iv) {
       const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
       const arr = JSON.parse(json);
-      if (Array.isArray(arr) && arr.length) { KB = arr; saveKBLocal(); }
+      if (Array.isArray(arr) && arr.length) {
+        KB = arr; saveKBLocal();
+        if (document.getElementById('aiOverlay')) { renderKb(); updateKbCntLine(); }
+        return true;
+      }
     }
   } catch (e) { console.warn('[KB] 云端加载失败:', e); }
+  return false;
 }
 async function saveKBCloud() {
   if (!isSyncReady()) return;

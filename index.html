@@ -102,26 +102,21 @@
   .photo-wrap img { width:100%; height:100%; object-fit:cover; }
   .photo-placeholder { font-size: 36px; color: rgba(255,255,255,0.5); user-select: none; }
   #photoInput { display: none; }
-  /* ===== v3.5.109 AI 入口（去上传、固定照片、点头像进 AI 育儿问答） ===== */
+  /* ===== v3.5.109 AI 入口（去上传、固定照片、点头像进 AI 育儿问答） =====
+     v3.5.110 头像改回「小咕噜之前的照片」（浅色 assets/photo-day.webp / 深色 assets/photo-data.webp，
+     随主题自动切换），尺寸与修改前完全一致（.photo-wrap 112×112 + 2px 边框、无底色填充、无重阴影） */
   .ai-avatar-wrap { position: relative; margin-left: 10px; flex-shrink: 0; cursor: pointer; }
-  /* 头像外框底色 = 添加按钮底色（深色 #25375f / 浅色 #0984e3） */
-  .ai-avatar {
-    --ph-bg:#2b3a67; --ph-skin:#f1c9a5; --ph-hair:#5a3b2e; --ph-cheek:#e8a07f;
-    border: 3px solid #25375f; background: #25375f; box-shadow: 0 6px 18px rgba(37,55,95,.45);
-  }
-  body.theme-day .photo-wrap.ai-avatar {
-    --ph-bg:#ffe3ec; --ph-skin:#ffd9b8; --ph-hair:#7a4a33; --ph-cheek:#ff9e80;
-    border-color: #0984e3; background: #0984e3; box-shadow: 0 6px 18px rgba(9,132,227,.3);
-  }
-  .ai-avatar .baby-face { width: 100%; height: 100%; border-radius: 50%; display: block; }
+  /* 头像外框色号 = 首页「选中的分类标签」底色（深色 #24375c / 浅色 #d8e9fa） */
+  .ai-avatar { border: 2px solid #24375c; }
+  body.theme-day .photo-wrap.ai-avatar { border-color: #d8e9fa; }
   .ai-avatar:active { transform: scale(.96); }
-  /* 「👆 AI育儿」胶囊：底色=添加按钮底色，不加外框 */
+  /* 「👆 AI育儿」胶囊：底色 = 首页「选中的分类标签」底色，不加外框 */
   .ai-chip {
     position: absolute; left: 50%; bottom: -13px; transform: translateX(-50%);
-    background: #25375f; color: #fff; font-size: 11px; font-weight: 800;
-    padding: 3px 11px; border-radius: 13px; white-space: nowrap; box-shadow: 0 3px 8px rgba(0,0,0,.35);
+    background: #24375c; color: #fff; font-size: 11px; font-weight: 800;
+    padding: 3px 11px; border-radius: 13px; white-space: nowrap;
   }
-  body.theme-day .ai-chip { background: #0984e3; }
+  body.theme-day .ai-chip { background: #d8e9fa; color: #0984e3; }
 
   /* ===== 信息总览 ===== */
   .overview {
@@ -145,15 +140,15 @@
   .overview-achievement .ov-text .ov-label { color: #fff; }
   /* v3.5.106 总览内「日报」小组件（点击弹窗看完整日报） */
   /* v3.5.107 日报色号统一为「选中的分类标签字体色」(.cat-tag.active)：深色 #fff / 浅色 #0984e3 */
-  /* v3.5.109 日报胶囊右移 + 底色改为「添加按钮底色」(#25375f 深 / #0984e3 浅)，白字 */
+  /* v3.5.109 日报胶囊右移；v3.5.110 底色 = 首页「选中的分类标签」底色（深色 #24375c / 浅色 #d8e9fa） */
   .ov-report-row { display: flex; justify-content: flex-end; margin-top: 10px; }
   .ov-report-pill {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 6px 14px; border-radius: 20px; cursor: pointer;
-    background: #25375f; border: 1px solid #25375f;
+    background: #24375c; border: 1px solid #24375c;
     color: #fff; font-size: 13.5px; font-weight: 600; transition: all .15s;
   }
-  .ov-report-pill:active { transform: scale(.96); background: #2f4576; }
+  .ov-report-pill:active { transform: scale(.96); }
   .ov-report-pill .pill-chev { opacity: .85; }
 
   /* ===== 分类侧边栏 ===== */
@@ -540,7 +535,7 @@
     --bg:#141b2d; --fg:#f0f0f0; --muted:#b2bec3; --row-bd:rgba(255,255,255,.08); --rec-bd:rgba(255,255,255,.06); --sheet-bd:rgba(255,255,255,.15);
     width: 100%; max-width: 480px; height: 88%; background: var(--bg); border: 1px solid var(--sheet-bd);
     border-radius: 20px 20px 0 0; padding: 16px 15px 14px; display: flex; flex-direction: column;
-    animation: aiUp .28s ease; position: relative;
+    animation: aiUp .28s ease; position: relative; overflow: hidden;
   }
   body.theme-day .ai-sheet {
     --bg:#ffffff; --fg:#3d4852; --muted:#636e72; --row-bd:rgba(9,132,227,.12); --rec-bd:rgba(9,132,227,.08); --sheet-bd:rgba(9,132,227,.15);
@@ -568,15 +563,45 @@
   .ai-msg.me { align-self:flex-end; background:#0984e3; color:#fff; border-bottom-right-radius:5px; }
   .ai-msg .ai-mini { display:block; font-size:10.5px; opacity:.7; margin-bottom:4px; }
   .ai-typing { align-self:flex-start; font-size:12.5px; color:var(--muted); }
-  .ai-voice-note { font-size:10.5px; color:#f1c40f; text-align:center; padding:2px 0 6px; }
+  /* ===== v3.5.110 左上角「带横线圆圈」按钮 + 左侧历史对话抽屉 ===== */
+  .ai-menu-btn { position:absolute; top:11px; left:14px; width:26px; height:26px; padding:0; background:none; border:none; cursor:pointer; }
+  .ai-menu-btn svg { width:100%; height:100%; fill:none; stroke:var(--muted); stroke-width:1.7; stroke-linecap:round; }
+  .ai-drawer-mask { position:absolute; inset:0; background:rgba(0,0,0,.45); display:none; z-index:5; border-radius:20px 20px 0 0; }
+  .ai-drawer-mask.show { display:block; }
+  .ai-drawer {
+    position:absolute; top:0; left:0; bottom:0; width:80%; max-width:330px; z-index:6;
+    background:var(--bg); border-right:1px solid var(--sheet-bd); border-radius:20px 0 0 0;
+    transform:translateX(-102%); transition:transform .26s ease;
+    display:flex; flex-direction:column; padding:14px 14px 12px;
+  }
+  .ai-drawer.show { transform:translateX(0); }
+  .ai-drawer-title { display:flex; align-items:center; justify-content:space-between; padding-bottom:10px; border-bottom:1px solid var(--row-bd); font-size:15px; font-weight:800; color:var(--fg); }
+  .ai-drawer-x { font-size:20px; line-height:1; color:var(--muted); background:none; border:none; cursor:pointer; font-family:inherit; }
+  .ai-hist-list { flex:1; overflow-y:auto; margin-top:6px; }
+  .ai-hist-list::-webkit-scrollbar { width:0; }
+  .ai-hist-item { padding:9px 4px; border-bottom:1px solid var(--rec-bd); cursor:pointer; }
+  .ai-hist-time { font-size:12.5px; color:var(--fg); font-weight:700; }
+  .ai-hist-prev { font-size:11.5px; color:var(--muted); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ai-hist-body { display:none; margin-top:7px; padding:8px 9px; border-radius:10px; background:rgba(255,255,255,.05); font-size:12px; line-height:1.55; color:var(--fg); }
+  body.theme-day .ai-hist-body { background:#f1f5fa; }
+  .ai-hist-item.open .ai-hist-body { display:block; }
+  .ai-hist-msg { margin-bottom:6px; word-break:break-word; }
+  .ai-hist-msg:last-child { margin-bottom:0; }
+  .ai-hist-msg b { color:#74b9ff; }
+  body.theme-day .ai-hist-msg b { color:#0984e3; }
+  .ai-hist-empty { text-align:center; color:var(--muted); font-size:12.5px; padding:26px 8px; line-height:1.6; }
+  .ai-drawer-foot { padding-top:9px; border-top:1px solid var(--row-bd); text-align:center; }
+  .ai-drawer-foot button { font-size:11.5px; color:var(--muted); background:none; border:1px solid var(--row-bd); border-radius:9px; padding:4px 12px; cursor:pointer; font-family:inherit; }
   .ai-composer { display:flex; align-items:flex-end; gap:7px; padding-top:10px; border-top:1px solid var(--row-bd); }
-  .ai-cbtn { width:38px; height:38px; flex-shrink:0; border-radius:11px; cursor:pointer; font-size:17px; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.15); color:var(--fg); font-family:inherit; }
-  body.theme-day .ai-cbtn { background:rgba(9,132,227,.05); border-color:rgba(9,132,227,.2); }
-  .ai-cbtn.recording { background:#e74c3c; color:#fff; border-color:#e74c3c; }
-  .ai-cta { flex:1; min-height:38px; max-height:96px; padding:9px 12px; border-radius:12px; font-size:14px; resize:none; outline:none; background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.18); color:var(--fg); font-family:inherit; line-height:1.4; }
+  .ai-input-wrap { position:relative; flex:1; display:flex; }
+  .ai-cta { flex:1; min-height:38px; max-height:96px; padding:9px 44px 9px 12px; border-radius:12px; font-size:14px; resize:none; outline:none; background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.18); color:var(--fg); font-family:inherit; line-height:1.4; }
   body.theme-day .ai-cta { background:#fff; border-color:rgba(9,132,227,.25); }
-  .ai-send { padding:9px 15px; border-radius:12px; background:#0984e3; border:none; color:#fff; font-weight:700; font-size:14px; cursor:pointer; font-family:inherit; flex-shrink:0; }
-  .ai-send:disabled { opacity:.5; }
+  /* v3.5.110 语音输入：图标同首页语音按钮，内嵌在输入框右侧（微信样式）；无发送按钮，回车发送 */
+  .ai-mic { position:absolute; right:5px; bottom:5px; width:30px; height:30px; padding:5px; border:none; background:none; cursor:pointer; border-radius:9px; display:flex; align-items:center; justify-content:center; }
+  .ai-mic svg { width:100%; height:100%; fill:none; stroke:#b2bec3; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; transition:stroke .2s; }
+  body.theme-day .ai-mic svg { stroke:#636e72; }
+  .ai-mic.recording { background:rgba(231,76,60,.14); }
+  .ai-mic.recording svg { stroke:#e74c3c; }
   .ai-chat-tools { display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:11px; color:var(--muted); }
   .ai-chat-tools .ai-clear { font-size:11px; color:var(--muted); background:none; border:1px solid var(--row-bd); border-radius:9px; padding:3px 10px; cursor:pointer; font-family:inherit; }
   .ai-kb-filter { display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; margin-bottom:6px; }
@@ -600,9 +625,20 @@
   .ai-kb-tag { display:inline-block; font-size:10.5px; font-weight:700; color:#a29bfe; background:rgba(162,155,254,.16); border:1px solid rgba(162,155,254,.4); border-radius:8px; padding:1px 8px; margin-bottom:5px; cursor:pointer; }
   body.theme-day .ai-kb-tag { color:#6c5ce7; background:rgba(118,75,162,.12); border-color:rgba(118,75,162,.4); }
   .ai-kb-item .kb-txt { color:var(--fg); white-space:pre-wrap; }
-  .ai-kb-item .kb-ops { display:flex; gap:4px; flex-shrink:0; }
-  .ai-kb-item .kb-ops span { width:26px; height:26px; display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:.7; font-size:15px; border-radius:8px; }
-  .ai-kb-item .kb-ops span:active { background:rgba(255,255,255,.1); opacity:1; }
+  /* v3.5.110 知识库条目右侧「编辑 / 删除」：图标与样式同首页卡片（.record-tag/.history-record） */
+  .ai-kb-item .rec-edit, .ai-kb-item .rec-delete {
+    width: 24px; height: 24px; cursor: pointer; padding: 2px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    opacity: 0.7; transition: opacity 0.2s; background: transparent; border: none; margin-left: 8px;
+  }
+  .ai-kb-item .rec-edit svg, .ai-kb-item .rec-delete svg {
+    width: 100%; height: 100%; display: block; stroke: #fff; stroke-width: 1.6; fill: none;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .ai-kb-item .rec-edit:active, .ai-kb-item .rec-delete:active { opacity: 1; }
+  .ai-kb-item .rec-edit:active svg { stroke: #74b9ff; }
+  .ai-kb-item .rec-delete:active svg { stroke: #e74c3c; }
+  body.theme-day .ai-kb-item .rec-edit svg, body.theme-day .ai-kb-item .rec-delete svg { stroke: #3d4852; }
   .ai-kb-empty { text-align:center; color:var(--muted); font-size:13px; padding:22px 0; }
   .ai-kb-note { font-size:10.5px; color:var(--muted); text-align:center; padding-top:8px; line-height:1.5; }
   .modal-title {
@@ -1403,8 +1439,9 @@
   body.theme-day .voice-empty-tip { color: #636e72; }
 
   /* ===== 日报 ===== */
-  body.theme-day .ov-report-pill { background: #0984e3; border-color: #0984e3; color: #fff; }
-  body.theme-day .ov-report-pill:active { background: #0a7bc4; }
+  /* v3.5.110 浅色下日报胶囊底色 = 首页选中分类标签底色 #d8e9fa，字色同标签字色 #0984e3 */
+  body.theme-day .ov-report-pill { background: #d8e9fa; border-color: rgba(9,132,227,0.5); color: #0984e3; }
+  body.theme-day .ov-report-pill:active { background: #c9e1f7; }
   body.theme-day .report-section-title { color: #0984e3; border-bottom-color: rgba(9,132,227,0.25); }
   body.theme-day .report-item { border-bottom-color: rgba(9,132,227,0.08); }
   body.theme-day .report-label { color: #636e72; }
@@ -1607,17 +1644,7 @@
     </div>
     <div class="ai-avatar-wrap" id="aiAvatar" onclick="openAI()" title="点此进入 AI 育儿问答">
       <div class="photo-wrap ai-avatar">
-        <svg viewBox="0 0 100 100" class="baby-face" aria-label="宝宝照片">
-          <circle cx="50" cy="50" r="50" fill="var(--ph-bg)"/>
-          <path d="M22 46 Q26 18 50 16 Q74 18 78 46 Q70 34 50 33 Q30 34 22 46 Z" fill="var(--ph-hair)"/>
-          <circle cx="50" cy="13" r="5" fill="var(--ph-hair)"/>
-          <ellipse cx="50" cy="56" rx="30" ry="31" fill="var(--ph-skin)"/>
-          <circle cx="34" cy="62" r="6" fill="var(--ph-cheek)" opacity=".8"/>
-          <circle cx="66" cy="62" r="6" fill="var(--ph-cheek)" opacity=".8"/>
-          <circle cx="39" cy="54" r="3.2" fill="#3a2c25"/>
-          <circle cx="61" cy="54" r="3.2" fill="#3a2c25"/>
-          <path d="M42 66 Q50 72 58 66" stroke="#c0623f" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-        </svg>
+        <img id="babyPhoto" alt="小咕噜">
       </div>
       <span class="ai-chip">&#128070; AI育儿</span>
     </div>
@@ -1680,11 +1707,22 @@
 <!-- AI 育儿问答 -->
 <div class="ai-overlay" id="aiOverlay" onclick="if(event.target===this)closeAI()">
   <div class="ai-sheet">
+    <button class="ai-menu-btn" type="button" onclick="toggleAIDrawer(true)" title="历史对话" aria-label="历史对话">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/></svg>
+    </button>
     <button class="ai-x" onclick="closeAI()">&times;</button>
     <div class="ai-title">🤖 AI 育儿问答</div>
     <div class="ai-model-line">模型 <b id="aiModelName">deepseek-v4-flash</b> · 已载入宝宝档案 + <span class="ai-kb-cnt" id="kbCntLine">知识库 0 条</span></div>
     <div class="ai-local-tag">🔒 对话仅存本机，不联网同步</div>
     <div id="tokenBanner" class="ai-token-banner">⚠️ 当前 DeepSeek 模型的 token 额度已达上限，AI 暂时无法回复。请稍后再试，或联系管理员调整额度。</div>
+
+    <!-- v3.5.110 左侧抽屉：历史对话 -->
+    <div class="ai-drawer-mask" id="aiDrawerMask" onclick="toggleAIDrawer(false)"></div>
+    <aside class="ai-drawer" id="aiDrawer">
+      <div class="ai-drawer-title"><span>🕘 历史对话</span><button class="ai-drawer-x" onclick="toggleAIDrawer(false)">&times;</button></div>
+      <div class="ai-hist-list" id="aiHistList"></div>
+      <div class="ai-drawer-foot"><button onclick="clearAIHistory()">清空历史对话</button></div>
+    </aside>
 
     <div class="ai-tabs">
       <button class="ai-tab on" data-tab="chat" onclick="switchAITab('chat')">💬 对话</button>
@@ -1694,14 +1732,14 @@
     <!-- 对话页 -->
     <div class="ai-pane on" id="pane-chat">
       <div class="ai-msgs" id="aiMsgs"></div>
-      <div class="ai-voice-note">🎤 语音输入：点按「🎤」说话，识别文字自动填入输入框</div>
       <div class="ai-composer">
-        <button class="ai-cbtn" id="aiVoiceBtn" title="语音输入" onclick="toggleAIVoice()">🎤</button>
-        <textarea class="ai-cta" id="aiChatInput" placeholder="输入问题，或语音输入…"></textarea>
-        <button class="ai-send" onclick="sendAIMsg()">发送</button>
+        <div class="ai-input-wrap">
+          <textarea class="ai-cta" id="aiChatInput" placeholder="输入问题，回车发送…" onkeydown="aiInputKey(event)"></textarea>
+          <button class="ai-mic" id="aiVoiceBtn" type="button" title="语音输入" onclick="toggleAIVoice()"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+        </div>
       </div>
       <div class="ai-chat-tools">
-        <span>本地已存 <b id="aiLocalCnt">0</b> 条对话</span>
+        <span>当前对话 <b id="aiLocalCnt">0</b> 条 · 关闭时自动存入历史</span>
         <button class="ai-clear" onclick="clearAIChat()">清空对话</button>
       </div>
     </div>
@@ -1724,7 +1762,7 @@
         <button onclick="addKb()">添加</button>
       </div>
       <div class="ai-kb-classify-note">🤖 添加后由大模型自动分类（点标签可手动改类）</div>
-      <div class="ai-kb-head"><span>已添加 <b id="kbCnt">0</b> 条</span><span>✎ 编辑 · 🗑 删除</span></div>
+      <div class="ai-kb-head"><span>已添加 <b id="kbCnt">0</b> 条</span></div>
       <div class="ai-kb-list" id="kbList"></div>
       <div class="ai-kb-note" id="kbNote">📡 知识库内容会<b>加密同步到家庭云</b>，并在提问时作为背景注入 AI</div>
     </div>
@@ -2012,8 +2050,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.109"></script>
-<script src="app-config.js?v=v3.5.109"></script>
-<script src="app.js?v=v3.5.109"></script>
+<script src="std-config.js?v=v3.5.110"></script>
+<script src="app-config.js?v=v3.5.110"></script>
+<script src="app.js?v=v3.5.110"></script>
 </body>
 </html>
