@@ -1291,7 +1291,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.115'; // ①备忘录加密同步家庭云(新增 _memo,启动恢复+本地优先合并,修复清缓存后丢失);②知识库输入框高度×2、已添加标签颜色紫→蓝、去掉标签机器人图标;③备忘录输入框高度×2并增加向下滚动条;④首页筛选重构:默认显示全部活动,分类由标签页改为对应活动上方的分组标题(图标左文字右),原位置改为左侧分类多选下拉(较窄)+右侧活动名搜索(较宽),多选分类/搜索名称均筛选对应活动
+const APP_VERSION = 'v3.5.116'; // 修复历史数据"丢失":全量同步(启动/手动)改为直接拉取云端已有的全部日期,不再受 historyDays(原30天)窗口限制,清缓存后 8 月等较早历史可完整恢复(合并非覆盖,仅尊重真实删除墓碑);historyDays 改为 90 仅作兜底
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5489,7 +5489,7 @@ function showToast(msg, ms) { const toast = document.getElementById('toast'); to
 
 // ---------- 配置 ----------
 // Supabase 默认端点 / 家庭码统一在 app-config.js 中维护（不在代码里写死）
-const SYNC_CONFIG = { supabaseUrl: _DEFAULT_SUPABASE_URL, supabaseKey: _DEFAULT_SUPABASE_KEY, pollInterval: 5*60*1000, historyDays: 30 };
+const SYNC_CONFIG = { supabaseUrl: _DEFAULT_SUPABASE_URL, supabaseKey: _DEFAULT_SUPABASE_KEY, pollInterval: 5*60*1000, historyDays: 90 };
 const PRESET_FAMILY_CODE = _DEFAULT_FAMILY_CODE;
 let _cryptoKey = null, _cryptoFamilyCode = null, _isSyncing = false;
 
@@ -5709,6 +5709,16 @@ async function syncOneDay(key, fid, ds) {
   } catch (e) { return false; }
 }
 
+// 滚动窗口：返回最近 days 天的日期列表（近期/增量同步用）
+function syncRollingDates(days) {
+  const today = new Date(); const arr = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    arr.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+  }
+  return arr;
+}
+
 async function syncPullAll(opts) {
   if (!isSyncReady() || !navigator.onLine || _isSyncing) return;
   _isSyncing = true; setSyncStatus('syncing');
@@ -5734,13 +5744,18 @@ async function syncPullAll(opts) {
       }
     } catch (e) {}
 
-    // 1. 拉取近期记录（分批并发：每批 6 天，降低串行等待；合并/备份/双向收敛语义保持不变）
-    const today = new Date();
-    const dates = [];
-    for (let i = 0; i < days; i++) {
-      const d = new Date(today); d.setDate(d.getDate() - i);
-      const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      dates.push(ds);
+    // 1. 拉取记录（分批并发：每批 6 天；合并/备份/双向收敛语义保持不变）
+    // v3.5.116 修复：全量同步(未指定 days)改为直接拉取云端已有的全部日期，不再受 historyDays 窗口限制。
+    // 否则清缓存后 8 月等较早历史不会被拉回，表现为"数据丢失"。近期/前台增量同步仍用滚动小窗口。
+    let dates;
+    if (opts && opts.days) {
+      dates = syncRollingDates(days);
+    } else {
+      try {
+        const dr = await supabaseGet(`family_records?family_id=eq.${fid}&select=record_date`);
+        const cloudDates = [...new Set((dr || []).map(r => r.record_date).filter(Boolean))];
+        dates = cloudDates.length ? cloudDates : syncRollingDates(days);
+      } catch (e) { console.warn('[Sync] 拉取云端日期失败，回退滚动窗口:', e); dates = syncRollingDates(days); }
     }
     const BATCH = 6;
     for (let b = 0; b < dates.length; b += BATCH) {
