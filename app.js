@@ -1244,7 +1244,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.107'; // ①日报总览胶囊色号统一为「选中的分类标签字体色」(.cat-tag.active:深#fff/浅#0984e3);②备忘录「添加」按钮改用首页同款 .fab-btn 样式,去掉备忘录语音输入(底栏不再抬高/不再回填,首页语音不变);③待办事项数由两端对齐改为紧贴标题右侧;④底部导航顺序改为 分析/备忘录/历史/管理; index.html 缓存参数升 v3.5.107
+const APP_VERSION = 'v3.5.108'; // 备忘录弹窗高度与历史/分析等弹窗一致：#memoModal .modal-box 统一撑满 85vh(与 .modal-box max-height 一致),避免内容少时过矮、与历史/分析弹窗不齐; index.html 缓存参数升 v3.5.108
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {

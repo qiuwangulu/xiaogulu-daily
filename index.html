@@ -507,6 +507,9 @@
     position: relative;
   }
   @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  /* v3.5.108 备忘录弹窗高度与历史/分析等弹窗一致：统一撑满 85vh（与 .modal-box 的 max-height 一致），
+     避免内容少时弹窗过矮、与历史/分析弹窗视觉不齐 */
+  #memoModal .modal-box { height: 85vh; }
   .modal-title {
     font-size: 20px; font-weight: 700;
     color: #fff; margin-bottom: 16px;
@@ -1850,8 +1853,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.107"></script>
-<script src="app-config.js?v=v3.5.107"></script>
-<script src="app.js?v=v3.5.107"></script>
+<script src="std-config.js?v=v3.5.108"></script>
+<script src="app-config.js?v=v3.5.108"></script>
+<script src="app.js?v=v3.5.108"></script>
 </body>
 </html>
