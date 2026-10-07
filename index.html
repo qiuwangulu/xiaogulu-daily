@@ -608,11 +608,38 @@
   .ai-cta { flex:1; min-height:38px; max-height:96px; padding:9px 44px 9px 12px; border-radius:12px; font-size:14px; resize:none; outline:none; background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.18); color:var(--fg); font-family:inherit; line-height:1.4; }
   body.theme-day .ai-cta { background:#fff; border-color:rgba(9,132,227,.25); }
   /* v3.5.110 语音输入：图标同首页语音按钮，内嵌在输入框右侧（微信样式）；无发送按钮，回车发送 */
-  .ai-mic { position:absolute; right:5px; bottom:5px; width:30px; height:30px; padding:5px; border:none; background:none; cursor:pointer; border-radius:9px; display:flex; align-items:center; justify-content:center; }
+  /* v3.5.114 AI 话筒：改为「按住说话」（交互与首页语音一致），并禁止长按弹出系统"粘贴"菜单 */
+  .ai-mic {
+    position:absolute; right:5px; bottom:5px; width:30px; height:30px; padding:5px;
+    border:none; background:none; cursor:pointer; border-radius:9px;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none;
+    -webkit-touch-callout:none; touch-action:none;
+    -webkit-tap-highlight-color:transparent;
+    transition:background .2s, transform .2s;
+  }
   .ai-mic svg { width:100%; height:100%; fill:none; stroke:#b2bec3; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; transition:stroke .2s; }
   body.theme-day .ai-mic svg { stroke:#636e72; }
-  .ai-mic.recording { background:rgba(231,76,60,.14); }
-  .ai-mic.recording svg { stroke:#e74c3c; }
+  /* 按住态（与首页 voice-hold-btn.holding 同色系） */
+  .ai-mic.holding { background:rgba(99,136,255,.2); transform:scale(1.08); }
+  .ai-mic.holding svg { stroke:#6388FF; }
+  /* 录音态：呼吸高亮（小按钮不适用首页大范围扩散光晕，改用缩放+透明度呼吸） */
+  .ai-mic.recording { background:rgba(116,185,255,.22); animation:aiMicPulse 1100ms ease-in-out infinite; }
+  .ai-mic.recording svg { stroke:#74b9ff; }
+  @keyframes aiMicPulse {
+    0%, 100% { transform:scale(1); box-shadow:0 0 0 0 rgba(116,185,255,.45); }
+    50%      { transform:scale(1.12); box-shadow:0 0 0 6px rgba(116,185,255,.18); }
+  }
+  /* 录音中提示条：浮在输入框上方 */
+  .ai-rec-bar {
+    display:none; position:absolute; left:0; right:0; bottom:calc(100% + 7px);
+    background:#1e3a5f; border:1px solid #6388FF; color:#E0E8FF;
+    font-size:12px; font-weight:700; padding:8px 12px; border-radius:10px;
+    text-align:center; animation:aiRecBlink 1100ms ease-in-out infinite; pointer-events:none;
+  }
+  .ai-rec-bar.show { display:block; }
+  @keyframes aiRecBlink { 0%, 100% { opacity:.6; } 50% { opacity:1; } }
+  body.theme-day .ai-rec-bar { background:#fff; border-color:#0984e3; color:#0984e3; }
   .ai-chat-tools { display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:11px; color:var(--muted); }
   .ai-chat-tools .ai-clear { font-size:11px; color:var(--muted); background:none; border:1px solid var(--row-bd); border-radius:9px; padding:3px 10px; cursor:pointer; font-family:inherit; }
   .ai-kb-filter { display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; margin-bottom:6px; }
@@ -1728,7 +1755,7 @@
     <button class="ai-x" onclick="closeAI()">&times;</button>
     <div class="ai-title">🤖 AI 育儿问答</div>
     <div class="ai-model-line">模型 <b id="aiModelName">deepseek-v4-flash</b> · 已载入宝宝档案 + <span class="ai-kb-cnt" id="kbCntLine">知识库 0 条</span></div>
-    <div class="ai-local-tag">🔒 对话仅存本机，不联网同步</div>
+    <div class="ai-local-tag">🔒 当前对话仅存本机 · <b>历史对话加密同步家庭云</b></div>
     <div id="tokenBanner" class="ai-token-banner">⚠️ 当前 DeepSeek 模型的 token 额度已达上限，AI 暂时无法回复。请稍后再试，或联系管理员调整额度。</div>
 
     <!-- v3.5.110 左侧抽屉：历史对话 -->
@@ -1749,8 +1776,9 @@
       <div class="ai-msgs" id="aiMsgs"></div>
       <div class="ai-composer">
         <div class="ai-input-wrap">
+          <div class="ai-rec-bar" id="aiRecBar">🎙️ 正在录音…松开结束，上滑取消</div>
           <textarea class="ai-cta" id="aiChatInput" placeholder="输入问题，回车发送…" onkeydown="aiInputKey(event)"></textarea>
-          <button class="ai-mic" id="aiVoiceBtn" type="button" title="语音输入" onclick="toggleAIVoice()"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+          <button class="ai-mic" id="aiVoiceBtn" type="button" title="按住说话"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
         </div>
       </div>
       <div class="ai-chat-tools">
@@ -2064,8 +2092,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.113"></script>
-<script src="app-config.js?v=v3.5.113"></script>
-<script src="app.js?v=v3.5.113"></script>
+<script src="std-config.js?v=v3.5.114"></script>
+<script src="app-config.js?v=v3.5.114"></script>
+<script src="app.js?v=v3.5.114"></script>
 </body>
 </html>

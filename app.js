@@ -32,10 +32,11 @@ function getStdRow(table, ds) {
   const m = getAgeMonths(ds);
   return table.find(r => r.month === m) || table[table.length - 1];
 }
-// v3.5.113 浅色头像换新照片。改用全新文件名 photo-day-v2.webp：GitHub Pages CDN 缓存 TTL 600s，
-// 同名文件推送后边缘节点仍会发旧图（实测 age≈272s 时仍是旧内容），换名可 100% 绕开 CDN 与浏览器双层缓存。
-// photo-day.webp 同步更新为新图，作为旧版 app.js 的兜底。
-const DEFAULT_PHOTO_DAY = 'assets/photo-day-v2.webp';
+// v3.5.114 浅色头像再次调整裁剪：原 (125,0,685,560) 右边界切掉了宝宝右侧手臂，
+// 改为 (200,20,760,580) —— 画面整体左移，右臂完整入镜，圆形构图下脸部仍居中。
+// 文件名再次更换（photo-day-v3.webp）以绕开 GitHub Pages CDN 600s 缓存。
+// photo-day.webp / photo-day-v2.webp 同步更新为同一内容，作为旧版 app.js 的兜底。
+const DEFAULT_PHOTO_DAY = 'assets/photo-day-v3.webp';
 const DEFAULT_PHOTO_DATA = 'assets/photo-data.webp';
 
 const CATEGORIES = [
@@ -1251,7 +1252,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.113'; // 浅色头像换新照片改用全新文件名 assets/photo-day-v2.webp（同名文件受 GitHub Pages CDN 600s 缓存影响，推送后边缘节点仍发旧图）；photo-day.webp 同步更新为新图作兜底；深色头像不变；其余同 v3.5.112
+const APP_VERSION = 'v3.5.114'; // ①浅色头像重裁(200,20,760,580):画面左移让宝宝右臂完整入镜,文件名换 photo-day-v3.webp 绕开 CDN 缓存;②AI 对话话筒改「按住说话」(复用首页识别链路:优先讯飞,回退 Web Speech),修复 not-allowed 报错与长按弹出系统粘贴菜单;③历史对话加密同步家庭云(新增 _ai_hist),修复关闭/清缓存后历史丢失;④system prompt 注入宝宝档案+今日明细+近7天逐日汇总+最近身高体重,可直接回答奶量/大便次数等具体数据;⑤新增 markdown 净化,气泡与历史里不再出现 * 号
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2228,14 +2229,25 @@ let _voiceHoldCanceled = false;      // 本次按住是否被上滑取消
 let _voiceTimeoutTimer = null;       // 录音超时定时器
 const VOICE_MAX_SEC = 60;            // 单次录音上限（秒），超时自动结束
 const VOICE_LABEL = { idle: '语音', recording: '录音中' };
+// v3.5.114 语音目标：'record' = 首页「语音」按钮（识别后弹解析弹窗）；
+//                 'ai'     = AI 对话输入框（识别后把文字回填输入框，不弹解析弹窗）
+let voiceTarget = 'record';
+function voiceBtnEl() { return document.getElementById(voiceTarget === 'ai' ? 'aiVoiceBtn' : 'voiceHoldBtn'); }
 function setVoiceState(state) {
-  const btn = document.getElementById('voiceHoldBtn');
+  const btn = voiceBtnEl();
   if (!btn) return;
   btn.classList.toggle('holding', state === 'holding');
   btn.classList.toggle('recording', state === 'recording');
   const label = btn.querySelector('.voice-label');
   if (label) label.textContent = (state === 'holding') ? '语音' : (VOICE_LABEL[state] || '语音');
-  if (state === 'idle') { if (label) label.textContent = '语音'; }
+  if (label && state === 'idle') label.textContent = '语音';
+  // AI 目标：同步「录音中」提示条与输入框占位文案
+  if (voiceTarget === 'ai') {
+    const bar = document.getElementById('aiRecBar');
+    if (bar) bar.classList.toggle('show', state === 'holding' || state === 'recording');
+    const ta = document.getElementById('aiChatInput');
+    if (ta) ta.placeholder = (state === 'idle') ? '输入问题，回车发送…' : '正在聆听…松开结束';
+  }
 }
 // 开始录音超时倒计时（到点自动结束录音）
 function armVoiceTimeout() {
@@ -2243,43 +2255,52 @@ function armVoiceTimeout() {
   _voiceTimeoutTimer = setTimeout(() => { stopVoiceHold(); }, VOICE_MAX_SEC * 1000);
 }
 function disarmVoiceTimeout() { clearTimeout(_voiceTimeoutTimer); _voiceTimeoutTimer = null; }
-// 取消录音（上滑移出按钮或 touchcancel）：丢弃本次识别结果
-function cancelVoiceHold() {
+// 取消录音（上滑移出按钮或 touchcancel）：静默丢弃本次识别结果
+// v3.5.114 抽出 quiet 版：关闭 AI 弹窗时静默中断，不弹「已取消录音」
+function cancelVoiceHoldQuiet() {
   disarmVoiceTimeout();
   _voiceHoldCanceled = true;
-  const btn = document.getElementById('voiceHoldBtn');
-  if (btn) btn.classList.remove('holding', 'recording');
-  if (btn) { const l = btn.querySelector('.voice-label'); if (l) l.textContent = '语音'; }
   voiceRecActive = false;
   voiceFinalText = ''; voiceItems = [];
   // 中止讯飞会话
   if (xfSession) { try { xfSession.endSent = true; xfSession.finalized = true; try { xfSession.ws && xfSession.ws.close(); } catch(e){} try { xfSession.stream && xfSession.stream.getTracks().forEach(t=>t.stop()); } catch(e){} xfSession = null; } catch(e){} }
   // 中止 Web Speech
   if (voiceRecog) { try { voiceRecog.onend = null; voiceRecog.stop(); } catch (e) {} }
-  showToast('已取消录音');
+  setVoiceState('idle');
 }
+function cancelVoiceHold() { cancelVoiceHoldQuiet(); showToast('已取消录音'); }
 
 function finishVoiceRecognition() {
   disarmVoiceTimeout();
   voiceRecActive = false;
+  const target = voiceTarget;
   setVoiceState('idle');
   if (_voiceHoldCanceled) { _voiceHoldCanceled = false; return; }
-  if (voiceFinalText) {
-    const r = parseVoiceText(voiceFinalText);
-    voiceItems = r.items;
-    showVoiceModal(voiceFinalText, r.unmatched);
-  } else {
-    showToast('未识别到语音，请靠近一点再试试');
+  if (!voiceFinalText) { showToast('未识别到语音，请靠近一点再试试'); return; }
+  // AI 对话：识别结果直接回填输入框（可编辑后再发送），不弹解析弹窗
+  if (target === 'ai') {
+    const ta = document.getElementById('aiChatInput');
+    if (ta) {
+      const prev = ta.value.replace(/\s+$/, '');
+      ta.value = prev ? prev + ' ' + voiceFinalText.trim() : voiceFinalText.trim();
+      try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
+    }
+    showToast('已转成文字，可直接发送');
+    return;
   }
+  const r = parseVoiceText(voiceFinalText);
+  voiceItems = r.items;
+  showVoiceModal(voiceFinalText, r.unmatched);
 }
 
-function startVoiceHold() {
+function startVoiceHold(target) {
   if (isReadOnlyMode()) return;
   if (voiceRecActive) return;
+  voiceTarget = target || 'record';
   _voiceHoldCanceled = false;
   voiceFinalText = '';
   voiceItems = [];
-  const btn = document.getElementById('voiceHoldBtn');
+  const btn = voiceBtnEl();
   setVoiceState('holding'); // 状态2：先进入按住态（高亮边 + tip），等识别真正激活再切录音中
   armVoiceTimeout();
   // 优先讯飞（国内直连可用）；未配置则回退浏览器自带 Web Speech API（海外可用）
@@ -2356,6 +2377,33 @@ function bindVoiceTouch() {
   const endVoice = (e) => { e.preventDefault(); if (voiceRecActive || btn.classList.contains('holding') || btn.classList.contains('recording')) { if (!_voiceHoldCanceled) stopVoiceHold(); } };
   btn.addEventListener('touchend', endVoice, { passive: false });
   btn.addEventListener('touchcancel', (e) => { e.preventDefault(); cancelVoiceHold(); }, { passive: false });
+}
+// v3.5.114 AI 对话输入框话筒：按住说话（与首页语音同一套识别链路：优先讯飞，回退 Web Speech）
+// 关键点：touchstart 里 preventDefault + CSS touch-callout/user-select:none，避免长按弹出系统「粘贴」菜单
+function bindAIVoiceTouch() {
+  const btn = document.getElementById('aiVoiceBtn');
+  if (!btn || btn.dataset.bound === '1') return;
+  btn.dataset.bound = '1';
+  let sx = 0, sy = 0, movedOut = false, active = false;
+  const begin = (x, y) => { sx = x; sy = y; movedOut = false; active = true; startVoiceHold('ai'); };
+  const move = (x, y) => {
+    if (!active) return;
+    const r = btn.getBoundingClientRect();
+    const outX = x < r.left - 8 || x > r.right + 8;
+    const outY = y < r.top - 40 || y > r.bottom + 8;
+    if ((y - sy < -30) || outX || outY) { if (!movedOut) { movedOut = true; cancelVoiceHold(); } }
+    else movedOut = false;
+  };
+  const end = () => { if (!active) return; active = false; if (!_voiceHoldCanceled) stopVoiceHold(); };
+  btn.addEventListener('touchstart', (e) => { e.preventDefault(); const t = e.touches[0]; begin(t.clientX, t.clientY); }, { passive: false });
+  btn.addEventListener('touchmove', (e) => { const t = e.touches[0]; move(t.clientX, t.clientY); e.preventDefault(); }, { passive: false });
+  btn.addEventListener('touchend', (e) => { e.preventDefault(); end(); }, { passive: false });
+  btn.addEventListener('touchcancel', (e) => { e.preventDefault(); active = false; cancelVoiceHold(); }, { passive: false });
+  // 桌面端：鼠标按住同样可用（便于在电脑上调试）
+  btn.addEventListener('mousedown', (e) => { e.preventDefault(); begin(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', () => { if (active) end(); });
+  // 屏蔽长按系统菜单
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
 // 触摸直发兜底：部分手机浏览器 click 合成可能失效（尤其语音按钮 preventDefault 之后），
@@ -4377,6 +4425,7 @@ async function enrichMilestonesWithLLM(items) {
 const KB_CATS = ['奶粉喂养','辅食','睡眠','早教','穿衣','户外','医疗'];
 const KB_KEY = 'ai_kb_v1';
 const KB_CLOUD_KEY = '_ai_kb';
+const AI_HIST_CLOUD_KEY = '_ai_hist';   // v3.5.114 历史对话也加密同步家庭云（此前只存本机，清缓存/换入口即丢）
 const AI_CHAT_KEY = 'ai_chat_v1';
 const AI_CHAT_CAP = 10;            // 单次对话本地仅留最近 10 条
 const AI_HIST_KEY = 'ai_chat_history_v1';
@@ -4386,7 +4435,7 @@ let KB_FILTER = '全部';
 let AI_CHAT = [];
 let AI_HIST = [];
 let tokenExceeded = false;
-let aiRecog = null, aiRecording = false;
+// v3.5.114 起语音识别统一走首页链路（startVoiceHold('ai')），不再单独持有 AI 识别实例
 
 function aiInit() {
   try { AI_CHAT = JSON.parse(localStorage.getItem(AI_CHAT_KEY) || '[]'); } catch { AI_CHAT = []; }
@@ -4394,20 +4443,54 @@ function aiInit() {
   try { AI_HIST = JSON.parse(localStorage.getItem(AI_HIST_KEY) || '[]'); } catch { AI_HIST = []; }
   if (!Array.isArray(AI_HIST)) AI_HIST = [];
   loadKBLocal();
+  loadAIHistLocal();
   // v3.5.110 知识库自动双向同步家庭云：启动即拉取；云端为空而本地有内容时上推
   if (isSyncReady()) {
     loadKBCloud()
       .then(had => { if (!had && KB.length) return saveKBCloud(); })
+      .catch(() => {});
+    // v3.5.114 历史对话同样自动双向同步（合并本地 + 云端，永不丢）
+    loadAIHistCloud()
+      .then(had => { if (!had && AI_HIST.length) return saveAIHistCloud(); })
       .catch(() => {});
   }
 }
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
+/* ---------- v3.5.114 大模型输出的 markdown 记号净化 ----------
+ * 背景：DeepSeek 回复里大量 ** 加粗、* 列表、*** 分隔线，气泡里显示成满屏星号，阅读吃力。
+ * 策略：纯文本场景直接剥掉记号；气泡场景把 **xx** 转成 <b>xx</b>（保留重点层次），其余记号一律去掉。
+ * 注意：气泡版先 escapeHtml 再插入 <b>，不存在 XSS 风险。 */
+function mdToText(s) {
+  return String(s == null ? '' : s)
+    .replace(/\*\*\*(.+?)\*\*\*/g, '$1')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/(^|\n)\s*[\*\-]\s+/g, '$1· ')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/\*/g, '')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/`{1,3}/g, '')
+    .replace(/~~(.+?)~~/g, '$1');
+}
+function aiMsgHtml(text) {
+  let s = escapeHtml(text == null ? '' : String(text));
+  s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<b>$1</b>');
+  s = s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  s = s.replace(/(^|\n)\s*[\*\-]\s+/g, '$1· ');
+  s = s.replace(/\*(.+?)\*/g, '$1');
+  s = s.replace(/\*/g, '');
+  s = s.replace(/^#{1,6}\s*/gm, '');
+  s = s.replace(/`{1,3}/g, '');
+  s = s.replace(/~~(.+?)~~/g, '$1');
+  return s.replace(/\n/g, '<br>');
+}
+
 /* ---------- AI 弹窗开关 / 标签 ---------- */
 function openAI() {
   const overlay = document.getElementById('aiOverlay'); if (!overlay) return;
   overlay.classList.add('show');
+  bindAIVoiceTouch();   // v3.5.114 话筒按住说话
   renderTokenBanner(); renderAIMsgs(); renderKb(); updateKbCntLine(); renderAIHistory();
 }
 // v3.5.110 关闭弹窗：自动把当前对话归档进「历史对话」并清空当前对话
@@ -4415,7 +4498,7 @@ function closeAI() {
   archiveAIChat();
   const o = document.getElementById('aiOverlay'); if (o) o.classList.remove('show');
   toggleAIDrawer(false);
-  stopAIVoice();
+  if (voiceTarget === 'ai') cancelVoiceHoldQuiet();
 }
 function switchAITab(t) {
   document.querySelectorAll('.ai-tab').forEach(x => x.classList.toggle('on', x.dataset.tab === t));
@@ -4434,9 +4517,47 @@ function toggleAIDrawer(show) {
   m.classList.toggle('show', on);
   if (on) renderAIHistory();
 }
+function loadAIHistLocal() {
+  try { AI_HIST = JSON.parse(localStorage.getItem(AI_HIST_KEY) || '[]'); } catch { AI_HIST = []; }
+  if (!Array.isArray(AI_HIST)) AI_HIST = [];
+}
 function saveAIHistory() {
   if (AI_HIST.length > AI_HIST_CAP) AI_HIST = AI_HIST.slice(0, AI_HIST_CAP);
   try { localStorage.setItem(AI_HIST_KEY, JSON.stringify(AI_HIST)); } catch (e) {}
+  saveAIHistCloud();   // v3.5.114 同步到家庭云（异步，不阻塞界面）
+}
+// 历史对话云端读写（与知识库共用同一套端到端加密配置表）
+async function loadAIHistCloud() {
+  if (!isSyncReady()) return false;
+  try {
+    const key = await getCryptoKey(); if (!key) return false;
+    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${AI_HIST_CLOUD_KEY}&select=encrypted_data,iv`);
+    if (rows.length > 0 && rows[0].encrypted_data && rows[0].iv) {
+      const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
+      const arr = JSON.parse(json);
+      if (Array.isArray(arr) && arr.length) {
+        // 与本地合并（按 id 去重，本地优先），比"云端覆盖本地"更安全：任一边有内容都不会丢
+        const map = new Map();
+        arr.forEach(h => { if (h && h.id) map.set(h.id, h); });
+        (AI_HIST || []).forEach(h => { if (h && h.id) map.set(h.id, h); });
+        AI_HIST = [...map.values()]
+          .sort((a, b) => (Number(String(b.id).replace(/\D/g, '')) || 0) - (Number(String(a.id).replace(/\D/g, '')) || 0))
+          .slice(0, AI_HIST_CAP);
+        try { localStorage.setItem(AI_HIST_KEY, JSON.stringify(AI_HIST)); } catch (e) {}
+        if (document.getElementById('aiOverlay')) renderAIHistory();
+        return true;
+      }
+    }
+  } catch (e) { console.warn('[AI历史] 云端加载失败:', e); }
+  return false;
+}
+async function saveAIHistCloud() {
+  if (!isSyncReady()) return;
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const { data, iv } = await encrypt(key, JSON.stringify(AI_HIST));
+    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: AI_HIST_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
+  } catch (e) { console.warn('[AI历史] 云端保存失败:', e); }
 }
 function archiveAIChat() {
   if (!AI_CHAT.length) return;
@@ -4454,12 +4575,12 @@ function archiveAIChat() {
 }
 function renderAIHistory() {
   const box = document.getElementById('aiHistList'); if (!box) return;
-  if (!AI_HIST.length) { box.innerHTML = '<div class="ai-hist-empty">还没有历史对话。<br>关闭 AI 育儿页面时，当前对话会自动存到这里。</div>'; return; }
+  if (!AI_HIST.length) { box.innerHTML = '<div class="ai-hist-empty">还没有历史对话。<br>关闭 AI 育儿页面时，当前对话会自动存到这里，<br>并加密同步到家庭云（换设备/清理缓存也不会丢）。</div>'; return; }
   box.innerHTML = AI_HIST.map((h, i) => (
     `<div class="ai-hist-item" data-i="${i}">`
     + `<div class="ai-hist-time">🕘 ${escapeHtml(h.time)}</div>`
-    + `<div class="ai-hist-prev">${escapeHtml(h.preview)}</div>`
-    + `<div class="ai-hist-body">${h.msgs.map(m => `<div class="ai-hist-msg"><b>${m.role === 'me' ? '我' : 'AI'}</b> ${escapeHtml(m.text)}</div>`).join('')}</div>`
+    + `<div class="ai-hist-prev">${escapeHtml(mdToText(h.preview))}</div>`
+    + `<div class="ai-hist-body">${h.msgs.map(m => `<div class="ai-hist-msg"><b>${m.role === 'me' ? '我' : 'AI'}</b> ${aiMsgHtml(m.text)}</div>`).join('')}</div>`
     + `</div>`
   )).join('');
   box.querySelectorAll('.ai-hist-item').forEach(el => {
@@ -4487,20 +4608,92 @@ function renderAIMsgs() {
     box.innerHTML = `<div class="ai-msg ai"><span class="ai-mini">AI 育儿助手</span>你好呀～我是咕噜的育儿小助手。我已经读过宝宝档案和你录入的「家庭知识库」，可以直接问我喂养、睡眠、发育相关的问题 🍼</div>`;
   } else {
     box.innerHTML = AI_CHAT.map(m => m.role === 'me'
-      ? `<div class="ai-msg me">${escapeHtml(m.text)}</div>`
-      : `<div class="ai-msg ai"><span class="ai-mini">AI 育儿助手</span>${escapeHtml(m.text)}</div>`).join('');
+      ? `<div class="ai-msg me">${aiMsgHtml(m.text)}</div>`
+      : `<div class="ai-msg ai"><span class="ai-mini">AI 育儿助手</span>${aiMsgHtml(m.text)}</div>`).join('');
   }
   box.scrollTop = box.scrollHeight;
   const c = document.getElementById('aiLocalCnt'); if (c) c.textContent = AI_CHAT.length;
 }
+/* ---------- v3.5.114 让 AI 能准确回答宝宝的具体数据 ----------
+ * 背景：此前 system prompt 只注入「月龄 + 知识库」，家长问"今天拉了几次/喝了多少奶"时，
+ * 模型看不到任何数据，只能回"我这边看不到宝宝的情况"。现在把宝宝档案 + 今日明细 +
+ * 近 7 天逐日汇总 + 最近身高体重一并注入，模型可直接引用真实数字作答。 */
+function daySummaryForAI(ds) {
+  const recs = getRecordsByDate(ds);
+  const byName = {};
+  const notes = [];
+  recs.forEach(r => {
+    const n = r.name || r.type || '记录';
+    if (!byName[n]) byName[n] = { cnt: 0, ml: 0, dur: 0, cnts: 0, statuses: [], foods: [], level: '', temp: null };
+    const o = byName[n];
+    o.cnt++;
+    if (r.milkAmount != null) o.ml += Number(r.milkAmount) || 0;
+    if (r.duration != null) o.dur += Number(r.duration) || 0;
+    if (r.count != null) o.cnts += Number(r.count) || 0;
+    if (r.poopStatus) o.statuses.push(r.poopStatus);
+    if (Array.isArray(r.solidFoods)) r.solidFoods.forEach(f => { if (f && !o.foods.includes(f)) o.foods.push(f); });
+    if (r.level) o.level = r.level;
+    if (r.temperature) o.temp = r.temperature;
+    if (r.note && String(r.note).trim()) notes.push(`${r.recTime || r.time || ''} ${n}: ${String(r.note).trim()}`);
+  });
+  return { recs, byName, notes };
+}
+function formatDayForAI(ds) {
+  const { recs, byName, notes } = daySummaryForAI(ds);
+  if (!recs.length) return `- ${ds}：当天没有任何记录`;
+  const parts = Object.keys(byName).map(n => {
+    const o = byName[n];
+    let t = `${n} ${o.cnt}次`;
+    if (o.ml) t += `，共${o.ml}ml`;
+    if (o.dur) t += `，共${Math.round(o.dur)}分钟`;
+    if (o.cnts) t += `，共${o.cnts}`;
+    if (o.statuses.length) t += `，性状：${o.statuses.join('、')}`;
+    if (o.foods.length) t += `，食物：${o.foods.join('、')}`;
+    if (o.level) t += `，程度：${o.level}`;
+    if (o.temp) t += `，${o.temp}℃`;
+    return t;
+  });
+  let out = `- ${ds}（共${recs.length}条）：` + parts.join('；');
+  if (notes.length) out += `\n     备注：` + notes.join(' | ');
+  return out;
+}
 function buildAISystemPrompt() {
-  const ageEl = document.getElementById('ageInfo');
-  const ageText = ageEl ? ageEl.textContent : '';
+  const ds = getTodayDateStr();
+  const ad = getAgeDetail(ds);
+  const birthStr = `${BIRTH_DATE.getFullYear()}-${String(BIRTH_DATE.getMonth() + 1).padStart(2, '0')}-${String(BIRTH_DATE.getDate()).padStart(2, '0')}`;
+  const h = localStorage.getItem('babyHeight') || '';
+  const w = localStorage.getItem('babyWeight') || '';
+  const bh = getBodyHistory()
+    .filter(x => x && x.d && (x.w != null || x.h != null))
+    .sort((a, b) => (a.d < b.d ? 1 : -1))
+    .slice(0, 6)
+    .map(x => `${x.d} ${x.h != null ? x.h + 'cm' : ''}${(x.h != null && x.w != null) ? ' / ' : ''}${x.w != null ? x.w + 'kg' : ''}`)
+    .join('；');
+
+  let baby = `【宝宝档案】\n- 姓名：${BABY_NAME}；出生日期：${birthStr}；今天：${ds}，当前 ${ad.months} 月龄 ${ad.days} 天\n`;
+  if (h || w) baby += `- 当前身高体重（家长最新录入）：身高 ${h || '—'}cm，体重 ${w || '—'}kg\n`;
+  if (bh) baby += `- 历史身高体重记录：${bh}\n`;
+
+  const days = [];
+  const now = new Date();
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    days.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+  }
+  const daily = days.map(formatDayForAI).join('\n');
+
   let kbText = '';
-  if (KB.length) kbText = '\n\n【家庭知识库（我家宝宝的具体情况，回复时务必优先考虑）】\n' + KB.map(x => '- [' + x.cat + '] ' + x.text).join('\n');
-  return '你是一位耐心、专业的婴幼儿育儿顾问，服务对象是用户的小宝宝（' + (ageText || '婴儿') + '）。\n'
+  if (KB.length) kbText = '\n\n【家庭知识库（我家宝宝的具体情况与偏好，回复时务必优先考虑）】\n' + KB.map(x => '- [' + x.cat + '] ' + x.text).join('\n');
+
+  return '你是一位耐心、专业的婴幼儿育儿顾问，服务对象是用户的小宝宝。\n'
     + '请用简洁、温暖、可操作的口吻回答喂养、睡眠、发育、健康、早教等问题，给出具体建议并说明原因；如无把握请如实说明并建议就医。\n'
-    + '回答使用简体中文，避免冗长，分点清晰。' + kbText;
+    + '回答使用简体中文，避免冗长，分点清晰。不要使用 markdown 标记：不要写星号（* 或 **），不要加 # 标题，列点请用「·」或「1. 2. 3.」。\n\n'
+    + baby
+    + '\n【宝宝每日记录（家长实际录入）】\n'
+    + daily
+    + '\n（以上均为家长手工录入的真实数据。家长询问喝奶量、大便次数与性状、睡眠时长、体重等具体数字时，'
+    + '请直接引用上面的数据作答，不要说"我看不到宝宝的情况"；某项当天没有记录时，直接说明"当天的记录里没有这一项"。）'
+    + kbText;
 }
 // 非 JSON 模式的对话调用：返回文本；429(额度上限)→返回特殊标记并置 banner；其它异常→null
 async function callAIChat(cfg, messages) {
@@ -4648,23 +4841,7 @@ async function saveKBCloud() {
   } catch (e) { console.warn('[KB] 云端保存失败:', e); }
 }
 
-/* ---------- 对话语音输入（Web Speech，识别文字回填输入框） ---------- */
-function toggleAIVoice() {
-  const btn = document.getElementById('aiVoiceBtn'); if (!btn) return;
-  if (aiRecording) { stopAIVoice(); return; }
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showToast('当前环境不支持语音识别'); return; }
-  try {
-    aiRecog = new SR();
-    aiRecog.lang = 'zh-CN'; aiRecog.interimResults = true; aiRecog.continuous = false; aiRecog.maxAlternatives = 1;
-    const ta = document.getElementById('aiChatInput');
-    aiRecog.onresult = (e) => { let t = ''; for (let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript; if (ta) ta.value = (ta.value ? ta.value + ' ' : '') + t; };
-    aiRecog.onerror = (e) => { aiRecording = false; if (btn) btn.classList.remove('recording'); showToast('语音识别出错(' + (e.error || '') + ')'); };
-    aiRecog.onend = () => { aiRecording = false; if (btn) btn.classList.remove('recording'); };
-    aiRecog.start(); aiRecording = true; if (btn) btn.classList.add('recording');
-  } catch (err) { showToast('语音启动失败'); }
-}
-function stopAIVoice() { if (aiRecog) { try { aiRecog.stop(); } catch (e) {} aiRecog = null; } aiRecording = false; const b = document.getElementById('aiVoiceBtn'); if (b) b.classList.remove('recording'); }
+/* ---------- 对话语音输入（v3.5.114 起并入首页语音链路，见 startVoiceHold('ai') / bindAIVoiceTouch） ---------- */
 
 // 月龄 + 距上次满月的天数（如 4月龄11天）
 function getAgeDetail(ds) {
