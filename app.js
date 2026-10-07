@@ -1291,7 +1291,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.116'; // 修复历史数据"丢失":全量同步(启动/手动)改为直接拉取云端已有的全部日期,不再受 historyDays(原30天)窗口限制,清缓存后 8 月等较早历史可完整恢复(合并非覆盖,仅尊重真实删除墓碑);historyDays 改为 90 仅作兜底
+const APP_VERSION = 'v3.5.117'; // 备忘录「添加」按钮去掉加号图标并收窄宽度(padding 6px 14px, gap 0)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {

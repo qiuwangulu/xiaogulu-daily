@@ -947,7 +947,8 @@
   }
   .memo-textarea:focus { border-color: rgba(116,185,255,0.6); }
   /* v3.5.107 备忘录「添加」按钮直接复用首页底部「添加」按钮样式(.fab-btn)，此处仅约束不收缩 */
-  .memo-input-row .fab-btn { flex-shrink: 0; }
+  /* v3.5.116 去掉加号图标并收窄宽度 */
+  .memo-input-row .fab-btn { flex-shrink: 0; padding: 6px 14px; gap: 0; }
   .memo-section-title { font-size: 14px; font-weight: 700; color: #fff; margin: 14px 0 8px;
     display: flex; justify-content: flex-start; align-items: baseline; gap: 6px; }
   .memo-section-title .cnt { color: #74b9ff; font-size: 13px; }
@@ -1850,7 +1851,6 @@
     <div class="memo-input-row">
       <textarea class="memo-textarea" id="memoInput" placeholder="输入待办事项…"></textarea>
       <button class="fab-btn" onclick="addMemo()">
-        <span class="fab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></span>
         添加
       </button>
     </div>
@@ -2124,8 +2124,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.116"></script>
-<script src="app-config.js?v=v3.5.116"></script>
-<script src="app.js?v=v3.5.116"></script>
+<script src="std-config.js?v=v3.5.117"></script>
+<script src="app-config.js?v=v3.5.117"></script>
+<script src="app.js?v=v3.5.117"></script>
 </body>
 </html>
