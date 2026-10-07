@@ -221,6 +221,7 @@ function init() {
   setInterval(() => { try { updateOverview(/*skipPush=*/true); } catch(e) { console.error(e); } }, 60000);
   setupPWA();
   initSync();
+  aiInit();
   bindVoiceTouch();
   bindFastTaps();
   // 自动清理测试残留数据（仅一次， harmless）
@@ -327,11 +328,13 @@ function handlePhotoUpload(e) {
   r.readAsDataURL(f);
 }
 function loadPhoto() {
+  const img = document.getElementById('babyPhoto'), ph = document.getElementById('photoPlaceholder');
+  // v3.5.109 头像改为固定 AI 入口（无上传照片元素）：无元素时直接返回，避免空引用
+  if (!img || !ph) return;
   const userPhoto = localStorage.getItem('babyPhoto');
   const day = document.body.classList.contains('theme-day');
   // 没上传过照片：白天皮肤用小咕噜默认照，夜间用原默认照（夜间皮肤不变）
   let du = userPhoto || (day ? DEFAULT_PHOTO_DAY : DEFAULT_PHOTO_DATA);
-  const img = document.getElementById('babyPhoto'), ph = document.getElementById('photoPlaceholder');
   if (du) {
     if (img.getAttribute('src') !== du) img.src = du;
     img.classList.remove('hidden'); ph.classList.add('hidden');
@@ -938,7 +941,8 @@ function updateOverview(skipPush) {
   }
 
   // v3.5.106 总览内「日报」小组件：点击弹窗看完整日报（图标同修改前，不显示条数）
-  html += `<div class="ov-report-pill" onclick="openReport()">&#128200; 日报 <span class="pill-chev">&#8250;</span></div>`;
+  // v3.5.109 日报胶囊右移并改添加按钮底色（右对齐包裹）
+  html += `<div class="ov-report-row"><div class="ov-report-pill" onclick="openReport()">&#128200; 日报 <span class="pill-chev">&#8250;</span></div></div>`;
 
   bar.innerHTML = html;
   // 推送检查改为脏位标记，由统一调度器延迟合并执行
@@ -1244,7 +1248,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.108'; // 备忘录弹窗高度与历史/分析等弹窗一致：#memoModal .modal-box 统一撑满 85vh(与 .modal-box max-height 一致),避免内容少时过矮、与历史/分析弹窗不齐; index.html 缓存参数升 v3.5.108
+const APP_VERSION = 'v3.5.109'; // 新增 AI 育儿问答(AI 入口=去上传的头像,点开底部抽屉:对话+知识库);①头像外框与「👆 AI育儿」胶囊底色=添加按钮底色(#25375f 深/#0984e3 浅),胶囊不加外框;②日报胶囊右移并改添加按钮底色;index.html 缓存参数升 v3.5.109
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4365,6 +4369,224 @@ async function enrichMilestonesWithLLM(items) {
   const tlEl = document.getElementById('milestoneTimeline');
   if (tlEl) tlEl.innerHTML = renderMilestoneInner();
 }
+
+// ==================== v3.5.109 AI 育儿问答（入口=去上传的头像；底部抽屉：对话 + 知识库） ====================
+const KB_CATS = ['奶粉喂养','辅食','睡眠','早教','穿衣','户外','医疗'];
+const KB_KEY = 'ai_kb_v1';
+const KB_CLOUD_KEY = '_ai_kb';
+const AI_CHAT_KEY = 'ai_chat_v1';
+const AI_CHAT_CAP = 10;            // 对话本地仅留最近 10 条
+let KB = [];
+let KB_FILTER = '全部';
+let AI_CHAT = [];
+let tokenExceeded = false;
+let aiRecog = null, aiRecording = false;
+
+function aiInit() {
+  try { AI_CHAT = JSON.parse(localStorage.getItem(AI_CHAT_KEY) || '[]'); } catch { AI_CHAT = []; }
+  if (!Array.isArray(AI_CHAT)) AI_CHAT = [];
+  loadKBLocal();
+  if (isSyncReady()) { loadKBCloud().catch(() => {}); } // 云端同步（异步，不阻塞首屏）
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+/* ---------- AI 弹窗开关 / 标签 ---------- */
+function openAI() {
+  const overlay = document.getElementById('aiOverlay'); if (!overlay) return;
+  overlay.classList.add('show');
+  renderTokenBanner(); renderAIMsgs(); renderKb(); updateKbCntLine();
+}
+function closeAI() { const o = document.getElementById('aiOverlay'); if (o) o.classList.remove('show'); stopAIVoice(); }
+function switchAITab(t) {
+  document.querySelectorAll('.ai-tab').forEach(x => x.classList.toggle('on', x.dataset.tab === t));
+  const pc = document.getElementById('pane-chat'), pk = document.getElementById('pane-kb');
+  if (pc) pc.classList.toggle('on', t === 'chat');
+  if (pk) pk.classList.toggle('on', t === 'kb');
+  if (t === 'kb') { renderKb(); updateKbCntLine(); }
+}
+
+/* ---------- token 上限提示 ---------- */
+function setTokenExceeded(v) { tokenExceeded = !!v; renderTokenBanner(); }
+function renderTokenBanner() { const b = document.getElementById('tokenBanner'); if (b) b.style.display = tokenExceeded ? 'block' : 'none'; }
+
+/* ---------- 对话（本地 localStorage，上限 10 条；不联网同步） ---------- */
+function saveAIChat() {
+  if (AI_CHAT.length > AI_CHAT_CAP) AI_CHAT = AI_CHAT.slice(-AI_CHAT_CAP);
+  try { localStorage.setItem(AI_CHAT_KEY, JSON.stringify(AI_CHAT)); } catch (e) {}
+}
+function renderAIMsgs() {
+  const box = document.getElementById('aiMsgs'); if (!box) return;
+  if (!AI_CHAT.length) {
+    box.innerHTML = `<div class="ai-msg ai"><span class="ai-mini">AI 育儿助手</span>你好呀～我是咕噜的育儿小助手。我已经读过宝宝档案和你录入的「家庭知识库」，可以直接问我喂养、睡眠、发育相关的问题 🍼</div>`;
+  } else {
+    box.innerHTML = AI_CHAT.map(m => m.role === 'me'
+      ? `<div class="ai-msg me">${escapeHtml(m.text)}</div>`
+      : `<div class="ai-msg ai"><span class="ai-mini">AI 育儿助手</span>${escapeHtml(m.text)}</div>`).join('');
+  }
+  box.scrollTop = box.scrollHeight;
+  const c = document.getElementById('aiLocalCnt'); if (c) c.textContent = AI_CHAT.length;
+}
+function buildAISystemPrompt() {
+  const ageEl = document.getElementById('ageInfo');
+  const ageText = ageEl ? ageEl.textContent : '';
+  let kbText = '';
+  if (KB.length) kbText = '\n\n【家庭知识库（我家宝宝的具体情况，回复时务必优先考虑）】\n' + KB.map(x => '- [' + x.cat + '] ' + x.text).join('\n');
+  return '你是一位耐心、专业的婴幼儿育儿顾问，服务对象是用户的小宝宝（' + (ageText || '婴儿') + '）。\n'
+    + '请用简洁、温暖、可操作的口吻回答喂养、睡眠、发育、健康、早教等问题，给出具体建议并说明原因；如无把握请如实说明并建议就医。\n'
+    + '回答使用简体中文，避免冗长，分点清晰。' + kbText;
+}
+// 非 JSON 模式的对话调用：返回文本；429(额度上限)→返回特殊标记并置 banner；其它异常→null
+async function callAIChat(cfg, messages) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const res = await fetch(cfg.base, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.apiKey },
+      body: JSON.stringify({ model: cfg.model, messages: messages, temperature: 0.6 }),
+      signal: ctrl.signal
+    });
+    if (res.status === 429) { setTokenExceeded(true); return '__QUOTA__'; }
+    if (!res.ok) return null;
+    const j = await res.json();
+    const content = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+    return content || null;
+  } catch { return null; }
+  finally { clearTimeout(timer); }
+}
+async function sendAIMsg() {
+  const el = document.getElementById('aiChatInput'); if (!el) return;
+  const v = el.value.trim(); if (!v) return;
+  AI_CHAT.push({ role: 'me', text: v }); el.value = ''; saveAIChat(); renderAIMsgs();
+  const box = document.getElementById('aiMsgs');
+  const typing = document.createElement('div'); typing.className = 'ai-typing'; typing.id = 'aiTyping'; typing.textContent = 'AI 正在思考…';
+  box.appendChild(typing); box.scrollTop = box.scrollHeight;
+  const cfg = getAITagConfig();
+  let reply;
+  if (!cfg) {
+    reply = '（尚未配置 AI 密钥：请到「管理」页配置 DeepSeek 等大模型密钥后再使用本功能）';
+  } else {
+    const msgs = [{ role: 'system', content: buildAISystemPrompt() }]
+      .concat(AI_CHAT.filter(m => m.role === 'me' || m.role === 'ai').map(m => ({ role: m.role === 'me' ? 'user' : 'assistant', content: m.text })));
+    const r = await callAIChat(cfg, msgs);
+    if (r === '__QUOTA__') reply = '⚠️ 当前模型 token 额度已达上限，AI 暂时无法回复。请稍后再试，或联系管理员调整额度。';
+    else if (r === null) reply = '（抱歉，AI 暂时没有回应，请稍后再试）';
+    else reply = r;
+  }
+  const t = document.getElementById('aiTyping'); if (t) t.remove();
+  AI_CHAT.push({ role: 'ai', text: reply }); saveAIChat(); renderAIMsgs();
+}
+function clearAIChat() { AI_CHAT = []; saveAIChat(); renderAIMsgs(); }
+
+/* ---------- 知识库（7 类 + 综合兜底；AI 自动分类；加密同步家庭云） ---------- */
+function loadKBLocal() { try { KB = JSON.parse(localStorage.getItem(KB_KEY) || '[]'); } catch { KB = []; } if (!Array.isArray(KB)) KB = []; }
+function saveKBLocal() { try { localStorage.setItem(KB_KEY, JSON.stringify(KB)); } catch (e) {} }
+const KB_RULES = {
+  奶粉喂养:['奶','奶粉','配方','喂养','奶瓶','母乳','乳糖','乳清','冲调','吃奶','喝奶','夜奶','断奶','蛋白','氨基酸'],
+  辅食:['辅食','米粉','米糊','蛋黄','果泥','菜泥','面条','粥','添加','固体','手指食物','餐','月龄吃','南瓜','土豆','肉泥'],
+  睡眠:['睡','夜醒','哄睡','入睡','作息','午睡','小睡','安睡','分床','熬夜','抱睡','落地醒','睡整觉'],
+  早教:['早教','启蒙','玩具','绘本','趴','抬头','翻身','认知','游戏','互动','精细','大运动','发育','练习','追视','坐'],
+  穿衣:['穿衣','衣服','连体','哈衣','外套','厚度','洋葱','保暖','换衣','薄','厚','穿法','包被','睡袋'],
+  户外:['户外','出门','公园','晒太阳','散步','遛','出行','旅行','阳光','空气','吹风','遛弯'],
+  医疗:['医','药','发烧','发热','咳嗽','疫苗','生病','就诊','医生','过敏','疹','护臀','维生素','钙','铁','体温','症状','腹泻','鼻塞']
+};
+function aiClassifyKb(text) { // 关键词兜底
+  let best = '综合', max = 0;
+  for (const c of KB_CATS) { let n = 0; for (const k of KB_RULES[c]) if (text.includes(k)) n++; if (n > max) { max = n; best = c; } }
+  return best;
+}
+async function classifyKbLLM(text, cfg) {
+  const catList = KB_CATS.concat(['综合']).join('、');
+  const sys = '你是婴儿育儿知识库分类助手。用户给一段育儿备注文本，请判断它最贴合哪个分类。\n可选分类（必须严格从中选一个）：' + catList + '。\n只输出 JSON：{"cat":"分类名称"}。若都不贴合则选「综合」。';
+  const out = await callChatCompletions(cfg, [{ role: 'system', content: sys }, { role: 'user', content: String(text || '') }]);
+  if (out && out.cat && (KB_CATS.includes(out.cat) || out.cat === '综合')) return out.cat;
+  return null;
+}
+async function addKb() {
+  const el = document.getElementById('kbInput'); if (!el) return;
+  const v = el.value.trim(); if (!v) { el.focus(); return; }
+  const cat = aiClassifyKb(v);                 // 先关键词兜底，保证即时有分类
+  el.value = '';
+  KB.push({ text: v, cat });
+  saveKBLocal(); await saveKBCloud(); renderKb(); updateKbCntLine();
+  const cfg = getAITagConfig();
+  if (cfg) {                                   // 异步用大模型精分（不阻塞）
+    classifyKbLLM(v, cfg).then(c => {
+      if (!c || c === cat) return;
+      const idx = KB.findIndex(x => x.text === v && x.cat === cat);
+      if (idx >= 0) { KB[idx].cat = c; saveKBLocal(); saveKBCloud(); renderKb(); updateKbCntLine(); }
+    }).catch(() => {});
+  }
+}
+function delKb(i) { if (i < 0 || i >= KB.length) return; KB.splice(i, 1); saveKBLocal(); saveKBCloud(); renderKb(); updateKbCntLine(); }
+function editKb(i) {
+  const t = prompt('编辑知识库内容：', KB[i].text);
+  if (t !== null && t.trim()) { KB[i].text = t.trim(); KB[i].cat = aiClassifyKb(t.trim()); saveKBLocal(); saveKBCloud(); renderKb(); updateKbCntLine(); }
+}
+function reTagKb(i) {
+  const cur = KB[i].cat;
+  const next = prompt('修改分类（可选：' + KB_CATS.join(' / ') + ' / 综合）：', cur);
+  if (next && (KB_CATS.includes(next.trim()) || next.trim() === '综合')) { KB[i].cat = next.trim(); saveKBLocal(); saveKBCloud(); renderKb(); }
+}
+function filterKb(f) {
+  KB_FILTER = f;
+  document.querySelectorAll('#kbFilter .kf').forEach(b => b.classList.toggle('on', b.dataset.f === f));
+  renderKb();
+}
+function renderKb() {
+  const list = document.getElementById('kbList'); if (!list) return;
+  const arr = KB_FILTER === '全部' ? KB : KB.filter(x => x.cat === KB_FILTER);
+  const cnt = document.getElementById('kbCnt'); if (cnt) cnt.textContent = KB.length;
+  if (!arr.length) { list.innerHTML = '<div class="ai-kb-empty">该分类下还没有内容～</div>'; return; }
+  list.innerHTML = arr.map(x => {
+    const realIdx = KB.indexOf(x);
+    return `<div class="ai-kb-item"><div class="kb-body">`
+      + `<span class="ai-kb-tag" onclick="reTagKb(${realIdx})" title="点此改分类">🤖 ${escapeHtml(x.cat)}</span>`
+      + `<div class="kb-txt">${escapeHtml(x.text)}</div></div>`
+      + `<span class="kb-ops"><span onclick="editKb(${realIdx})" title="编辑">✎</span><span onclick="delKb(${realIdx})" title="删除">🗑</span></span></div>`;
+  }).join('');
+}
+function updateKbCntLine() { const el = document.getElementById('kbCntLine'); if (el) el.textContent = '知识库 ' + KB.length + ' 条'; }
+async function loadKBCloud() {
+  if (!isSyncReady() || KB.length > 0) return;   // 本地已有则以本地为编辑源，不覆盖
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${KB_CLOUD_KEY}&select=encrypted_data,iv`);
+    if (rows.length > 0 && rows[0].encrypted_data && rows[0].iv) {
+      const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
+      const arr = JSON.parse(json);
+      if (Array.isArray(arr) && arr.length) { KB = arr; saveKBLocal(); }
+    }
+  } catch (e) { console.warn('[KB] 云端加载失败:', e); }
+}
+async function saveKBCloud() {
+  if (!isSyncReady()) return;
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const { data, iv } = await encrypt(key, JSON.stringify(KB));
+    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: KB_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
+  } catch (e) { console.warn('[KB] 云端保存失败:', e); }
+}
+
+/* ---------- 对话语音输入（Web Speech，识别文字回填输入框） ---------- */
+function toggleAIVoice() {
+  const btn = document.getElementById('aiVoiceBtn'); if (!btn) return;
+  if (aiRecording) { stopAIVoice(); return; }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast('当前环境不支持语音识别'); return; }
+  try {
+    aiRecog = new SR();
+    aiRecog.lang = 'zh-CN'; aiRecog.interimResults = true; aiRecog.continuous = false; aiRecog.maxAlternatives = 1;
+    const ta = document.getElementById('aiChatInput');
+    aiRecog.onresult = (e) => { let t = ''; for (let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript; if (ta) ta.value = (ta.value ? ta.value + ' ' : '') + t; };
+    aiRecog.onerror = (e) => { aiRecording = false; if (btn) btn.classList.remove('recording'); showToast('语音识别出错(' + (e.error || '') + ')'); };
+    aiRecog.onend = () => { aiRecording = false; if (btn) btn.classList.remove('recording'); };
+    aiRecog.start(); aiRecording = true; if (btn) btn.classList.add('recording');
+  } catch (err) { showToast('语音启动失败'); }
+}
+function stopAIVoice() { if (aiRecog) { try { aiRecog.stop(); } catch (e) {} aiRecog = null; } aiRecording = false; const b = document.getElementById('aiVoiceBtn'); if (b) b.classList.remove('recording'); }
+
 // 月龄 + 距上次满月的天数（如 4月龄11天）
 function getAgeDetail(ds) {
   const [y, m, d] = ds.split('-').map(Number);
