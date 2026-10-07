@@ -989,7 +989,7 @@ function renderCategoryBar() {
   const panel = document.getElementById('catDropdownPanel');
   if (panel) {
     const allOn = selectedCategories.size === CATEGORIES.length;
-    let h = `<label class="cat-dp-item"><input type="checkbox" ${allOn ? 'checked' : ''} onchange="toggleCatAll(this)"> 🏠 全部分类</label>`;
+    let h = `<label class="cat-dp-item"><input type="checkbox" ${allOn ? 'checked' : ''} onchange="toggleCatAll(this)"> 🏠 全部</label>`;
     CATEGORIES.forEach(c => {
       const on = selectedCategories.has(c.id);
       h += `<label class="cat-dp-item"><input type="checkbox" data-cat="${c.id}" ${on ? 'checked' : ''} onchange="toggleCatFilter('${c.id}',this)"> ${c.icon} ${c.name}</label>`;
@@ -997,9 +997,15 @@ function renderCategoryBar() {
     panel.innerHTML = h;
   }
   const btn = document.getElementById('catDropdownBtn');
-  if (btn) btn.textContent = (selectedCategories.size === CATEGORIES.length ? '📂 全部分类' : '📂 已选 ' + selectedCategories.size + ' 类') + ' ▾';
+  if (btn) btn.innerHTML = (selectedCategories.size === CATEGORIES.length ? '📂 全部' : '📂 已选 ' + selectedCategories.size + ' 类') + ' <span class="cat-arrow">&#9662;</span>';
 }
 function toggleCatDropdown() { const p = document.getElementById('catDropdownPanel'); if (p) p.classList.toggle('open'); }
+// v3.5.118 点击下拉框以外区域时关闭分类下拉面板
+function _catOutsideClose(e) {
+  const p = document.getElementById('catDropdownPanel');
+  if (p && p.classList.contains('open') && !(e.target.closest && e.target.closest('.cat-dropdown'))) p.classList.remove('open');
+}
+document.addEventListener('click', _catOutsideClose);
 function toggleCatAll(cb) {
   selectedCategories = cb.checked ? new Set(CATEGORIES.map(c => c.id)) : new Set();
   renderCategoryBar(); renderCards();
@@ -1291,7 +1297,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.117'; // 备忘录「添加」按钮去掉加号图标并收窄宽度(padding 6px 14px, gap 0)
+const APP_VERSION = 'v3.5.118'; // ①首页分类下拉框变窄(30%)、搜索框相应加宽;②下拉"全部分类"文案改为"全部",向下箭头改为与辅食下拉一致的 ▾ 且靠右,点击外部区域关闭下拉;③分组标题(分类)字号 15→16px 与活动名称一致并加粗;④备忘录/知识库「添加」按钮高度对齐首页底部「添加」按钮(约37px)且顶部与输入框上边框平齐(容器由 stretch 改为 flex-start)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
