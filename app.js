@@ -32,8 +32,10 @@ function getStdRow(table, ds) {
   const m = getAgeMonths(ds);
   return table.find(r => r.month === m) || table[table.length - 1];
 }
-// v3.5.112 浅色头像换新照片（同系列戴墨镜图，重新方形裁切）；带 ?v= 参数强制刷新浏览器/CDN 缓存
-const DEFAULT_PHOTO_DAY = 'assets/photo-day.webp?v=112';
+// v3.5.113 浅色头像换新照片。改用全新文件名 photo-day-v2.webp：GitHub Pages CDN 缓存 TTL 600s，
+// 同名文件推送后边缘节点仍会发旧图（实测 age≈272s 时仍是旧内容），换名可 100% 绕开 CDN 与浏览器双层缓存。
+// photo-day.webp 同步更新为新图，作为旧版 app.js 的兜底。
+const DEFAULT_PHOTO_DAY = 'assets/photo-day-v2.webp';
 const DEFAULT_PHOTO_DATA = 'assets/photo-data.webp';
 
 const CATEGORIES = [
@@ -333,7 +335,7 @@ function loadPhoto() {
   if (!img) return;                       // 无照片元素（如 AI 入口内）则跳过
   const ph = document.getElementById('photoPlaceholder');
   const day = document.body.classList.contains('theme-day');
-  // v3.5.110 头像为固定照片：浅色用 photo-day.webp，深色用 photo-data.webp，随主题自动切换
+  // v3.5.113 头像为固定照片：浅色用 photo-day-v2.webp（2026-10-07 换新照片），深色用 photo-data.webp，随主题自动切换
   const du = day ? DEFAULT_PHOTO_DAY : DEFAULT_PHOTO_DATA;
   if (du) {
     if (img.getAttribute('src') !== du) img.src = du;
@@ -1249,7 +1251,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.112'; // 浅色模式头像换成新照片(同系列戴墨镜图,重新方形裁切 560→320px,圆形构图更聚焦,小黄鸭保留);深色模式头像不变;DEFAULT_PHOTO_DAY 加 ?v=112 规避浏览器/CDN 图片缓存;其余功能与 v3.5.111 一致
+const APP_VERSION = 'v3.5.113'; // 浅色头像换新照片改用全新文件名 assets/photo-day-v2.webp（同名文件受 GitHub Pages CDN 600s 缓存影响，推送后边缘节点仍发旧图）；photo-day.webp 同步更新为新图作兜底；深色头像不变；其余同 v3.5.112
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
