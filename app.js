@@ -1244,7 +1244,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.106'; // ①日报由底部导航移入总览胶囊小组件(图标同前,点击弹窗看完整日报,不显示条数);②底部导航原日报位置改为备忘录(待办增删改+勾选完成折叠到已办默认折叠可展开带年月日,编辑/删除按钮样式复用首页卡片 rec-edit/rec-delete);③复用底部现有语音按钮:备忘录打开时语音文本回填备忘录输入框(否则仍走活动解析); index.html 缓存参数升 v3.5.106
+const APP_VERSION = 'v3.5.107'; // ①日报总览胶囊色号统一为「选中的分类标签字体色」(.cat-tag.active:深#fff/浅#0984e3);②备忘录「添加」按钮改用首页同款 .fab-btn 样式,去掉备忘录语音输入(底栏不再抬高/不再回填,首页语音不变);③待办事项数由两端对齐改为紧贴标题右侧;④底部导航顺序改为 分析/备忘录/历史/管理; index.html 缓存参数升 v3.5.107
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2258,13 +2258,6 @@ function finishVoiceRecognition() {
   setVoiceState('idle');
   if (_voiceHoldCanceled) { _voiceHoldCanceled = false; return; }
   if (voiceFinalText) {
-    // v3.5.106 备忘录打开时，复用底部语音按钮：识别文本直接回填备忘录输入框（不进活动解析）
-    const memoModal = document.getElementById('memoModal');
-    if (memoModal && memoModal.classList.contains('show')) {
-      const ta = document.getElementById('memoInput');
-      if (ta) { ta.value = (ta.value ? ta.value + (ta.value.endsWith('\n') ? '' : ' ') : '') + voiceFinalText; ta.focus(); }
-      return;
-    }
     const r = parseVoiceText(voiceFinalText);
     voiceItems = r.items;
     showVoiceModal(voiceFinalText, r.unmatched);
@@ -3209,12 +3202,10 @@ const MEMO_DEL_SVG = '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V
 function openMemo() {
   _memoEditingId = null;
   const ta = document.getElementById('memoInput'); if (ta) ta.value = '';
-  document.body.classList.add('memo-open');
   renderMemo();
   showModal('memoModal');
 }
 function closeMemo() {
-  document.body.classList.remove('memo-open');
   _memoEditingId = null;
   hideModal('memoModal');
 }
