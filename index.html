@@ -56,7 +56,7 @@
 
   .header {
     display: flex; align-items: flex-start; justify-content: space-between;
-    margin-bottom: 8px;
+    margin-bottom: 14px;
   }
   .header-left { flex:1; }
   .title {
@@ -78,17 +78,23 @@
     padding-left: 30px;
   }
   .age-info .highlight { color: #ffeaa7; font-weight: 600; }
+  /* v3.5.111 窄屏适配：间距 14→9、输入框 60→56，保证 360px 宽屏下右侧头像外框完整可见 */
   .body-measure {
     text-align: center; margin-top: 5px;
-    display: flex; align-items: center; justify-content: center; gap: 14px;
+    display: flex; align-items: center; justify-content: center; gap: 9px;
   }
   .body-measure label { font-size: 15px; color: #fff; }
   .body-measure input {
     background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15);
     border-radius: 6px; color: #fff; font-size: 14px;
-    padding: 4px 7px; width: 60px; outline: none;
+    padding: 4px 7px; width: 56px; outline: none;
   }
   .body-measure .unit { font-size: 13px; color: #fff; }
+  /* v3.5.111 超窄屏（≤344px）再收一档，避免右侧头像外框被裁 */
+  @media (max-width: 344px) {
+    .body-measure { gap: 6px; }
+    .body-measure input { width: 48px; }
+  }
 
   .photo-wrap {
     width: 112px; height: 112px;
@@ -105,25 +111,28 @@
   /* ===== v3.5.109 AI 入口（去上传、固定照片、点头像进 AI 育儿问答） =====
      v3.5.110 头像改回「小咕噜之前的照片」（浅色 assets/photo-day.webp / 深色 assets/photo-data.webp，
      随主题自动切换），尺寸与修改前完全一致（.photo-wrap 112×112 + 2px 边框、无底色填充、无重阴影） */
-  .ai-avatar-wrap { position: relative; margin-left: 10px; flex-shrink: 0; cursor: pointer; }
+  .ai-avatar-wrap { position: relative; margin-left: 8px; flex-shrink: 0; cursor: pointer; }
   /* 头像外框色号 = 首页「选中的分类标签」底色（深色 #24375c / 浅色 #d8e9fa） */
-  .ai-avatar { border: 2px solid #24375c; }
+  /* v3.5.111 头像由 112 缩到 96（含内层 margin 归零），窄屏 360px 下右侧外框也能完整显示 */
+  .ai-avatar { width: 96px; height: 96px; border: 2px solid #24375c; margin-left: 0; }
   body.theme-day .photo-wrap.ai-avatar { border-color: #d8e9fa; }
   .ai-avatar:active { transform: scale(.96); }
-  /* 「👆 AI育儿」胶囊：底色 = 首页「选中的分类标签」底色，不加外框 */
+  /* 「👆 AI育儿」胶囊：底色 = 首页「选中的分类标签」底色；
+     v3.5.111 加外框 —— 深色 = 首页「添加」按钮外框色 #b2bec3；浅色 = 首页「添加」按钮底色 #0984e3 */
   .ai-chip {
-    position: absolute; left: 50%; bottom: -13px; transform: translateX(-50%);
-    background: #24375c; color: #fff; font-size: 11px; font-weight: 800;
+    position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%);
+    background: #24375c; border: 1px solid #b2bec3; color: #fff;
+    font-size: 11px; font-weight: 800;
     padding: 3px 11px; border-radius: 13px; white-space: nowrap;
   }
-  body.theme-day .ai-chip { background: #d8e9fa; color: #0984e3; }
+  body.theme-day .ai-chip { background: #d8e9fa; border-color: #0984e3; color: #0984e3; }
 
   /* ===== 信息总览 ===== */
   .overview {
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 12px; padding: 12px 16px;
-    margin: 10px 0 14px;
+    margin: 12px 0 14px;
     font-size: 15px;
   }
   .overview-row { display: flex; gap: 10px 20px; flex-wrap: wrap; justify-content: space-between; margin-bottom: 8px; }
@@ -141,12 +150,13 @@
   /* v3.5.106 总览内「日报」小组件（点击弹窗看完整日报） */
   /* v3.5.107 日报色号统一为「选中的分类标签字体色」(.cat-tag.active)：深色 #fff / 浅色 #0984e3 */
   /* v3.5.109 日报胶囊右移；v3.5.110 底色 = 首页「选中的分类标签」底色（深色 #24375c / 浅色 #d8e9fa） */
-  .ov-report-row { display: flex; justify-content: flex-end; margin-top: 10px; }
+  /* v3.5.111 日报胶囊尺寸与字号各缩小一档并上移；深色模式加外框，外框色 = 首页「添加」按钮外框色 #b2bec3 */
+  .ov-report-row { display: flex; justify-content: flex-end; margin-top: 5px; }
   .ov-report-pill {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 6px 14px; border-radius: 20px; cursor: pointer;
-    background: #24375c; border: 1px solid #24375c;
-    color: #fff; font-size: 13.5px; font-weight: 600; transition: all .15s;
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 11px; border-radius: 18px; cursor: pointer;
+    background: #24375c; border: 1px solid #b2bec3;
+    color: #fff; font-size: 12px; font-weight: 600; transition: all .15s;
   }
   .ov-report-pill:active { transform: scale(.96); }
   .ov-report-pill .pill-chev { opacity: .85; }
@@ -543,9 +553,10 @@
   @keyframes aiUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
   .ai-x { position:absolute; top:12px; right:15px; font-size:25px; line-height:1; color:var(--muted); background:none; border:none; cursor:pointer; font-family:inherit; }
   .ai-title { text-align:center; font-size:18px; font-weight:800; color:var(--fg); }
-  .ai-model-line { text-align:center; font-size:10.5px; color:var(--muted); margin-top:4px; line-height:1.5; }
-  .ai-model-line .ai-kb-cnt { color:#55efc4; }
-  body.theme-day .ai-model-line .ai-kb-cnt { color:#00b894; }
+  /* v3.5.111 「模型 … + 知识库 N 条」提示语改为浅色黑字 / 深色白字 */
+  .ai-model-line { text-align:center; font-size:10.5px; color:#fff; margin-top:4px; line-height:1.5; }
+  .ai-model-line .ai-kb-cnt { color:inherit; }
+  body.theme-day .ai-model-line { color:#000; }
   .ai-local-tag { display:block; margin:6px auto 0; font-size:10px; color:#f1c40f; border:1px solid rgba(241,196,15,.5); padding:1px 9px; border-radius:9px; width:max-content; }
   .ai-token-banner { display:none; margin:8px 2px 0; padding:8px 12px; border-radius:10px; font-size:12px; line-height:1.55; background:rgba(231,76,60,.14); border:1px solid rgba(231,76,60,.5); color:#e74c3c; }
   .ai-tabs { display:flex; gap:8px; margin:12px 0 10px; }
@@ -607,14 +618,19 @@
   .ai-kb-filter { display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; margin-bottom:6px; }
   .ai-kb-filter::-webkit-scrollbar { display:none; }
   .kf { flex-shrink:0; padding:5px 12px; border-radius:13px; font-size:12.5px; cursor:pointer; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14); color:var(--muted); font-family:inherit; }
-  .kf.on { background:rgba(162,155,254,.2); border-color:rgba(162,155,254,.6); color:#a29bfe; font-weight:700; }
+  .kf.on { background:rgba(100,149,237,.3); border-color:rgba(100,149,237,.5); color:#fff; font-weight:700; }
   body.theme-day .kf { background:rgba(9,132,227,.05); border-color:rgba(9,132,227,.2); }
-  body.theme-day .kf.on { background:rgba(118,75,162,.14); border-color:rgba(118,75,162,.5); color:#6c5ce7; }
+  /* v3.5.111 选中标签样式对齐首页「选中的分类标签」(.cat-tag.active) */
+  body.theme-day .kf.on { background:rgba(9,132,227,.12); border-color:rgba(9,132,227,.5); color:#0984e3; }
   .ai-kb-add { display:flex; gap:8px; align-items:stretch; margin:6px 0 10px; }
   .ai-kb-ta { flex:1; min-height:56px; padding:9px 11px; border-radius:12px; font-size:13.5px; resize:none; outline:none; background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.18); color:var(--fg); font-family:inherit; line-height:1.45; }
   body.theme-day .ai-kb-ta { background:#fff; border-color:rgba(9,132,227,.25); }
-  .ai-kb-add button { flex-shrink:0; width:60px; border-radius:12px; background:#0984e3; border:none; color:#fff; font-weight:700; font-size:13.5px; cursor:pointer; font-family:inherit; }
-  .ai-kb-classify-note { font-size:10px; color:#a29bfe; text-align:center; padding:2px 0 4px; }
+  /* v3.5.111 知识库「添加」按钮对齐首页底部「添加」按钮（深色 #25375f/#b2bec3，浅色 #0984e3/#fff） */
+  .ai-kb-add button { flex-shrink:0; width:60px; border-radius:12px; background:#25375f; border:1px solid #b2bec3; color:#b2bec3; font-weight:600; font-size:13.5px; cursor:pointer; font-family:inherit; }
+  body.theme-day .ai-kb-add button { background:#0984e3; border-color:#b2bec3; color:#fff; }
+  /* v3.5.111 提示语改为浅色黑字 / 深色白字 */
+  .ai-kb-classify-note { font-size:10px; color:#fff; text-align:center; padding:2px 0 4px; }
+  body.theme-day .ai-kb-classify-note { color:#000; }
   .ai-kb-head { display:flex; justify-content:space-between; align-items:center; font-size:12.5px; color:var(--muted); margin-bottom:6px; }
   .ai-kb-head b { color:#74b9ff; }
   body.theme-day .ai-kb-head b { color:#0984e3; }
@@ -640,7 +656,6 @@
   .ai-kb-item .rec-delete:active svg { stroke: #e74c3c; }
   body.theme-day .ai-kb-item .rec-edit svg, body.theme-day .ai-kb-item .rec-delete svg { stroke: #3d4852; }
   .ai-kb-empty { text-align:center; color:var(--muted); font-size:13px; padding:22px 0; }
-  .ai-kb-note { font-size:10.5px; color:var(--muted); text-align:center; padding-top:8px; line-height:1.5; }
   .modal-title {
     font-size: 20px; font-weight: 700;
     color: #fff; margin-bottom: 16px;
@@ -1761,10 +1776,9 @@
         <textarea class="ai-kb-ta" id="kbInput" placeholder="输入要加入知识库的内容，例如：我家宝宝对牛奶蛋白过敏，请避开含乳清蛋白的配方奶…"></textarea>
         <button onclick="addKb()">添加</button>
       </div>
-      <div class="ai-kb-classify-note">🤖 添加后由大模型自动分类（点标签可手动改类）</div>
+      <div class="ai-kb-classify-note">🤖 自动分类/点标签改类</div>
       <div class="ai-kb-head"><span>已添加 <b id="kbCnt">0</b> 条</span></div>
       <div class="ai-kb-list" id="kbList"></div>
-      <div class="ai-kb-note" id="kbNote">📡 知识库内容会<b>加密同步到家庭云</b>，并在提问时作为背景注入 AI</div>
     </div>
   </div>
 </div>
@@ -1919,8 +1933,8 @@
       <div class="push-token-hint">pushplus.plus → 发送消息 → 一对多消息 → 群组编码填到这里，家人扫码入群即可同步接收成就提醒<br><b>重要：</b>多台设备都开着本应用时会各自推送一遍造成重复。<b>请只在一台设备（如妈妈的手机）勾选「由本设备负责推送」</b>，其他设备取消勾选即可。取消勾选的设备仍可正常记录与查看，只是不再发推送。</div>
     </div>
     <div class="sync-section">
-      <div class="cos-title">💡 AI 里程碑归类</div>
-      <div style="font-size:13px;color:#b2bec3;padding:2px 0 8px 0;">用大模型智能识别成长里程碑（替代关键词规则）。默认使用<b style="color:#74b9ff;">家庭云端加密同步的默认密钥</b>（同记录端到端加密，仅家人可解密，不可见明文）；也可在此填写自己的密钥（仅存本机）覆盖。密钥永不明文显示。</div>
+      <div class="cos-title">💡 AI 大模型</div>
+      <div style="font-size:13px;color:#b2bec3;padding:2px 0 8px 0;">用于<b style="color:#74b9ff;">AI 育儿问答</b>的智能回复与<b style="color:#74b9ff;">成长里程碑归类</b>（替代关键词规则）。默认使用<b style="color:#74b9ff;">家庭云端加密同步的默认密钥</b>（同记录端到端加密，仅家人可解密，不可见明文）；也可在此填写自己的密钥（仅存本机）覆盖。密钥永不明文显示。</div>
       <div class="xf-config-row"><label>服务商:</label>
         <select id="aiTagProvider" onchange="onAITagProviderChange()" style="flex:1;">
           <option value="deepseek">DeepSeek</option>
@@ -2050,8 +2064,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.110"></script>
-<script src="app-config.js?v=v3.5.110"></script>
-<script src="app.js?v=v3.5.110"></script>
+<script src="std-config.js?v=v3.5.111"></script>
+<script src="app-config.js?v=v3.5.111"></script>
+<script src="app.js?v=v3.5.111"></script>
 </body>
 </html>
