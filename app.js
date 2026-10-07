@@ -91,7 +91,9 @@ const DEFAULT_FINE_MOTOR = ['抓握', '摇头', '点头', '挥手', '放东西',
 const DEFAULT_SOLID_FOODS = ['高铁米粉','不含铁米粉','苹果','南瓜','山药','小米','红薯','玉米','紫薯','猪肉','牛肉','羊肉','鱼','鸡肉','虾','鸡蛋','猪肝','胡萝卜','梨','豆腐','花生','枣','黄豆','绿豆','红豆','油菜','白菜','西兰花','西红柿','茄子','牛油果','芒果','猕猴桃','莴苣','黄瓜','核桃','冬瓜','香菇','香蕉','西瓜'];
 
 let hiddenActivities = [];
-let currentCategory = 'all';
+// v3.5.115 首页筛选：默认全部分类选中（=显示全部活动）；actSearchQuery 为活动名搜索关键字
+let selectedCategories = new Set(CATEGORIES.map(c => c.id));
+let actSearchQuery = '';
 let addModalCategory = 'all';
 let addSelectedSet = new Set(); // 跨分类保留已勾选活动
 let grossMotorOptions = [];
@@ -226,6 +228,7 @@ function init() {
   setupPWA();
   initSync();
   aiInit();
+  loadMemoCloud().catch(() => {});   // v3.5.115 备忘录启动即从家庭云恢复（本地优先合并）
   bindVoiceTouch();
   bindFastTaps();
   // 自动清理测试残留数据（仅一次， harmless）
@@ -981,55 +984,91 @@ function checkMilkReminder(attempt) {
   }
 }
 
-/* ==================== 分类侧边栏 ==================== */
+/* ==================== 首页筛选（v3.5.115：左侧分类多选下拉 + 右侧活动名搜索） ==================== */
 function renderCategoryBar() {
-  const bar = document.getElementById('categoryBar');
-  let html = `<div class="cat-tag${currentCategory==='all'?' active':''}" onclick="setCategory('all')"><span class="cat-icon">&#127968;</span><span class="cat-label">全部</span></div>`;
-  CATEGORIES.forEach(c => { html += `<div class="cat-tag${currentCategory===c.id?' active':''}" onclick="setCategory('${c.id}')"><span class="cat-icon">${c.icon}</span><span class="cat-label">${c.name}</span></div>`; });
-  bar.innerHTML = html;
+  const panel = document.getElementById('catDropdownPanel');
+  if (panel) {
+    const allOn = selectedCategories.size === CATEGORIES.length;
+    let h = `<label class="cat-dp-item"><input type="checkbox" ${allOn ? 'checked' : ''} onchange="toggleCatAll(this)"> 🏠 全部分类</label>`;
+    CATEGORIES.forEach(c => {
+      const on = selectedCategories.has(c.id);
+      h += `<label class="cat-dp-item"><input type="checkbox" data-cat="${c.id}" ${on ? 'checked' : ''} onchange="toggleCatFilter('${c.id}',this)"> ${c.icon} ${c.name}</label>`;
+    });
+    panel.innerHTML = h;
+  }
+  const btn = document.getElementById('catDropdownBtn');
+  if (btn) btn.textContent = (selectedCategories.size === CATEGORIES.length ? '📂 全部分类' : '📂 已选 ' + selectedCategories.size + ' 类') + ' ▾';
 }
-function setCategory(cid) { currentCategory = cid; renderCategoryBar(); renderCards(); }
+function toggleCatDropdown() { const p = document.getElementById('catDropdownPanel'); if (p) p.classList.toggle('open'); }
+function toggleCatAll(cb) {
+  selectedCategories = cb.checked ? new Set(CATEGORIES.map(c => c.id)) : new Set();
+  renderCategoryBar(); renderCards();
+}
+function toggleCatFilter(id, cb) {
+  if (cb.checked) selectedCategories.add(id); else selectedCategories.delete(id);
+  renderCategoryBar(); renderCards();
+}
+function onActSearch() {
+  const el = document.getElementById('actSearch');
+  actSearchQuery = el ? el.value.trim().toLowerCase() : '';
+  renderCards();
+}
 
-/* ==================== 渲染卡片 ==================== */
+/* ==================== 渲染卡片（v3.5.115：按分类分组，分类标题置于对应活动上方） ==================== */
 function renderCards(newestIds) {
   newestIds = newestIds || [];
   const grid = document.getElementById('cardsGrid');
   grid.innerHTML = '';
   const records = getTodayRecords();
+  const q = actSearchQuery;
 
-  ACTIVITIES.forEach(act => {
-    if (hiddenActivities.includes(act.id)) return;
-    if (currentCategory !== 'all' && act.category !== currentCategory) return;
+  CATEGORIES.forEach(cat => {
+    if (!selectedCategories.has(cat.id)) return;
+    let acts = ACTIVITIES.filter(act => act.category === cat.id && !hiddenActivities.includes(act.id));
+    if (q) acts = acts.filter(act => act.name.toLowerCase().includes(q));
+    if (!acts.length) return;
 
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.dataset.id = act.id;
-    if (newestIds.includes(act.id)) card.classList.add('highlight');
+    // 分类分组标题（图标在左、文字在右），置于该分类活动上方
+    const title = document.createElement('div');
+    title.className = 'cat-section-title';
+    title.innerHTML = `<span class="cat-sec-icon">${cat.icon}</span><span class="cat-sec-name">${cat.name}</span>`;
+    grid.appendChild(title);
 
-    const actRecords = records.filter(r => r.type === act.id).reverse();
-    const count = actRecords.length;
+    acts.forEach(act => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.dataset.id = act.id;
+      if (newestIds.includes(act.id)) card.classList.add('highlight');
 
-    let bodyHtml = '';
-    if (actRecords.length === 0) {
-      bodyHtml = '<div class="card-empty">今日暂无记录</div>';
-    } else {
-      bodyHtml = '<div class="card-records">';
-      actRecords.forEach((r, i) => {
-        const isNewest = i === 0 && newestIds.includes(act.id);
-        const time = r.recTime || r.time;
-        const readOnly = isReadOnlyMode();
-        const editDeleteHtml = readOnly ? '' : `<span class="rec-edit" onclick="event.stopPropagation();openEditRecord('${r.type}',${r.timestamp})"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><span class="rec-delete" onclick="event.stopPropagation();deleteRecord('${r.type}',${r.timestamp})"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6"/><path d="M14 10v6"/></svg></span>`;
-        bodyHtml += `<div class="record-tag${isNewest ? ' newest' : ''}" data-timestamp="${r.timestamp}" data-type="${r.type}">
-          <div class="rec-left"><span class="rec-time">${time}</span><span class="rec-detail">${formatRecordBrief(r, getTodayDateStr())}</span></div>
-          ${editDeleteHtml}
-        </div>`;
-      });
-      bodyHtml += '</div>';
-    }
+      const actRecords = records.filter(r => r.type === act.id).reverse();
+      const count = actRecords.length;
 
-    card.innerHTML = `<div class="card-header"><div class="card-name"><span class="icon">${act.icon}</span>${act.name}</div>${count>0?`<div class="card-count">${count}次</div>`:''}</div>${bodyHtml}`;
-    grid.appendChild(card);
+      let bodyHtml = '';
+      if (actRecords.length === 0) {
+        bodyHtml = '<div class="card-empty">今日暂无记录</div>';
+      } else {
+        bodyHtml = '<div class="card-records">';
+        actRecords.forEach((r, i) => {
+          const isNewest = i === 0 && newestIds.includes(act.id);
+          const time = r.recTime || r.time;
+          const readOnly = isReadOnlyMode();
+          const editDeleteHtml = readOnly ? '' : `<span class="rec-edit" onclick="event.stopPropagation();openEditRecord('${r.type}',${r.timestamp})"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><span class="rec-delete" onclick="event.stopPropagation();deleteRecord('${r.type}',${r.timestamp})"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6"/><path d="M14 10v6"/></svg></span>`;
+          bodyHtml += `<div class="record-tag${isNewest ? ' newest' : ''}" data-timestamp="${r.timestamp}" data-type="${r.type}">
+            <div class="rec-left"><span class="rec-time">${time}</span><span class="rec-detail">${formatRecordBrief(r, getTodayDateStr())}</span></div>
+            ${editDeleteHtml}
+          </div>`;
+        });
+        bodyHtml += '</div>';
+      }
+
+      card.innerHTML = `<div class="card-header"><div class="card-name"><span class="icon">${act.icon}</span>${act.name}</div>${count>0?`<div class="card-count">${count}次</div>`:''}</div>${bodyHtml}`;
+      grid.appendChild(card);
+    });
   });
+
+  if (!grid.children.length) {
+    grid.innerHTML = '<div class="memo-empty">没有匹配的活动，换个关键词或分类试试～</div>';
+  }
 }
 
 function formatRecordBrief(r, ds) {
@@ -1252,7 +1291,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.114'; // ①浅色头像重裁(200,20,760,580):画面左移让宝宝右臂完整入镜,文件名换 photo-day-v3.webp 绕开 CDN 缓存;②AI 对话话筒改「按住说话」(复用首页识别链路:优先讯飞,回退 Web Speech),修复 not-allowed 报错与长按弹出系统粘贴菜单;③历史对话加密同步家庭云(新增 _ai_hist),修复关闭/清缓存后历史丢失;④system prompt 注入宝宝档案+今日明细+近7天逐日汇总+最近身高体重,可直接回答奶量/大便次数等具体数据;⑤新增 markdown 净化,气泡与历史里不再出现 * 号
+const APP_VERSION = 'v3.5.115'; // ①备忘录加密同步家庭云(新增 _memo,启动恢复+本地优先合并,修复清缓存后丢失);②知识库输入框高度×2、已添加标签颜色紫→蓝、去掉标签机器人图标;③备忘录输入框高度×2并增加向下滚动条;④首页筛选重构:默认显示全部活动,分类由标签页改为对应活动上方的分组标题(图标左文字右),原位置改为左侧分类多选下拉(较窄)+右侧活动名搜索(较宽),多选分类/搜索名称均筛选对应活动
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3247,7 +3286,7 @@ function getMemos() {
   try { const d = JSON.parse(localStorage.getItem(MEMO_KEY) || '{}'); const items = Array.isArray(d.items) ? d.items : []; _memoSeq = items.reduce((m, x) => Math.max(m, x.id || 0), 0); return items; }
   catch { return []; }
 }
-function saveMemos(items) { localStorage.setItem(MEMO_KEY, JSON.stringify({ items })); }
+function saveMemos(items) { localStorage.setItem(MEMO_KEY, JSON.stringify({ items })); saveMemoCloud(); }
 function _memoNextId() { return ++_memoSeq; }
 function _escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); }
 function _escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
@@ -3325,6 +3364,41 @@ function deleteMemo(id) {
 function toggleMemoDoneExpand() {
   const h = document.getElementById('memoDoneHead'), b = document.getElementById('memoDoneBody');
   if (h && b) { h.classList.toggle('open'); b.classList.toggle('open'); }
+}
+
+/* ---------- 备忘录加密同步家庭云（v3.5.115） ----------
+ * 此前备忘录只存本机 localStorage，清缓存/换设备即丢。现与知识库/历史对话共用同一套端到端加密。
+ * 合并策略：本地 + 云端按 id 取并集，本地已存在的条目优先（绝不覆盖本地内容）。 */
+async function loadMemoCloud() {
+  if (!isSyncReady()) return false;
+  try {
+    const key = await getCryptoKey(); if (!key) return false;
+    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${MEMO_CLOUD_KEY}&select=encrypted_data,iv`);
+    if (rows.length > 0 && rows[0].encrypted_data && rows[0].iv) {
+      const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
+      const arr = JSON.parse(json);
+      if (Array.isArray(arr) && arr.length) {
+        const local = getMemos();
+        const map = new Map();
+        arr.forEach(m => { if (m && m.id != null) map.set(m.id, m); });   // 云端先入
+        local.forEach(m => { if (m && m.id != null) map.set(m.id, m); });  // 本地后入 → 本地优先
+        const merged = [...map.values()].sort((a, b) => (b.id || 0) - (a.id || 0));
+        localStorage.setItem(MEMO_KEY, JSON.stringify({ items: merged }));
+        _memoSeq = merged.reduce((m, x) => Math.max(m, x.id || 0), 0);
+        if (document.getElementById('memoModal') && document.getElementById('memoModal').classList.contains('show')) renderMemo();
+        return true;
+      }
+    }
+  } catch (e) { console.warn('[Memo] 云端加载失败:', e); }
+  return false;
+}
+async function saveMemoCloud() {
+  if (!isSyncReady()) return;
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const { data, iv } = await encrypt(key, JSON.stringify(getMemos()));
+    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: MEMO_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
+  } catch (e) { console.warn('[Memo] 云端保存失败:', e); }
 }
 
 /* ==================== 数据分析 ==================== */
@@ -4426,6 +4500,7 @@ const KB_CATS = ['奶粉喂养','辅食','睡眠','早教','穿衣','户外','�
 const KB_KEY = 'ai_kb_v1';
 const KB_CLOUD_KEY = '_ai_kb';
 const AI_HIST_CLOUD_KEY = '_ai_hist';   // v3.5.114 历史对话也加密同步家庭云（此前只存本机，清缓存/换入口即丢）
+const MEMO_CLOUD_KEY = '_memo';         // v3.5.115 备忘录同样加密同步家庭云（此前只存本机，清缓存后丢失）
 const AI_CHAT_KEY = 'ai_chat_v1';
 const AI_CHAT_CAP = 10;            // 单次对话本地仅留最近 10 条
 const AI_HIST_KEY = 'ai_chat_history_v1';
@@ -4808,7 +4883,7 @@ function renderKb() {
   list.innerHTML = arr.map(x => {
     const realIdx = KB.indexOf(x);
     return `<div class="ai-kb-item"><div class="kb-body">`
-      + `<span class="ai-kb-tag" onclick="reTagKb(${realIdx})" title="点此改分类">🤖 ${escapeHtml(x.cat)}</span>`
+      + `<span class="ai-kb-tag" onclick="reTagKb(${realIdx})" title="点此改分类">${escapeHtml(x.cat)}</span>`
       + `<div class="kb-txt">${escapeHtml(x.text)}</div></div>`
       + `<span class="rec-edit" onclick="editKb(${realIdx})" title="编辑">${MEMO_EDIT_SVG}</span>`
       + `<span class="rec-delete" onclick="delKb(${realIdx})" title="删除">${MEMO_DEL_SVG}</span></div>`;
