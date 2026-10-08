@@ -1357,7 +1357,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.128'; // ①知识库/备忘录语音按钮去掉前面的话筒图标、尺寸缩小至与「添加」按钮一样大(60×45);②AI 育儿话筒按住波纹再扩大2倍(12px→24px)
+const APP_VERSION = 'v3.5.129'; // 备忘录的「添加」与「语音」按钮形状改为与首页添加按钮一致的胶囊形(圆角22.5px,原为12px方角)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
