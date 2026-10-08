@@ -1311,6 +1311,9 @@
     border-top: 1px solid rgba(255,255,255,0.1);
   }
   .manage-footer .btn { width: auto; }
+  /* v3.5.134 管理弹窗改为纵向 flex，底部「确定」靠 margin-top:auto 贴到弹窗最下方 */
+  #manageModal .modal-box { display: flex; flex-direction: column; }
+  #manageModal .manage-footer { margin-top: auto; }
 
   /* ===== 云端同步 ===== */
   .sync-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); }
@@ -1778,7 +1781,7 @@
   .tasks-head { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin: 4px 0 10px 0; }
   .tasks-title { font-size: 16px; font-weight: 700; color: #dfe6e9; }
   body.theme-day .tasks-title { color: #2d3436; }
-  .tasks-add-row { display: flex; align-items: center; gap: 10px; }
+  .tasks-add-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .tasks-hint { font-size: 13px; color: #b2bec3; }
   body.theme-day .tasks-hint { color: #636e72; }
   .tasks-list { max-height: 52vh; overflow-y: auto; }
@@ -2381,6 +2384,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.133"></script>
+<script src="app.js?v=v3.5.134"></script>
 </body>
 </html>

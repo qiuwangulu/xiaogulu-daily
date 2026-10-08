@@ -1359,7 +1359,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.133'; // 定时任务UI调整:①任务编辑弹窗去掉取消按钮、保存改「确定」并移至弹窗右下角(btn-success同首页添加弹窗确定按钮);②任务页添加按钮改带圆圈加号(同首页fab)、下移一行与「点添加新建任务」提示并排;③管理弹窗所有标签页「完成」改「确定」置于右下角(btn-success);④弹窗内「AI自动生成」改「AI推荐」(卡片文案同步)
+const APP_VERSION = 'v3.5.134'; // 定时任务UI微调:①任务页添加按钮移至最右侧(提示左/按钮右);②去掉任务列表空状态「暂无定时任务」提示行;③管理弹窗改纵向flex,底部「确定」靠margin-top:auto贴到弹窗最下方右侧
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5415,7 +5415,7 @@ function toggleTodayPlan() { todayPlanExpanded = !todayPlanExpanded; renderToday
 const SCHED_FREQ_LABEL = { once: '仅一次', daily: '每天', weekly: '每周', monthly: '每月' };
 function renderSchedTasks() {
   const box = document.getElementById('tasksList'); if (!box) return;
-  if (!SCHED_TASKS.length) { box.innerHTML = '<div class="sf-empty">暂无定时任务，点右上角「+ 添加」新建</div>'; return; }
+  if (!SCHED_TASKS.length) { box.innerHTML = ''; return; }
   let h = '';
   SCHED_TASKS.forEach(t => {
     const editable = isPlanEditable(t);
