@@ -1297,7 +1297,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.123'; // 知识库「编辑」由浏览器原生 prompt(单行,长文本看不到后面)改为与首页「编辑记录」同一套弹窗样式:多行文本域(自动增高至 200px,超出内部滚动)、带「分类」下拉、取消/确认按钮;Ctrl/Cmd+回车保存、Esc 取消
+const APP_VERSION = 'v3.5.124'; // 首页分类分组标题(.cat-section-title):浅色模式由蓝色(#0984e3)改为黑色(#1a1a1a)且字体加粗;深色模式颜色(#fff)与加粗(700)均保持不变
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
