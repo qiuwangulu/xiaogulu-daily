@@ -1297,7 +1297,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.119'; // ①首页分类下拉框变窄(30%)、搜索框相应加宽;②下拉"全部分类"文案改为"全部",向下箭头改为与辅食下拉一致的 ▾ 且靠右,点击外部区域关闭下拉;③分组标题(分类)字号 15→16px 与活动名称一致并加粗;④备忘录/知识库「添加」按钮高度精确对齐首页底部「添加」按钮(45px),顶部与输入框上边框平齐(容器由 stretch 改为 flex-start,按钮 min-height:45px)
+const APP_VERSION = 'v3.5.120'; // ①备忘录行内编辑由单行 input 改为多行 textarea(可换行、随内容自动增高至 200px,长文本完整可见;Ctrl/Cmd+回车保存、Esc 取消),「保存/取消」独立一行右对齐;②AI 对话每条消息下方新增「复制」按钮(复制时用 mdToText 去掉 markdown 记号,粘贴为干净文字)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3295,6 +3295,14 @@ function getMemos() {
 function saveMemos(items) { localStorage.setItem(MEMO_KEY, JSON.stringify({ items })); saveMemoCloud(); }
 function _memoNextId() { return ++_memoSeq; }
 function _escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); }
+// v3.5.120 textarea 内容转义：保留原始换行（不能像 _escHtml 那样把 \n 变成 <br>）
+function _escTa(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+// v3.5.120 行内编辑文本域随内容自动增高（上限 200px，超过则内部滚动）
+function _memoEditAutoGrow(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+}
 function _escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 const MEMO_EDIT_SVG = '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 const MEMO_DEL_SVG = '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6"/><path d="M14 10v6"/></svg>';
@@ -3321,11 +3329,16 @@ function renderMemo() {
   tl.innerHTML = todos.length ? '' : '<div class="memo-empty">暂无待办，添加一条吧～</div>';
   todos.forEach(it => {
     if (_memoEditingId === it.id) {
-      tl.innerHTML += `<div class="memo-item">
+      // v3.5.120 改为多行 textarea：长文本可换行完整可见（原来是单行 input，看不到后面的内容）
+      tl.innerHTML += `<div class="memo-item memo-item-editing">
         <div class="memo-check" onclick="toggleMemoDone(${it.id})"></div>
-        <input class="memo-edit-input" id="mei_${it.id}" value="${_escAttr(it.text)}">
-        <span class="memo-mini-save" onclick="saveMemoEdit(${it.id})">保存</span>
-        <span class="memo-mini-cancel" onclick="cancelMemoEdit()">取消</span>
+        <div class="memo-edit-wrap">
+          <textarea class="memo-edit-input" id="mei_${it.id}" rows="2" placeholder="输入待办事项…" oninput="_memoEditAutoGrow(this)" onkeydown="_memoEditKey(event,${it.id})">${_escTa(it.text)}</textarea>
+          <div class="memo-edit-actions">
+            <span class="memo-mini-save" onclick="saveMemoEdit(${it.id})">保存</span>
+            <span class="memo-mini-cancel" onclick="cancelMemoEdit()">取消</span>
+          </div>
+        </div>
       </div>`;
     } else {
       tl.innerHTML += `<div class="memo-item">
@@ -3356,7 +3369,16 @@ function toggleMemoDone(id) {
   else { items[i].done = false; items[i].date = ''; }
   saveMemos(items); renderMemo();
 }
-function startMemoEdit(id) { _memoEditingId = id; renderMemo(); const el = document.getElementById('mei_' + id); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
+// v3.5.120 多行编辑快捷键：回车=换行，Ctrl/Cmd+回车=保存，Esc=取消
+function _memoEditKey(e, id) {
+  if (e.key === 'Escape') { e.preventDefault(); cancelMemoEdit(); }
+  else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveMemoEdit(id); }
+}
+function startMemoEdit(id) {
+  _memoEditingId = id; renderMemo();
+  const el = document.getElementById('mei_' + id);
+  if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); _memoEditAutoGrow(el); }
+}
 function saveMemoEdit(id) {
   const el = document.getElementById('mei_' + id); if (!el) return;
   const v = el.value.trim(); if (!v) { showToast('内容不能为空'); return; }
@@ -4683,14 +4705,20 @@ function saveAIChat() {
   if (AI_CHAT.length > AI_CHAT_CAP) AI_CHAT = AI_CHAT.slice(-AI_CHAT_CAP);
   try { localStorage.setItem(AI_CHAT_KEY, JSON.stringify(AI_CHAT)); } catch (e) {}
 }
+/* v3.5.120 AI 对话复制：点消息气泡下方的「复制」把该条内容拷到剪贴板（用 mdToText 去掉 markdown 记号，粘贴出来是干净文字） */
+function copyAICur(i) {
+  const m = AI_CHAT[i];
+  if (!m) { showToast('内容不存在'); return; }
+  copyTextToClipboard(mdToText(m.text));
+}
 function renderAIMsgs() {
   const box = document.getElementById('aiMsgs'); if (!box) return;
   if (!AI_CHAT.length) {
     box.innerHTML = `<div class="ai-msg ai"><span class="ai-mini">AI 育儿助手</span>你好呀～我是咕噜的育儿小助手。我已经读过宝宝档案和你录入的「家庭知识库」，可以直接问我喂养、睡眠、发育相关的问题 🍼</div>`;
   } else {
-    box.innerHTML = AI_CHAT.map(m => m.role === 'me'
-      ? `<div class="ai-msg me">${aiMsgHtml(m.text)}</div>`
-      : `<div class="ai-msg ai"><span class="ai-mini">AI 育儿助手</span>${aiMsgHtml(m.text)}</div>`).join('');
+    box.innerHTML = AI_CHAT.map((m, i) => m.role === 'me'
+      ? `<div class="ai-msg-wrap me"><div class="ai-msg me">${aiMsgHtml(m.text)}</div><span class="ai-copy" onclick="copyAICur(${i})">复制</span></div>`
+      : `<div class="ai-msg-wrap ai"><div class="ai-msg ai"><span class="ai-mini">AI 育儿助手</span>${aiMsgHtml(m.text)}</div><span class="ai-copy" onclick="copyAICur(${i})">复制</span></div>`).join('');
   }
   box.scrollTop = box.scrollHeight;
   const c = document.getElementById('aiLocalCnt'); if (c) c.textContent = AI_CHAT.length;
