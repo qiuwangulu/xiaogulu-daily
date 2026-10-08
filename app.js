@@ -1359,7 +1359,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.134'; // 定时任务UI微调:①任务页添加按钮移至最右侧(提示左/按钮右);②去掉任务列表空状态「暂无定时任务」提示行;③管理弹窗改纵向flex,底部「确定」靠margin-top:auto贴到弹窗最下方右侧
+const APP_VERSION = 'v3.5.135'; // 定时任务「开始日期」改为应用内日历选择器(同历史弹窗「选日」样式):复用#historyDatePickerModal,新增_dpMode模式(history禁未来/task可选未来),任务模式隐藏快捷(昨天/前天/上周)、回填到开始日期按钮;日期选择器浮层z-index提至600以盖住任务/管理弹窗
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2888,7 +2888,9 @@ function addHistoryRecord() {
 }
 // ---------- 自绘日期选择器（替代系统 picker：蓝色"确定"按钮 + 蓝色头部） ----------
 let _dpViewYear = 0, _dpViewMonth = 0, _dpSelected = '';
+let _dpMode = 'history'; // v3.5.135 日期选择器模式：history(历史,禁未来) | task(定时任务,可选未来)
 function openHistoryDatePicker() {
+  _dpMode = 'history';
   const cur = document.getElementById('historyDate').value;
   // 若当前值是今天或未来（异常状态），回退到昨天
   const now = new Date();
@@ -2899,7 +2901,26 @@ function openHistoryDatePicker() {
   _dpViewMonth = d.getMonth();
   _dpSelected = validCur || `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   renderHistoryDatePicker();
+  const q = document.getElementById('dpQuick'); if (q) q.style.display = '';
   showModal('historyDatePickerModal');
+}
+// v3.5.135 定时任务「开始日期」复用应用内日历选择器（同历史「选日」样式），允许选择未来日期
+function openTaskDatePicker() {
+  _dpMode = 'task';
+  const cur = document.getElementById('taskStartDate').value;
+  let d = cur ? new Date(cur + 'T00:00:00') : new Date();
+  if (isNaN(d.getTime())) d = new Date();
+  _dpViewYear = d.getFullYear();
+  _dpViewMonth = d.getMonth();
+  _dpSelected = cur || `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  renderHistoryDatePicker();
+  const q = document.getElementById('dpQuick'); if (q) q.style.display = 'none';
+  showModal('historyDatePickerModal');
+}
+// 同步任务开始日期：隐藏字段存值 + 触发按钮显示文本
+function setTaskStartDateValue(v) {
+  const hs = document.getElementById('taskStartDate'); if (hs) hs.value = v || '';
+  const btn = document.getElementById('taskStartDateBtn'); if (btn) btn.textContent = v || '选择日期';
 }
 function renderHistoryDatePicker() {
   const label = document.getElementById('dpMonthLabel');
@@ -2913,6 +2934,7 @@ function renderHistoryDatePicker() {
   const prevMonthDays = new Date(_dpViewYear, _dpViewMonth, 0).getDate();
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const lockFuture = _dpMode !== 'task'; // 历史模式禁选未来；定时任务模式可选任意日期
   let html = '';
   // 上月尾部
   for (let i = startOffset - 1; i >= 0; i--) {
@@ -2923,12 +2945,12 @@ function renderHistoryDatePicker() {
   for (let d = 1; d <= daysInMonth; d++) {
     const key = `${_dpViewYear}-${String(_dpViewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const cls = ['dp-cell'];
-    // 历史记录只能看过去，禁止选当天及以后的日期
+    // 历史记录只能看过去，禁止选当天及以后的日期；定时任务模式可选未来
     const isFuture = key >= todayKey;
     if (key === todayKey) cls.push('today');
-    if (key === _dpSelected && !isFuture) cls.push('selected');
-    if (isFuture) cls.push('disabled');
-    if (isFuture) {
+    if (key === _dpSelected && (!lockFuture || !isFuture)) cls.push('selected');
+    if (lockFuture && isFuture) cls.push('disabled');
+    if (lockFuture && isFuture) {
       html += `<div class="${cls.join(' ')}" data-d="${d}">${d}</div>`;
     } else {
       html += `<div class="${cls.join(' ')}" data-d="${d}" onclick="dpSelectDay('${key}')">${d}</div>`;
@@ -2943,10 +2965,12 @@ function renderHistoryDatePicker() {
   grid.innerHTML = html;
 }
 function dpSelectDay(key) {
-  // 禁止选择当天及以后
-  const t = new Date();
-  const todayKey = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
-  if (key >= todayKey) return;
+  if (_dpMode !== 'task') {
+    // 历史模式禁止选择当天及以后
+    const t = new Date();
+    const todayKey = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+    if (key >= todayKey) return;
+  }
   _dpSelected = key;
   renderHistoryDatePicker();
 }
@@ -2968,6 +2992,12 @@ function dpPickQuick(deltaDays) {
 }
 function confirmHistoryDatePicker() {
   if (!_dpSelected) { showToast('请先选择日期'); return; }
+  // 定时任务模式：回填「开始日期」并关闭，允许选择未来
+  if (_dpMode === 'task') {
+    setTaskStartDateValue(_dpSelected);
+    hideModal('historyDatePickerModal');
+    return;
+  }
   // 最终守卫：禁止确定今天及以后的日期
   const t = new Date();
   const todayKey = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
@@ -5455,12 +5485,12 @@ function openTaskEditor(id) {
   if (id) {
     const t = SCHED_TASKS.find(x => x.id === id);
     setRadio('taskFreq', t.freq); setRadio('taskMode', t.mode);
-    document.getElementById('taskStartDate').value = t.startDate;
+    setTaskStartDateValue(t.startDate);
     document.getElementById('taskStartTime').value = t.startTime;
     document.getElementById('taskCustom').value = t.content || '';
   } else {
     setRadio('taskFreq', 'daily'); setRadio('taskMode', 'ai');
-    document.getElementById('taskStartDate').value = getTodayDateStr();
+    setTaskStartDateValue(getTodayDateStr());
     document.getElementById('taskStartTime').value = '08:00';
     document.getElementById('taskCustom').value = '';
   }

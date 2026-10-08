@@ -1811,6 +1811,10 @@
   .te-time-row { display: flex; gap: 10px; }
   .te-date, .te-time { flex: 1; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; color: #dfe6e9; padding: 8px; font-size: 14px; font-family: inherit; }
   body.theme-day .te-date, body.theme-day .te-time { background: #fff; border-color: rgba(9,132,227,0.2); color: #2d3436; }
+  /* v3.5.135 任务开始日期改为应用内日历选择器（同历史「选日」样式），触发按钮沿用 .te-date 外观 */
+  .te-date-btn { text-align: left; cursor: pointer; }
+  /* v3.5.135 日期选择器浮层需盖在任务编辑弹窗/管理弹窗之上 */
+  #historyDatePickerModal { z-index: 600; }
   .te-textarea { width: 100%; box-sizing: border-box; min-height: 110px; resize: vertical; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.2); color: #dfe6e9; padding: 10px; font-size: 14px; line-height: 1.6; font-family: inherit; }
   body.theme-day .te-textarea { background: #fff; border-color: rgba(9,132,227,0.2); color: #2d3436; }
   /* 首页总览今日计划卡片 */
@@ -2072,7 +2076,7 @@
       <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
     </div>
     <div class="dp-grid" id="dpGrid"></div>
-    <div class="dp-quick">
+    <div class="dp-quick" id="dpQuick">
       <button class="dp-quick-btn" onclick="dpPickQuick(1)">昨天</button>
       <button class="dp-quick-btn" onclick="dpPickQuick(2)">前天</button>
       <button class="dp-quick-btn" onclick="dpPickQuick(7)">上周</button>
@@ -2229,7 +2233,8 @@
     <div class="te-field">
       <div class="te-label">开始时间</div>
       <div class="te-time-row">
-        <input type="date" id="taskStartDate" class="te-date">
+        <button type="button" class="te-date te-date-btn" id="taskStartDateBtn" onclick="openTaskDatePicker()">选择日期</button>
+        <input type="hidden" id="taskStartDate">
         <input type="time" id="taskStartTime" class="te-time" value="08:00">
       </div>
       <div class="te-hint">触发当天按该时刻执行；AI 任务会提前 12 小时生成计划</div>
@@ -2384,6 +2389,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.134"></script>
+<script src="app.js?v=v3.5.135"></script>
 </body>
 </html>
