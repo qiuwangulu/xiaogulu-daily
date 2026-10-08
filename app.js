@@ -1297,7 +1297,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.121'; // 修复 AI 问答偶发无响应：单次超时 15s→60s(长 prompt 生成常需 20~40s,原超时会把正常回答误判为失败)、网络/超时/5xx/限流自动重试(最多 2 次,指数退避)、429 区分「限流」与「额度耗尽」、失败按原因给出具体提示、失败气泡下方新增「重试」按钮、失败占位文本不再进入后续对话上下文、发送前等待家庭云端默认密钥加载完成、防止连点并发重复请求
+const APP_VERSION = 'v3.5.122'; // ①AI 育儿对话页新增「全屏」按钮(点击切换页面内全屏,覆盖整个视口,再点退出),便于长对话阅读;②知识库每条记录默认只显示一行(单行省略、保留开头信息),点击该条可展开查看完整内容(再点收起),编辑/删除/改分类按钮已加 stopPropagation 避免误触折叠
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4536,6 +4536,7 @@ const AI_HIST_KEY = 'ai_chat_history_v1';
 const AI_HIST_CAP = 30;            // 历史对话最多保留 30 段
 let KB = [];
 let KB_FILTER = '全部';
+const kbExpanded = new Set();      // v3.5.122 知识库已展开条目的全局索引（仅控制 UI 折叠态）
 let AI_CHAT = [];
 let AI_HIST = [];
 let tokenExceeded = false;
@@ -4591,11 +4592,21 @@ function aiMsgHtml(text) {
 }
 
 /* ---------- AI 弹窗开关 / 标签 ---------- */
+// v3.5.122 「全屏」按钮：在页面内把 AI 对话页撑满整个视口（非浏览器 Fullscreen API，手机端更稳），再点退出
+const AI_FS_ENTER_SVG = '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+const AI_FS_EXIT_SVG = '<svg viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
+function toggleAIFullscreen() {
+  const s = document.querySelector('.ai-sheet'); if (!s) return;
+  const on = s.classList.toggle('ai-fullscreen');
+  const b = document.getElementById('aiFsBtn');
+  if (b) b.innerHTML = on ? AI_FS_EXIT_SVG : AI_FS_ENTER_SVG;
+}
 function openAI() {
   const overlay = document.getElementById('aiOverlay'); if (!overlay) return;
   overlay.classList.add('show');
   bindAIVoiceTouch();   // v3.5.114 话筒按住说话
   renderTokenBanner(); renderAIMsgs(); renderKb(); updateKbCntLine(); renderAIHistory();
+  const fsBtn = document.getElementById('aiFsBtn'); if (fsBtn) fsBtn.innerHTML = AI_FS_ENTER_SVG;
 }
 // v3.5.110 关闭弹窗：自动把当前对话归档进「历史对话」并清空当前对话
 function closeAI() {
@@ -4603,6 +4614,9 @@ function closeAI() {
   const o = document.getElementById('aiOverlay'); if (o) o.classList.remove('show');
   toggleAIDrawer(false);
   if (voiceTarget === 'ai') cancelVoiceHoldQuiet();
+  // v3.5.122 关闭时退出全屏态，下次打开恢复常态
+  const s = document.querySelector('.ai-sheet'); if (s) s.classList.remove('ai-fullscreen');
+  const fsBtn = document.getElementById('aiFsBtn'); if (fsBtn) fsBtn.innerHTML = AI_FS_ENTER_SVG;
 }
 function switchAITab(t) {
   document.querySelectorAll('.ai-tab').forEach(x => x.classList.toggle('on', x.dataset.tab === t));
@@ -5019,7 +5033,16 @@ async function addKb() {
     }).catch(() => {});
   }
 }
-function delKb(i) { if (i < 0 || i >= KB.length) return; KB.splice(i, 1); saveKBLocal(); saveKBCloud(); renderKb(); updateKbCntLine(); }
+function delKb(i) {
+  if (i < 0 || i >= KB.length) return;
+  KB.splice(i, 1);
+  // 删除后后方条目索引整体前移 1，同步修正展开集合，避免错位；被删条目本身从集合移除
+  for (const v of [...kbExpanded]) {
+    if (v === i) kbExpanded.delete(v);
+    else if (v > i) { kbExpanded.delete(v); kbExpanded.add(v - 1); }
+  }
+  saveKBLocal(); saveKBCloud(); renderKb(); updateKbCntLine();
+}
 function editKb(i) {
   const t = prompt('编辑知识库内容：', KB[i].text);
   if (t !== null && t.trim()) { KB[i].text = t.trim(); KB[i].cat = aiClassifyKb(t.trim()); saveKBLocal(); saveKBCloud(); renderKb(); updateKbCntLine(); }
@@ -5034,6 +5057,11 @@ function filterKb(f) {
   document.querySelectorAll('#kbFilter .kf').forEach(b => b.classList.toggle('on', b.dataset.f === f));
   renderKb();
 }
+// v3.5.122 知识库条目折叠/展开：编辑/删除/改分类需 stopPropagation，避免误触整条折叠切换
+function toggleKbExpand(i) {
+  if (kbExpanded.has(i)) kbExpanded.delete(i); else kbExpanded.add(i);
+  renderKb();
+}
 function renderKb() {
   const list = document.getElementById('kbList'); if (!list) return;
   const arr = KB_FILTER === '全部' ? KB : KB.filter(x => x.cat === KB_FILTER);
@@ -5041,11 +5069,14 @@ function renderKb() {
   if (!arr.length) { list.innerHTML = '<div class="ai-kb-empty">该分类下还没有内容～</div>'; return; }
   list.innerHTML = arr.map(x => {
     const realIdx = KB.indexOf(x);
-    return `<div class="ai-kb-item"><div class="kb-body">`
-      + `<span class="ai-kb-tag" onclick="reTagKb(${realIdx})" title="点此改分类">${escapeHtml(x.cat)}</span>`
-      + `<div class="kb-txt">${escapeHtml(x.text)}</div></div>`
-      + `<span class="rec-edit" onclick="editKb(${realIdx})" title="编辑">${MEMO_EDIT_SVG}</span>`
-      + `<span class="rec-delete" onclick="delKb(${realIdx})" title="删除">${MEMO_DEL_SVG}</span></div>`;
+    const expanded = kbExpanded.has(realIdx);
+    return `<div class="ai-kb-item${expanded ? ' expanded' : ' collapsed'}" onclick="toggleKbExpand(${realIdx})"><div class="kb-body">`
+      + `<span class="ai-kb-tag" onclick="event.stopPropagation();reTagKb(${realIdx})" title="点此改分类">${escapeHtml(x.cat)}</span>`
+      + `<div class="kb-txt">${escapeHtml(x.text)}</div>`
+      + `<div class="kb-toggle">${expanded ? '▾ 收起' : '▸ 展开'}</div>`
+      + `</div>`
+      + `<span class="rec-edit" onclick="event.stopPropagation();editKb(${realIdx})" title="编辑">${MEMO_EDIT_SVG}</span>`
+      + `<span class="rec-delete" onclick="event.stopPropagation();delKb(${realIdx})" title="删除">${MEMO_DEL_SVG}</span></div>`;
   }).join('');
 }
 function updateKbCntLine() { const el = document.getElementById('kbCntLine'); if (el) el.textContent = '知识库 ' + KB.length + ' 条'; }
