@@ -1359,7 +1359,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.136'; // 定时任务修复与增强:①AI计划的生成不再受"由本设备负责推送"限制(未开启推送的设备上计划一直空白),切到「任务」页立即跑一次调度,可编辑判定改为对齐"提前12h生成窗口"(20:00后可编辑次日计划,不再误报只读);②任务新增「任务名称」,卡片标题显示名称、副标题显示频率/时间/类型;③卡片去掉删除按钮,编辑改为首页同款铅笔图标,开关沿用活动页开关并加"开启将会推送微信消息"提示
+const APP_VERSION = 'v3.5.137'; // v3.5.137:①首页分类下拉/搜索框字号统一14;②任务「开始时间」改为同首页添加弹窗的数字输入(时:分);③AI育儿历史对话不再同步家庭云、只保留最近10条;④云端同步三按钮(设置/同步/恢复)等宽并排;⑤AI推荐任务全局仅允许一个,已有则新建时禁用该选项;⑥修复详细中文地址查不到天气的问题(地理编码逐级降级+内置城市兜底)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4632,12 +4632,12 @@ let kbSelectedCats = new Set(KB_FILTER_CATS);      // v3.5.127 多选（默认�
 let kbSearchQuery = '';                            // v3.5.127 知识库搜索关键字
 const KB_KEY = 'ai_kb_v1';
 const KB_CLOUD_KEY = '_ai_kb';
-const AI_HIST_CLOUD_KEY = '_ai_hist';   // v3.5.114 历史对话也加密同步家庭云（此前只存本机，清缓存/换入口即丢）
+const AI_HIST_CLOUD_KEY = '_ai_hist';   // v3.5.137 已停用（历史对话不再上家庭云；常量保留仅为兼容旧版本残留数据）
 const MEMO_CLOUD_KEY = '_memo';         // v3.5.115 备忘录同样加密同步家庭云（此前只存本机，清缓存后丢失）
 const AI_CHAT_KEY = 'ai_chat_v1';
 const AI_CHAT_CAP = 10;            // 单次对话本地仅留最近 10 条
 const AI_HIST_KEY = 'ai_chat_history_v1';
-const AI_HIST_CAP = 30;            // 历史对话最多保留 30 段
+const AI_HIST_CAP = 10;            // v3.5.137 历史对话仅保留最近 10 段（此前 30）
 let KB = [];
 let KB_FILTER = '全部';
 const kbExpanded = new Set();      // v3.5.122 知识库已展开条目的全局索引（仅控制 UI 折叠态）
@@ -4659,10 +4659,7 @@ function aiInit() {
       .then(had => { if (!had && KB.length) return saveKBCloud(); })
       .then(() => { seedAuthoritativeKB(); })   // v3.5.131 方案A：云端拉取完成后再投喂，避免与云端已有条目重复
       .catch(() => { seedAuthoritativeKB(); });
-    // v3.5.114 历史对话同样自动双向同步（合并本地 + 云端，永不丢）
-    loadAIHistCloud()
-      .then(had => { if (!had && AI_HIST.length) return saveAIHistCloud(); })
-      .catch(() => {});
+    // v3.5.137 历史对话已改为「仅本机、不共享」：不再读写家庭云
   } else {
     seedAuthoritativeKB();   // 未配置同步时也投喂（仅本机）
   }
@@ -4748,45 +4745,17 @@ function toggleAIDrawer(show) {
 function loadAIHistLocal() {
   try { AI_HIST = JSON.parse(localStorage.getItem(AI_HIST_KEY) || '[]'); } catch { AI_HIST = []; }
   if (!Array.isArray(AI_HIST)) AI_HIST = [];
+  // v3.5.137 上限 10 条（旧版本可能存了 30 条，加载时一并裁剪回写）
+  if (AI_HIST.length > AI_HIST_CAP) {
+    AI_HIST = AI_HIST.slice(0, AI_HIST_CAP);
+    try { localStorage.setItem(AI_HIST_KEY, JSON.stringify(AI_HIST)); } catch (e) {}
+  }
 }
 function saveAIHistory() {
   if (AI_HIST.length > AI_HIST_CAP) AI_HIST = AI_HIST.slice(0, AI_HIST_CAP);
   try { localStorage.setItem(AI_HIST_KEY, JSON.stringify(AI_HIST)); } catch (e) {}
-  saveAIHistCloud();   // v3.5.114 同步到家庭云（异步，不阻塞界面）
 }
-// 历史对话云端读写（与知识库共用同一套端到端加密配置表）
-async function loadAIHistCloud() {
-  if (!isSyncReady()) return false;
-  try {
-    const key = await getCryptoKey(); if (!key) return false;
-    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${AI_HIST_CLOUD_KEY}&select=encrypted_data,iv`);
-    if (rows.length > 0 && rows[0].encrypted_data && rows[0].iv) {
-      const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
-      const arr = JSON.parse(json);
-      if (Array.isArray(arr) && arr.length) {
-        // 与本地合并（按 id 去重，本地优先），比"云端覆盖本地"更安全：任一边有内容都不会丢
-        const map = new Map();
-        arr.forEach(h => { if (h && h.id) map.set(h.id, h); });
-        (AI_HIST || []).forEach(h => { if (h && h.id) map.set(h.id, h); });
-        AI_HIST = [...map.values()]
-          .sort((a, b) => (Number(String(b.id).replace(/\D/g, '')) || 0) - (Number(String(a.id).replace(/\D/g, '')) || 0))
-          .slice(0, AI_HIST_CAP);
-        try { localStorage.setItem(AI_HIST_KEY, JSON.stringify(AI_HIST)); } catch (e) {}
-        if (document.getElementById('aiOverlay')) renderAIHistory();
-        return true;
-      }
-    }
-  } catch (e) { console.warn('[AI历史] 云端加载失败:', e); }
-  return false;
-}
-async function saveAIHistCloud() {
-  if (!isSyncReady()) return;
-  try {
-    const key = await getCryptoKey(); if (!key) return;
-    const { data, iv } = await encrypt(key, JSON.stringify(AI_HIST));
-    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: AI_HIST_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
-  } catch (e) { console.warn('[AI历史] 云端保存失败:', e); }
-}
+// v3.5.137 历史对话不再读写家庭云（仅本机保存，不共享给家人）
 function archiveAIChat() {
   if (!AI_CHAT.length) return;
   const firstUser = AI_CHAT.find(m => m.role === 'me');
@@ -4803,7 +4772,7 @@ function archiveAIChat() {
 }
 function renderAIHistory() {
   const box = document.getElementById('aiHistList'); if (!box) return;
-  if (!AI_HIST.length) { box.innerHTML = '<div class="ai-hist-empty">还没有历史对话。<br>关闭 AI 育儿页面时，当前对话会自动存到这里，<br>并加密同步到家庭云（换设备/清理缓存也不会丢）。</div>'; return; }
+  if (!AI_HIST.length) { box.innerHTML = '<div class="ai-hist-empty">还没有历史对话。<br>关闭 AI 育儿页面时，当前对话会自动存到这里，<br>仅保存在本机（最多保留最近 10 条，不上传、不共享）。</div>'; return; }
   box.innerHTML = AI_HIST.map((h, i) => (
     `<div class="ai-hist-item" data-i="${i}">`
     + `<div class="ai-hist-head"><div class="ai-hist-time">${escapeHtml(h.time)}</div>`
@@ -5197,19 +5166,79 @@ function saveWeatherAddrUI() {
 /* ---------- 天气（Open-Meteo 免密钥 API） ---------- */
 const WMO_CODES = {0:'晴',1:'大致晴朗',2:'局部多云',3:'阴',45:'雾',48:'雾凇',51:'毛毛雨(弱)',53:'毛毛雨',55:'毛毛雨(强)',56:'冻毛毛雨',57:'冻毛毛雨',61:'小雨',63:'中雨',65:'大雨',66:'冻雨',67:'冻雨',71:'小雪',73:'中雪',75:'大雪',77:'雪粒',80:'阵雨(弱)',81:'阵雨',82:'阵雨(强)',85:'阵雪',86:'阵雪(强)',95:'雷阵雨',96:'雷阵雨伴小冰雹',99:'雷阵雨伴大冰雹'};
 async function geocodeAddr(addr) {
+  const raw = String(addr || '').trim();
+  if (!raw) return null;
+  const cache = (() => { try { return JSON.parse(localStorage.getItem(WEATHER_GEO_CACHE_KEY) || '{}'); } catch (e) { return {}; } })();
+  if (cache[raw] && cache[raw].lat) return cache[raw];
+  // v3.5.137 修复「未查询到天气」：Open-Meteo 地理编码对中文详细地址（如"上海市闵行区七宝镇xx路55弄"）几乎匹配不到，
+  // 改为逐级降级——原地址 → 去门牌 → 市名 → 区名，任一命中即用；全部失败再用内置坐标兜底。
+  const cands = geoCandidates(raw);
+  for (let i = 0; i < cands.length; i++) {
+    const r = await geoSearchOne(cands[i]);
+    if (r) { cache[raw] = r; try { localStorage.setItem(WEATHER_GEO_CACHE_KEY, JSON.stringify(cache)); } catch (e) {} return r; }
+  }
+  const fb = geoFallback(raw);
+  if (fb) { cache[raw] = fb; try { localStorage.setItem(WEATHER_GEO_CACHE_KEY, JSON.stringify(cache)); } catch (e) {} return fb; }
+  console.warn('[天气] 地理编码全部失败，地址：', raw);
+  return null;
+}
+
+/* ---------- v3.5.137 地理编码降级与兜底 ---------- */
+// 常见城市坐标（接口不可用时的最后一道保险）
+const CN_CITY_FALLBACK = {
+  '北京': [39.9042, 116.4074], '上海': [31.2304, 121.4737], '天津': [39.3434, 117.3616], '重庆': [29.5630, 106.5516],
+  '广州': [23.1291, 113.2644], '深圳': [22.5431, 114.0579], '杭州': [30.2741, 120.1551], '南京': [32.0603, 118.7969],
+  '苏州': [31.2989, 120.5853], '无锡': [31.4912, 120.3119], '宁波': [29.8683, 121.5440], '合肥': [31.8206, 117.2272],
+  '成都': [30.5728, 104.0668], '武汉': [30.5928, 114.3055], '西安': [34.3416, 108.9398], '郑州': [34.7466, 113.6254],
+  '长沙': [28.2282, 112.9388], '南昌': [28.6820, 115.8579], '福州': [26.0745, 119.2965], '厦门': [24.4798, 118.0894],
+  '济南': [36.6512, 117.1201], '青岛': [36.0671, 120.3826], '沈阳': [41.8057, 123.4315], '大连': [38.9140, 121.6147],
+  '哈尔滨': [45.8038, 126.5349], '长春': [43.8171, 125.3235], '石家庄': [38.0428, 114.5149], '太原': [37.8706, 112.5489],
+  '南宁': [22.8170, 108.3669], '昆明': [24.8801, 102.8329], '贵阳': [26.6470, 106.6302], '海口': [20.0444, 110.1999],
+  '兰州': [36.0611, 103.8343], '西宁': [36.6171, 101.7782], '银川': [38.4872, 106.2309], '乌鲁木齐': [43.8256, 87.6168],
+  '呼和浩特': [40.8414, 111.7519], '拉萨': [29.6500, 91.1000], '三亚': [18.2528, 109.5119],
+  '香港': [22.3193, 114.1694], '澳门': [22.1987, 113.5439], '台北': [25.0330, 121.5654]
+};
+// 常用区县坐标（比市级更贴近，优先匹配）
+const CN_DISTRICT_FALLBACK = {
+  '闵行': [31.1128, 121.3817], '浦东': [31.2216, 121.5397], '徐汇': [31.1883, 121.4365], '黄浦': [31.2317, 121.4844],
+  '静安': [31.2290, 121.4483], '长宁': [31.2204, 121.4246], '普陀': [31.2495, 121.3963], '虹口': [31.2646, 121.5050],
+  '杨浦': [31.2595, 121.5264], '宝山': [31.4050, 121.4894], '嘉定': [31.3756, 121.2655], '松江': [31.0322, 121.2277],
+  '青浦': [31.1497, 121.1243], '奉贤': [30.9179, 121.4740], '金山': [30.7418, 121.3414], '崇明': [31.6269, 121.3973]
+};
+// 由详细地址逐级生成搜索候选（去重、保持精度优先）
+function geoCandidates(addr) {
+  const out = [];
+  const push = s => { const v = String(s == null ? '' : s).replace(/[\s,，]+/g, ''); if (v.length >= 2 && out.indexOf(v) < 0) out.push(v); };
+  const a = String(addr || '').trim();
+  if (!a) return out;
+  push(a);
+  push(a.replace(/[0-9０-９]+/g, '').replace(/[弄号幢栋室座组队排弄]/g, ''));
+  let rest = a;
+  const mProv = a.match(/^(.{2,8}?)(?:省|自治区|特别行政区)/);   // 省 / 自治区
+  if (mProv) { push(mProv[1]); rest = a.slice(mProv[0].length); }
+  const mCity = rest.match(/^(.{2,8}?)(?:市|自治州|地区|盟)/);     // 市 / 州 / 地区
+  if (mCity) push(mCity[1]);
+  const dm = a.match(/([^省市区县镇乡街道]{2,5})(?:区|县|旗)/g); // 区 / 县
+  if (dm) dm.slice().reverse().forEach(x => { push(x); push(x.replace(/(区|县|旗)$/, '')); });
+  return out;
+}
+// 兜底：按地址中的「区」→「市」关键字取内置坐标
+function geoFallback(addr) {
+  const a = String(addr || '');
+  for (const k in CN_DISTRICT_FALLBACK) if (a.indexOf(k) >= 0) return { lat: CN_DISTRICT_FALLBACK[k][0], lon: CN_DISTRICT_FALLBACK[k][1], name: k };
+  for (const k in CN_CITY_FALLBACK) if (a.indexOf(k) >= 0) return { lat: CN_CITY_FALLBACK[k][0], lon: CN_CITY_FALLBACK[k][1], name: k };
+  return null;
+}
+// 单次地理编码：只要中国境内的结果（避免「上海市」被匹配到美国同名小镇）
+async function geoSearchOne(q) {
   try {
-    const cache = JSON.parse(localStorage.getItem(WEATHER_GEO_CACHE_KEY) || '{}');
-    if (cache[addr]) return cache[addr];
-    const url = 'https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(addr) + '&count=1&language=zh&format=json';
+    const url = 'https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(q) + '&count=5&language=zh&format=json';
     const res = await fetch(url);
     const j = await res.json();
-    if (j && j.results && j.results[0]) {
-      const r = j.results[0];
-      const out = { lat: r.latitude, lon: r.longitude, name: (r.name || '') + (r.admin1 ? '·' + r.admin1 : '') };
-      cache[addr] = out; localStorage.setItem(WEATHER_GEO_CACHE_KEY, JSON.stringify(cache));
-      return out;
-    }
-  } catch (e) { console.warn('[天气] 地理编码失败', e); }
+    const list = (j && j.results) || [];
+    const r = list.find(x => x && (x.country_code === 'CN' || x.country === '中国'));
+    if (r) return { lat: r.latitude, lon: r.longitude, name: (r.name || '') + (r.admin1 ? '·' + r.admin1 : '') };
+  } catch (e) { console.warn('[天气] 地理编码失败(', q, '):', e); }
   return null;
 }
 async function fetchWeather(addr, dateStr) {
@@ -5461,6 +5490,40 @@ function toggleTodayPlan() { todayPlanExpanded = !todayPlanExpanded; renderToday
 
 /* ---------- 定时任务 UI ---------- */
 const SCHED_FREQ_LABEL = { once: '仅一次', daily: '每天', weekly: '每周', monthly: '每月' };
+/* v3.5.137 任务「开始时间」改为与首页添加弹窗一致的两个数字输入框（时/分） */
+function getTaskTimeVal() {
+  const hEl = document.getElementById('taskStartHour'), mEl = document.getElementById('taskStartMin');
+  const h = Math.max(0, Math.min(23, parseInt((hEl && hEl.value) || '0', 10) || 0));
+  const m = Math.max(0, Math.min(59, parseInt((mEl && mEl.value) || '0', 10) || 0));
+  if (hEl) hEl.value = _pad2(h);
+  if (mEl) mEl.value = _pad2(m);
+  return _pad2(h) + ':' + _pad2(m);
+}
+function setTaskTimeVal(v) {
+  const p = String(v || '08:00').split(':');
+  const h = Math.max(0, Math.min(23, parseInt(p[0], 10) || 0));
+  const m = Math.max(0, Math.min(59, parseInt(p[1], 10) || 0));
+  const hEl = document.getElementById('taskStartHour'), mEl = document.getElementById('taskStartMin');
+  if (hEl) hEl.value = _pad2(h);
+  if (mEl) mEl.value = _pad2(m);
+}
+// v3.5.137 AI 推荐任务全局只允许一个：已有 AI 任务时，新建弹窗禁用「AI 推荐」选项
+function hasOtherAITask(exceptId) {
+  return SCHED_TASKS.some(t => t.mode === 'ai' && t.id !== exceptId);
+}
+function setAIModeDisabled(dis, showTip) {
+  const r = document.querySelector('input[name="taskMode"][value="ai"]');
+  if (!r) return;
+  const lab = r.closest('.cat-tag');
+  r.disabled = !!dis;
+  if (lab) {
+    lab.classList.toggle('disabled', !!dis);
+    lab.style.pointerEvents = dis ? 'none' : '';
+    lab.title = dis ? '已有 AI 推荐任务，最多只能添加一个' : '';
+  }
+  if (dis && r.checked) { setRadio('taskMode', 'custom'); onModeChange(); }
+  if (dis && showTip) showToast('已有 AI 推荐任务，最多只能添加一个');
+}
 function renderSchedTasks() {
   const box = document.getElementById('tasksList'); if (!box) return;
   if (!SCHED_TASKS.length) { box.innerHTML = ''; return; }
@@ -5508,16 +5571,18 @@ function openTaskEditor(id) {
     const t = SCHED_TASKS.find(x => x.id === id);
     setRadio('taskFreq', t.freq); setRadio('taskMode', t.mode);
     setTaskStartDateValue(t.startDate);
-    document.getElementById('taskStartTime').value = t.startTime;
+    setTaskTimeVal(t.startTime);
     document.getElementById('taskName').value = t.name || '';
     document.getElementById('taskCustom').value = t.content || '';
   } else {
     setRadio('taskFreq', 'daily'); setRadio('taskMode', 'ai');
     setTaskStartDateValue(getTodayDateStr());
-    document.getElementById('taskStartTime').value = '08:00';
+    setTaskTimeVal('08:00');
     document.getElementById('taskName').value = '';
     document.getElementById('taskCustom').value = '';
   }
+  // v3.5.137 AI 推荐任务最多一个：新建时若已存在 AI 任务，禁用该选项并自动切到「自定义」
+  setAIModeDisabled(hasOtherAITask(id || ''), !id);
   onFreqChange(); onModeChange();
   showModal('taskEditorModal');
 }
@@ -5525,11 +5590,13 @@ function saveTask() {
   const id = document.getElementById('taskEditId').value;
   const freq = document.querySelector('input[name="taskFreq"]:checked').value;
   const startDate = document.getElementById('taskStartDate').value;
-  const startTime = document.getElementById('taskStartTime').value || '08:00';
+  const startTime = getTaskTimeVal();
   const mode = document.querySelector('input[name="taskMode"]:checked').value;
   const nameEl = document.getElementById('taskName');
   const name = nameEl ? nameEl.value.trim() : '';
   if (!startDate) { showToast('请选择开始日期'); return; }
+  // v3.5.137 兜底校验：AI 推荐任务只允许存在一个
+  if (mode === 'ai' && hasOtherAITask(id || '')) { showToast('已有 AI 推荐任务，最多只能添加一个'); return; }
   if (id) {
     const t = SCHED_TASKS.find(x => x.id === id);
     t.name = name;

@@ -192,7 +192,7 @@
   .cat-dropdown-btn { width: 100%; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 6px;
     padding: 9px 10px; border-radius: 14px;
     border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: #dfe6e9;
-    font-size: 13.5px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: inherit; }
+    font-size: 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: inherit; }
   body.theme-day .cat-dropdown-btn { color: #3d4852; border-color: rgba(9,132,227,0.25); background: #fff; }
   .cat-dropdown-btn .cat-arrow { font-size: 20px; line-height: 1; flex-shrink: 0; font-weight: 700; }
   body.theme-day .cat-dropdown-btn { color: #3d4852; border-color: rgba(9,132,227,0.25); background: #fff; }
@@ -1334,7 +1334,8 @@
   .sync-hint { font-size: 12px; color: #636e72; line-height: 1.6; margin: 8px 0; }
   .sync-hint b { color: #f1c40f; }
   .sync-btn-row { display: flex; gap: 8px; margin-top: 10px; }
-  .sync-btn-row .btn { flex: 1; }
+  /* v3.5.137 云端同步三个按钮等宽并排：设置 / 同步 / 恢复 */
+  .sync-btn-row .btn { flex: 1 1 0; min-width: 0; padding-left: 0; padding-right: 0; justify-content: center; white-space: nowrap; }
 
   /* ===== 分析图表 ===== */
   .chart-card {
@@ -1782,7 +1783,7 @@
   .tasks-title { font-size: 16px; font-weight: 700; color: #dfe6e9; }
   body.theme-day .tasks-title { color: #2d3436; }
   .tasks-add-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .tasks-hint { font-size: 13px; color: #b2bec3; }
+  .tasks-hint { font-size: 14px; color: #b2bec3; }
   body.theme-day .tasks-hint { color: #636e72; }
   .tasks-list { max-height: 52vh; overflow-y: auto; }
   .task-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
@@ -1821,6 +1822,11 @@
   .te-time-row { display: flex; gap: 10px; }
   .te-date, .te-time { flex: 1; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; color: #dfe6e9; padding: 8px; font-size: 14px; font-family: inherit; }
   body.theme-day .te-date, body.theme-day .te-time { background: #fff; border-color: rgba(9,132,227,0.2); color: #2d3436; }
+  /* v3.5.137 任务「开始时间」改为与首页添加弹窗一致的两个数字输入框（时:分），不再用原生时间选择器 */
+  .te-time-group { flex: 1; justify-content: center; padding: 2px 0; }
+  .te-time-group input { width: 52px; font-size: 14px; }
+  /* v3.5.137 任务模式（AI 推荐/自定义）不可用态：已有 AI 推荐任务时禁止再次选择 */
+  .cat-tag.disabled { opacity: .4; cursor: not-allowed; }
   /* v3.5.135 任务开始日期改为应用内日历选择器（同历史「选日」样式），触发按钮沿用 .te-date 外观 */
   .te-date-btn { text-align: left; cursor: pointer; }
   /* v3.5.136 任务名称输入框 */
@@ -2143,13 +2149,11 @@
       <div class="cos-title">☁️ 云端同步</div>
       <div class="sync-status-row"><span class="sync-dot off" id="syncDotManage"></span><span id="syncStatusTextManage">未配置</span></div>
       <div class="sync-btn-row">
-        <button class="btn btn-primary" onclick="hideModal('manageModal');openSyncSettings()">同步设置</button>
-        <button class="btn" onclick="syncPullAllAndRefresh()">立即同步</button>
+        <button class="btn btn-primary" onclick="hideModal('manageModal');openSyncSettings()">设置</button>
+        <button class="btn" onclick="syncPullAllAndRefresh()">同步</button>
+        <button class="btn" onclick="restoreTodayFromBackup()" title="从备份恢复今日数据">恢复</button>
       </div>
-      <div class="sync-btn-row" style="margin-top:8px;">
-        <button class="btn" style="font-size:12px;padding:6px 10px;" onclick="restoreTodayFromBackup()">↩️ 从备份恢复今日数据</button>
-      </div>
-      <div style="font-size:11px;color:#b2bec3;margin-top:4px;">每次从云端拉取前会自动备份本地数据；若同步后数据异常，可点击上方按钮恢复</div>
+      <div style="font-size:11px;color:#b2bec3;margin-top:4px;">每次从云端拉取前会自动备份本地数据；若同步后数据异常，可点击「恢复」还原</div>
     </div>
     <div class="sync-section">
       <div class="cos-title">🎤 语音识别</div>
@@ -2252,7 +2256,9 @@
       <div class="te-time-row">
         <button type="button" class="te-date te-date-btn" id="taskStartDateBtn" onclick="openTaskDatePicker()">选择日期</button>
         <input type="hidden" id="taskStartDate">
-        <input type="time" id="taskStartTime" class="te-time" value="08:00">
+        <div class="time-input-group te-time-group" id="taskTimeGroup">
+          <input type="number" id="taskStartHour" min="0" max="23" value="08" inputmode="numeric"><span>:</span><input type="number" id="taskStartMin" min="0" max="59" value="00" inputmode="numeric">
+        </div>
       </div>
       <div class="te-hint">触发当天按该时刻执行；AI 任务会提前 12 小时生成计划</div>
     </div>
@@ -2406,6 +2412,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.136"></script>
+<script src="app.js?v=v3.5.137"></script>
 </body>
 </html>
