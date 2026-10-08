@@ -1357,7 +1357,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.130'; // KB 语音按钮形状改为与 KB「添加」按钮一致(60×45/圆角12px);备忘录的「语音」「添加」形状也改为与 KB「添加」按钮一致(圆角12px)
+const APP_VERSION = 'v3.5.131'; // AI 育儿三项增强:①回车发送后blur收键盘+双次滚动定位(输入框readonly防并发、保持可点);②system prompt注入当前时刻(时分+周几);③formatDayForAI改逐条时间点输出(保留recTime)并按"现在时刻"计算间隔;④方案A:知识库新增「权威资料」分类并种子投喂崔玉涛体系要点(摘要+出处)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4586,10 +4586,11 @@ async function enrichMilestonesWithLLM(items) {
 }
 
 // ==================== v3.5.109 AI 育儿问答（入口=去上传的头像；底部抽屉：对话 + 知识库） ====================
-const KB_CATS = ['奶粉喂养','辅食','睡眠','早教','穿衣','户外','医疗'];
+const KB_CATS = ['奶粉喂养','辅食','睡眠','早教','穿衣','户外','医疗']; // 自动分类候选（不含「权威资料」，后者为投喂的权威参考，不参与关键词/大模型自动归类）
+const KB_AUTH_CAT = '权威资料';   // v3.5.131 方案A：投喂权威育儿资料（崔玉涛等）的统一分类，仅人工标注/种子投喂
 // v3.5.125 知识库分类图标（分类选择弹窗内展示）
-const KB_CAT_ICON = { '奶粉喂养':'🍼','辅食':'🍚','睡眠':'😴','早教':'📚','穿衣':'👕','户外':'🌳','医疗':'💊','综合':'📌' };
-const KB_FILTER_CATS = KB_CATS.concat(['综合']);   // v3.5.127 知识库筛选下拉的全部可选分类
+const KB_CAT_ICON = { '奶粉喂养':'🍼','辅食':'🍚','睡眠':'😴','早教':'📚','穿衣':'👕','户外':'🌳','医疗':'💊','综合':'📌','权威资料':'🎓' };
+const KB_FILTER_CATS = KB_CATS.concat(['综合', KB_AUTH_CAT]);   // v3.5.127 知识库筛选下拉的全部可选分类（含「权威资料」）
 let kbSelectedCats = new Set(KB_FILTER_CATS);      // v3.5.127 多选（默认全选=显示全部）
 let kbSearchQuery = '';                            // v3.5.127 知识库搜索关键字
 const KB_KEY = 'ai_kb_v1';
@@ -4619,11 +4620,14 @@ function aiInit() {
   if (isSyncReady()) {
     loadKBCloud()
       .then(had => { if (!had && KB.length) return saveKBCloud(); })
-      .catch(() => {});
+      .then(() => { seedAuthoritativeKB(); })   // v3.5.131 方案A：云端拉取完成后再投喂，避免与云端已有条目重复
+      .catch(() => { seedAuthoritativeKB(); });
     // v3.5.114 历史对话同样自动双向同步（合并本地 + 云端，永不丢）
     loadAIHistCloud()
       .then(had => { if (!had && AI_HIST.length) return saveAIHistCloud(); })
       .catch(() => {});
+  } else {
+    seedAuthoritativeKB();   // 未配置同步时也投喂（仅本机）
   }
 }
 
@@ -4803,6 +4807,12 @@ function copyAICur(i) {
   if (!m) { showToast('内容不存在'); return; }
   copyTextToClipboard(mdToText(m.text));
 }
+// v3.5.131 ① 滚动到底部：立即一次 + 300ms 后补一次（等软键盘收起、视口恢复，确保落到最新 AI 回复）
+function scrollAIMsgsBottom() {
+  const box = document.getElementById('aiMsgs'); if (!box) return;
+  box.scrollTop = box.scrollHeight;
+  setTimeout(() => { if (box) box.scrollTop = box.scrollHeight; }, 300);
+}
 function renderAIMsgs() {
   const box = document.getElementById('aiMsgs'); if (!box) return;
   if (!AI_CHAT.length) {
@@ -4817,7 +4827,7 @@ function renderAIMsgs() {
         : `<div class="ai-msg-wrap ai"><div class="ai-msg ai${isAIFailMsg(m) ? ' fail' : ''}"><span class="ai-mini">AI 育儿助手</span>${aiMsgHtml(m.text)}</div><span class="ai-tools">${tools}</span></div>`;
     }).join('');
   }
-  box.scrollTop = box.scrollHeight;
+  scrollAIMsgsBottom();
   const c = document.getElementById('aiLocalCnt'); if (c) c.textContent = AI_CHAT.length;
 }
 /* ---------- v3.5.114 让 AI 能准确回答宝宝的具体数据 ----------
@@ -4844,22 +4854,27 @@ function daySummaryForAI(ds) {
   });
   return { recs, byName, notes };
 }
+// v3.5.131 改为逐条时间点输出（保留 recTime 的 HH:MM），便于回答"几点睡""距上次喂奶/睡眠多久"等带时间的问题
 function formatDayForAI(ds) {
   const { recs, byName, notes } = daySummaryForAI(ds);
   if (!recs.length) return `- ${ds}：当天没有任何记录`;
-  const parts = Object.keys(byName).map(n => {
-    const o = byName[n];
-    let t = `${n} ${o.cnt}次`;
-    if (o.ml) t += `，共${o.ml}ml`;
-    if (o.dur) t += `，共${Math.round(o.dur)}分钟`;
-    if (o.cnts) t += `，共${o.cnts}`;
-    if (o.statuses.length) t += `，性状：${o.statuses.join('、')}`;
-    if (o.foods.length) t += `，食物：${o.foods.join('、')}`;
-    if (o.level) t += `，程度：${o.level}`;
-    if (o.temp) t += `，${o.temp}℃`;
-    return t;
+  // 按时间升序逐条列出（时间取 recTime，统一 HH:MM）
+  const sorted = recs.slice().sort((a, b) => String(a.recTime || a.time || '').localeCompare(String(b.recTime || b.time || '')));
+  const lines = sorted.map(r => {
+    const t = String(r.recTime || r.time || '').slice(0, 5);   // HH:MM
+    const name = r.name || r.type || '记录';
+    let d = name;
+    if (r.milkAmount != null) d += ` ${Number(r.milkAmount) || 0}ml`;
+    if (r.duration != null) d += ` ${Math.round(Number(r.duration) || 0)}分钟`;
+    if (r.count != null) d += ` ${Number(r.count) || 0}次`;
+    if (r.poopStatus) d += ` 性状:${r.poopStatus}`;
+    if (Array.isArray(r.solidFoods) && r.solidFoods.length) d += ` 食物:${r.solidFoods.join('、')}`;
+    if (r.level) d += ` ${r.level}`;
+    if (r.temperature) d += ` ${r.temperature}℃`;
+    if (r.note && String(r.note).trim()) d += ` 备注:${String(r.note).trim()}`;
+    return `    · ${t} ${d}`;
   });
-  let out = `- ${ds}（共${recs.length}条）：` + parts.join('；');
+  let out = `- ${ds}（共${recs.length}条）：\n` + lines.join('\n');
   if (notes.length) out += `\n     备注：` + notes.join(' | ');
   return out;
 }
@@ -4876,12 +4891,16 @@ function buildAISystemPrompt() {
     .map(x => `${x.d} ${x.h != null ? x.h + 'cm' : ''}${(x.h != null && x.w != null) ? ' / ' : ''}${x.w != null ? x.w + 'kg' : ''}`)
     .join('；');
 
+  const pad2 = n => String(n).padStart(2, '0');
+  const now = new Date();
+  const wk = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
+  const clock = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())} ${pad2(now.getHours())}:${pad2(now.getMinutes())}（周${wk}）`;
   let baby = `【宝宝档案】\n- 姓名：${BABY_NAME}；出生日期：${birthStr}；今天：${ds}，当前 ${ad.months} 月龄 ${ad.days} 天\n`;
   if (h || w) baby += `- 当前身高体重（家长最新录入）：身高 ${h || '—'}cm，体重 ${w || '—'}kg\n`;
   if (bh) baby += `- 历史身高体重记录：${bh}\n`;
+  baby += `现在时刻：${clock}（回答"现在几点""距上次喂奶/睡眠多久"等问题时，以此刻为基准与记录时间相减计算）\n`;
 
   const days = [];
-  const now = new Date();
   for (let i = 0; i < 7; i++) {
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
     days.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
@@ -4890,15 +4909,20 @@ function buildAISystemPrompt() {
 
   let kbText = '';
   if (KB.length) kbText = '\n\n【家庭知识库（我家宝宝的具体情况与偏好，回复时务必优先考虑）】\n' + KB.map(x => '- [' + x.cat + '] ' + x.text).join('\n');
+  // v3.5.131 方案A：标注「权威资料」的条目为权威育儿参考，冲突时优先采信并注明出处
+  if (KB.some(x => x.cat === KB_AUTH_CAT)) {
+    kbText += '\n（其中标注「' + KB_AUTH_CAT + '」的条目为权威育儿参考，如崔玉涛《育儿百科》等；当与一般性经验或网络说法冲突时，优先采信权威资料，并尽量注明出处。）';
+  }
 
   return '你是一位耐心、专业的婴幼儿育儿顾问，服务对象是用户的小宝宝。\n'
     + '请用简洁、温暖、可操作的口吻回答喂养、睡眠、发育、健康、早教等问题，给出具体建议并说明原因；如无把握请如实说明并建议就医。\n'
     + '回答使用简体中文，避免冗长，分点清晰。不要使用 markdown 标记：不要写星号（* 或 **），不要加 # 标题，列点请用「·」或「1. 2. 3.」。\n\n'
     + baby
-    + '\n【宝宝每日记录（家长实际录入）】\n'
+    + '\n【宝宝每日记录（家长手工录入，时间为当天 HH:MM）】\n'
     + daily
-    + '\n（以上均为家长手工录入的真实数据。家长询问喝奶量、大便次数与性状、睡眠时长、体重等具体数字时，'
-    + '请直接引用上面的数据作答，不要说"我看不到宝宝的情况"；某项当天没有记录时，直接说明"当天的记录里没有这一项"。）'
+    + '\n（以上为家长手工录入的真实数据，时间为当天 HH:MM。家长问"今天喝了多少奶""拉了几次、性状如何""睡了多久"等具体数字时，'
+    + '直接引用上面数据作答，不要说"我看不到宝宝的情况"；问"现在几点""距上次喂奶/睡眠多久"时，用上面记录的时间与「现在时刻」相减计算并说明；'
+    + '某项当天没有记录时，直接说"记录里没有这一项"，不要编造，也不要反问用户来确认。）'
     + kbText;
 }
 /* ---------- v3.5.121 AI 问答稳定性修复 ----------
@@ -5032,16 +5056,20 @@ async function runAIRequest() {
   } finally {
     clearInterval(tick);
     aiBusy = false;
+    const el = document.getElementById('aiChatInput'); if (el) el.readOnly = false;   // v3.5.131 复位，输入框恢复可编辑
   }
   if (seq !== aiReqSeq) return;   // 期间对话被清空/用户已离开，丢弃结果
   const t = document.getElementById('aiTyping'); if (t) t.remove();
   AI_CHAT.push(failed ? { role: 'ai', text: reply, failed: true, reason } : { role: 'ai', text: reply });
   saveAIChat(); renderAIMsgs();
 }
+// v3.5.131 ① 回车/发送后先 blur() 收起键盘；发送期间输入框加 readonly 防并发（仍可点、可聚焦）
 async function sendAIMsg() {
   if (aiBusy) { showToast('AI 正在回答，请稍候'); return; }
   const el = document.getElementById('aiChatInput'); if (!el) return;
   const v = el.value.trim(); if (!v) return;
+  el.blur();                  // 收起软键盘
+  el.readOnly = true;          // 防并发（回复返回后由 runAIRequest 复位）
   AI_CHAT.push({ role: 'me', text: v }); el.value = ''; saveAIChat(); renderAIMsgs();
   await runAIRequest();
 }
@@ -5073,6 +5101,34 @@ function aiInputKey(e) {
 /* ---------- 知识库（7 类 + 综合兜底；AI 自动分类；加密同步家庭云） ---------- */
 function loadKBLocal() { try { KB = JSON.parse(localStorage.getItem(KB_KEY) || '[]'); } catch { KB = []; } if (!Array.isArray(KB)) KB = []; }
 function saveKBLocal() { try { localStorage.setItem(KB_KEY, JSON.stringify(KB)); } catch (e) {} }
+// v3.5.131 方案A：首次启动把权威育儿资料（崔玉涛体系等）投喂进家庭知识库，标注「权威资料」。
+// 仅摘要+注明出处，不整本搬运；一次性（按 kb_auth_seed 版本号），用户删除后不会重复投喂。
+const KB_SEED_VER = '1';
+const KB_AUTH_SEEDS = [
+  '新生儿胃容量很小：第1天约5-7ml(樱桃大小)，第3天约22-27ml(核桃)，1周约45-60ml(鸡蛋)，满月约80-150ml。主张按需喂养，不必严格按时。— 崔玉涛《育儿百科》',
+  '喂奶后建议竖抱拍嗝（空心掌由下往上轻拍后背），可减少吐奶与肠胀气；母乳亲喂且宝宝无不适时可不强制拍嗝。',
+  '1岁内婴儿睡眠应坚持仰卧（back to sleep），床垫硬实、床上不放枕头/被子/毛绒玩具，可显著降低婴儿猝死综合征(SIDS)风险。— 美国儿科学会/崔玉涛',
+  '建立昼夜节律：白天小睡保持室内明亮、声响正常；夜间喂奶调暗灯光、少互动，帮助宝宝区分昼夜。',
+  '生理性黄疸多在出生后2-3天出现、2周内消退；若出生24小时内出现、程度过重或退而复现，需就医排查病理性黄疸。',
+  '足月儿出生后约15天起每日补充维生素D 400IU（母乳与配方奶均可能不足），促进钙吸收、预防佝偻病，可补至2岁。— 崔玉涛',
+  '发热处理：3个月以下体温≥38℃须立即就医；退热优先物理降温（减衣被、温水擦浴），药物首选对乙酰氨基酚(≥2月)或布洛芬(≥6月)，禁用酒精擦浴。— 崔玉涛',
+  '辅食一般在满6月龄(约180天)开始，不早于4月、不晚于6月；首推富铁食物(强化铁米粉、肉泥)，每次只加一种、观察3-5天再添新食物。— 崔玉涛/WHO',
+  '湿疹护理核心是保湿：每日多次厚涂无刺激润肤霜，洗澡水温不过热、时间宜短；中重度需遵医嘱用弱效激素药膏，不必盲目忌口。— 崔玉涛',
+  '肠绞痛多见于2周-4月龄，表现为固定时段长时间剧烈哭闹、难以安抚；可试飞机抱、顺时针揉腹、排气操缓解，通常4-6月自行好转。',
+  '疫苗接种：乙肝、卡介苗出生即接种，之后按免疫规划按时进行；发热或急性病期间暂缓，接种后留观30分钟。',
+  '大运动大致规律：2月抬头、4月翻身、6月独坐、8月爬行、12月扶站/学走；个体差异大，明显落后或能力倒退应及时评估。',
+  '6月龄前纯母乳或配方奶喂养通常不需额外喂水；添加辅食后及炎热出汗多时可少量补水。',
+  '建立固定睡前程序（洗澡-抚触-喂奶-放床）有助于宝宝学会自主入睡；新生儿可用包裹、白噪音、轻摇模拟宫内环境安抚。'
+];
+function seedAuthoritativeKB() {
+  try {
+    if (localStorage.getItem('kb_auth_seed') === KB_SEED_VER) return;
+    let added = 0;
+    KB_AUTH_SEEDS.forEach(s => { if (s && !KB.some(x => x.text === s)) { KB.push({ text: s, cat: KB_AUTH_CAT }); added++; } });
+    localStorage.setItem('kb_auth_seed', KB_SEED_VER);
+    if (added) { saveKBLocal(); if (typeof saveKBCloud === 'function') saveKBCloud().catch(() => {}); renderKb(); updateKbCntLine(); }
+  } catch (e) {}
+}
 const KB_RULES = {
   奶粉喂养:['奶','奶粉','配方','喂养','奶瓶','母乳','乳糖','乳清','冲调','吃奶','喝奶','夜奶','断奶','蛋白','氨基酸'],
   辅食:['辅食','米粉','米糊','蛋黄','果泥','菜泥','面条','粥','添加','固体','手指食物','餐','月龄吃','南瓜','土豆','肉泥'],
@@ -5127,7 +5183,7 @@ function editKb(i) {
   if (i < 0 || i >= KB.length) return;
   _kbEditIdx = i; _kbEditOrigCat = KB[i].cat;
   // 分类下拉：可选分类 + 综合；若该条分类不在预设里（历史自定义），临时补进去，避免选择被重置
-  const cats = KB_CATS.concat(['综合']);
+  const cats = KB_FILTER_CATS.concat();
   if (KB[i].cat && !cats.includes(KB[i].cat)) cats.unshift(KB[i].cat);
   const catRow = document.getElementById('kbEditCatRow');
   if (catRow) {
@@ -5167,7 +5223,7 @@ function kbEditKey(e) {
 // v3.5.125 知识库「改分类」：由原生 prompt 改为与首页添加弹窗同一套分类选择下拉弹窗
 function reTagKb(i) {
   if (i < 0 || i >= KB.length) return;
-  const items = KB_CATS.concat(['综合']).map(c => ({ id: c, name: c, icon: KB_CAT_ICON[c] || '🏷️' }));
+  const items = KB_FILTER_CATS.map(c => ({ id: c, name: c, icon: KB_CAT_ICON[c] || '🏷️' }));
   openCatPicker('选择分类', items, KB[i].cat, (id) => {
     if (!id) return;
     KB[i].cat = id; saveKBLocal(); saveKBCloud(); renderKb();
