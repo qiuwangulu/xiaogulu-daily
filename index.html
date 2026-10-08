@@ -569,6 +569,32 @@
   #memoModal .modal-box { height: 85vh; }
   /* v3.5.123 知识库编辑弹窗：复用首页「编辑记录」弹窗样式；层级必须高于 AI 抽屉(.ai-overlay z-index:300)，否则被盖住 */
   .kb-edit-overlay { z-index: 400; }
+  /* v3.5.125 通用「分类选择」下拉弹窗（首页添加弹窗 + 知识库改分类共用）：层级最高，需盖住 AI 抽屉(300) 与知识库编辑弹窗(400) */
+  .cat-pick-overlay { z-index: 500; }
+  .cat-pick-list { display: flex; flex-direction: column; gap: 8px; max-height: 52vh; overflow-y: auto; padding: 2px; }
+  .cat-pick-item { display: flex; align-items: center; gap: 10px; padding: 13px 14px; border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05);
+    color: #dfe6e9; font-size: 15px; cursor: pointer; }
+  .cat-pick-item:active { background: rgba(255,255,255,0.12); }
+  .cat-pick-item .cp-icon { font-size: 18px; }
+  .cat-pick-item .cp-name { flex: 1 1 auto; min-width: 0; }
+  .cat-pick-item .cp-check { opacity: 0; color: #74b9ff; font-weight: 700; }
+  .cat-pick-item.on { border-color: rgba(99,136,255,0.6); background: rgba(99,136,255,0.18); color: #fff; font-weight: 700; }
+  .cat-pick-item.on .cp-check { opacity: 1; }
+  body.theme-day .cat-pick-item { background: rgba(9,132,227,0.06); border-color: rgba(9,132,227,0.2); color: #3d4852; }
+  body.theme-day .cat-pick-item.on { background: rgba(9,132,227,0.15); border-color: rgba(9,132,227,0.5); color: #0984e3; }
+  body.theme-day .cat-pick-item.on .cp-check { color: #0984e3; }
+
+  /* v3.5.125 弹窗全屏（备忘录 / 分析 / 历史 / 管理）：点标题栏「全屏」按钮撑满整个视口，再点退出 */
+  .modal-fs-btn { position: absolute; top: 14px; right: 52px; width: 30px; height: 30px; padding: 0;
+    background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    color: #b2bec3; z-index: 1; }
+  .modal-fs-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .modal-fs-btn:active { opacity: .7; }
+  body.theme-day .modal-fs-btn { color: #636e72; }
+  .modal-box.modal-fs { max-width: none; width: 100%; height: 100%; max-height: 100vh; border-radius: 0; }
+  /* #memoModal .modal-box 有 ID 级 height:85vh，优先级高于上面的双类选择器，需同优先级覆盖才能撑满 */
+  #memoModal .modal-box.modal-fs { height: 100%; max-height: 100vh; }
   #kbEditModal .input-row > label { font-size: 14px; color: #b2bec3; }
   #kbEditModal .input-row > select { flex: 1 1 auto; min-width: 0; }
   #kbEditTa { min-height: 120px; max-height: 200px; overflow-y: auto; resize: none; }
@@ -651,6 +677,13 @@
   .ai-hist-list { flex:1; overflow-y:auto; margin-top:6px; }
   .ai-hist-list::-webkit-scrollbar { width:0; }
   .ai-hist-item { padding:9px 4px; border-bottom:1px solid var(--rec-bd); cursor:pointer; }
+  /* v3.5.125 历史对话支持复制：条目头部右侧「复制」按钮（复制整段对话） */
+  .ai-hist-head { display:flex; align-items:center; gap:8px; }
+  .ai-hist-head .ai-hist-time { flex:1 1 auto; min-width:0; }
+  .ai-hist-copy { flex:0 0 auto; font-size:11px; color:#74b9ff; opacity:.75; padding:2px 7px; border-radius:8px;
+    border:1px solid rgba(116,185,255,.35); user-select:none; -webkit-user-select:none; }
+  .ai-hist-copy:active { opacity:1; }
+  body.theme-day .ai-hist-copy { color:#0984e3; border-color:rgba(9,132,227,.35); }
   .ai-hist-time { font-size:12.5px; color:var(--fg); font-weight:700; }
   .ai-hist-prev { font-size:11.5px; color:var(--muted); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ai-hist-body { display:none; margin-top:7px; padding:8px 9px; border-radius:10px; background:rgba(255,255,255,.05); font-size:12px; line-height:1.55; color:var(--fg); }
@@ -665,7 +698,7 @@
   .ai-drawer-foot button { font-size:11.5px; color:var(--muted); background:none; border:1px solid var(--row-bd); border-radius:9px; padding:4px 12px; cursor:pointer; font-family:inherit; }
   .ai-composer { display:flex; align-items:flex-end; gap:7px; padding-top:10px; border-top:1px solid var(--row-bd); }
   .ai-input-wrap { position:relative; flex:1; display:flex; }
-  .ai-cta { flex:1; min-height:38px; max-height:96px; padding:9px 44px 9px 12px; border-radius:12px; font-size:14px; resize:none; outline:none; background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.18); color:var(--fg); font-family:inherit; line-height:1.4; }
+  .ai-cta { flex:1; min-height:38px; max-height:96px; padding:9px 100px 9px 12px; border-radius:12px; font-size:14px; resize:none; outline:none; background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.18); color:var(--fg); font-family:inherit; line-height:1.4; }
   body.theme-day .ai-cta { background:#fff; border-color:rgba(9,132,227,.25); }
   /* v3.5.110 语音输入：图标同首页语音按钮，内嵌在输入框右侧（微信样式）；无发送按钮，回车发送 */
   /* v3.5.114 AI 话筒：改为「按住说话」（交互与首页语音一致），并禁止长按弹出系统"粘贴"菜单 */
@@ -689,6 +722,26 @@
   @keyframes aiMicPulse {
     0%, 100% { transform:scale(1); box-shadow:0 0 0 0 rgba(116,185,255,.45); }
     50%      { transform:scale(1.12); box-shadow:0 0 0 6px rgba(116,185,255,.18); }
+  }
+  /* v3.5.125 AI 语音按钮 = 首页 .voice-hold-btn 的小号版本：结构与交互完全统一（按住高亮边框+图标变白放大+tip、
+     录音中隐藏图标显示声波竖纹+呼吸光晕+文字「录音中」），仅尺寸/定位按输入框内嵌做缩放 */
+  #aiVoiceBtn {
+    position:absolute; right:5px; bottom:5px;
+    width:auto; height:auto;
+    padding:6px 12px 6px 9px; border-radius:16px; gap:6px;
+    font-size:13px;
+  }
+  #aiVoiceBtn .voice-icon { width:19px; height:19px; }
+  #aiVoiceBtn .voice-label { font-size:13px; }
+  #aiVoiceBtn .voice-wave { height:20px; gap:3px; }
+  #aiVoiceBtn .voice-wave .vwb { width:3px; animation-name:voiceBarAI; }
+  #aiVoiceBtn.recording .voice-wave { height:20px; }
+  #aiVoiceBtn .voice-tip { bottom:calc(100% + 8px); }
+  @keyframes voiceBarAI { 0% { height:5px; } 100% { height:20px; } }
+  #aiVoiceBtn.recording { animation:voiceBreatheAI 1200ms ease-in-out infinite; }
+  @keyframes voiceBreatheAI {
+    0%, 100% { box-shadow:0 0 0 4px rgba(116,185,255,.25); }
+    50%      { box-shadow:0 0 0 14px rgba(116,185,255,.45); }
   }
   /* 录音中提示条：浮在输入框上方 */
   .ai-rec-bar {
@@ -724,8 +777,12 @@
   body.theme-day .ai-kb-head b { color:#0984e3; }
   .ai-kb-list { flex:1; overflow-y:auto; }
   .ai-kb-list::-webkit-scrollbar { width:0; }
-  .ai-kb-item { display:flex; gap:9px; align-items:flex-start; padding:11px 0; border-bottom:1px solid var(--rec-bd); font-size:13.5px; line-height:1.5; }
-  .ai-kb-item .kb-body { flex:1; }
+  .ai-kb-item { display:flex; gap:9px; align-items:flex-start; padding:11px 0; border-bottom:1px solid var(--rec-bd); font-size:13.5px; line-height:1.5;
+    width:100%; max-width:100%; box-sizing:border-box; }
+  /* v3.5.125 知识库条目宽度统一 + 编辑/删除按钮右对齐：kb-body 占满剩余宽度且可收缩(min-width:0)，
+     按钮固定 24px 不被文本挤压，因此每条右侧图标位置完全一致 */
+  .ai-kb-item .kb-body { flex:1 1 0; min-width:0; overflow:hidden; }
+  .ai-kb-item .kb-txt { overflow-wrap:anywhere; word-break:break-word; }
   .ai-kb-tag { display:inline-block; font-size:10.5px; font-weight:700; color:#74b9ff; background:rgba(116,185,255,.16); border:1px solid rgba(116,185,255,.4); border-radius:8px; padding:1px 8px; margin-bottom:5px; cursor:pointer; }
   body.theme-day .ai-kb-tag { color:#0984e3; background:rgba(9,132,227,.12); border-color:rgba(9,132,227,.4); }
   .ai-kb-item .kb-txt { color:var(--fg); white-space:pre-wrap; }
@@ -736,7 +793,7 @@
   body.theme-day .ai-kb-item .kb-toggle { color:#0984e3; }
   /* v3.5.110 知识库条目右侧「编辑 / 删除」：图标与样式同首页卡片（.record-tag/.history-record） */
   .ai-kb-item .rec-edit, .ai-kb-item .rec-delete {
-    width: 24px; height: 24px; cursor: pointer; padding: 2px; flex-shrink: 0;
+    width: 24px; height: 24px; cursor: pointer; padding: 2px; flex: 0 0 24px;
     display: inline-flex; align-items: center; justify-content: center;
     opacity: 0.7; transition: opacity 0.2s; background: transparent; border: none; margin-left: 8px;
   }
@@ -805,12 +862,19 @@
   }
   .add-search-wrap input::placeholder { color: rgba(255,255,255,0.35); }
 
-  .add-cat-bar {
-    display: flex; gap: 6px; overflow-x: auto;
-    margin-bottom: 14px; padding-bottom: 4px;
-    scrollbar-width: none;
+  .add-cat-bar { display: block; margin-bottom: 14px; }
+  /* v3.5.125 首页添加弹窗的分类改为「下拉弹窗」按钮（原横排标签已弃用；.add-cat-tag 样式保留以防回退） */
+  .add-cat-btn {
+    width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px; border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05);
+    color: #dfe6e9; font-size: 15px; font-family: inherit; cursor: pointer; text-align: left;
   }
-  .add-cat-bar::-webkit-scrollbar { display: none; }
+  .add-cat-btn:active { background: rgba(255,255,255,0.12); }
+  .add-cat-btn .acb-icon { font-size: 17px; }
+  .add-cat-btn .acb-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .add-cat-btn .acb-arrow { font-size: 18px; line-height: 1; flex-shrink: 0; font-weight: 700; }
+  body.theme-day .add-cat-btn { background: #fff; border-color: rgba(9,132,227,0.25); color: #3d4852; }
   .add-cat-tag {
     padding: 5px 12px; border-radius: 14px;
     border: 1px solid rgba(255,255,255,0.15);
@@ -1858,7 +1922,15 @@
         <div class="ai-input-wrap">
           <div class="ai-rec-bar" id="aiRecBar">🎙️ 正在录音…松开结束，上滑取消</div>
           <textarea class="ai-cta" id="aiChatInput" placeholder="输入问题，回车发送…" onkeydown="aiInputKey(event)"></textarea>
-          <button class="ai-mic" id="aiVoiceBtn" type="button" title="按住说话"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+          <!-- v3.5.125 AI 语音按钮：结构与交互与首页「语音」按钮完全一致（按住高亮 + 波纹 + 提示） -->
+          <button class="voice-hold-btn" id="aiVoiceBtn" type="button" title="按住说话">
+            <span class="voice-icon"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>
+            <span class="voice-label">语音</span>
+            <span class="voice-wave" aria-hidden="true">
+              <span class="vwb" style="height:6px"></span><span class="vwb" style="height:12px"></span><span class="vwb" style="height:16px"></span><span class="vwb" style="height:10px"></span><span class="vwb" style="height:8px"></span>
+            </span>
+            <span class="voice-tip">松开结束录音</span>
+          </button>
         </div>
       </div>
       <div class="ai-chat-tools">
@@ -2171,6 +2243,14 @@
     </div>
   </div>
 </div>
+<!-- v3.5.125 通用「分类选择」下拉弹窗：首页添加弹窗 + 知识库「改分类」共用（层级最高，覆盖面包括 AI 抽屉） -->
+<div class="modal-overlay cat-pick-overlay" id="catPickModal" onclick="closeModal(event,'catPickModal')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="hideModal('catPickModal')">&times;</button>
+    <div class="modal-title" id="catPickTitle">选择分类</div>
+    <div class="cat-pick-list" id="catPickList"></div>
+  </div>
+</div>
 <div class="modal-overlay" id="optionsResetModal" onclick="closeModal(event,'optionsResetModal')">
   <div class="modal-box" onclick="event.stopPropagation()">
     <button class="modal-close" onclick="hideModal('optionsResetModal')">&times;</button>
@@ -2188,8 +2268,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.124"></script>
-<script src="app-config.js?v=v3.5.124"></script>
-<script src="app.js?v=v3.5.124"></script>
+<script src="std-config.js?v=v3.5.125"></script>
+<script src="app-config.js?v=v3.5.125"></script>
+<script src="app.js?v=v3.5.125"></script>
 </body>
 </html>

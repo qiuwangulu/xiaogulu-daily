@@ -231,6 +231,7 @@ function init() {
   loadMemoCloud().catch(() => {});   // v3.5.115 备忘录启动即从家庭云恢复（本地优先合并）
   bindVoiceTouch();
   bindFastTaps();
+  initModalFullscreen();   // v3.5.125 备忘录/分析/历史/管理弹窗注入「全屏」按钮
   // 自动清理测试残留数据（仅一次， harmless）
   cleanupTestData();
   // 页面加载后检查喝奶提醒（已到时间则 toast，仅提醒一次）
@@ -1297,7 +1298,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.124'; // 首页分类分组标题(.cat-section-title):浅色模式由蓝色(#0984e3)改为黑色(#1a1a1a)且字体加粗;深色模式颜色(#fff)与加粗(700)均保持不变
+const APP_VERSION = 'v3.5.125'; // ①首页添加弹窗的「分类」栏与知识库「改分类」统一为同一个分类选择下拉弹窗;②知识库条目宽度一致、编辑/删除按钮右对齐;③备忘录/分析/历史/管理弹窗新增全屏按钮;④AI 语音按钮交互与首页语音统一(按住高亮+波纹+提示)、历史对话支持复制
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -1448,14 +1449,43 @@ if (document.body && !document.body.hasAttribute('onclick')) {
 }
 
 function renderAddModal() {
-  // 分类栏高亮
+  // v3.5.125 分类栏由横排标签改为「下拉弹窗」按钮：点它弹出分类选择弹窗（与知识库改分类同一套），选中即过滤
   const catBar = document.getElementById('addCatBar');
-  let ch = `<div class="add-cat-tag${addModalCategory==='all'?' active':''}" data-cat="all" onclick="setAddCat('all')"><span class="add-ci">&#127968;</span><span class="add-cl">全部</span></div>`;
-  CATEGORIES.forEach(c => {
-    ch += `<div class="add-cat-tag${addModalCategory===c.id?' active':''}" data-cat="${c.id}" onclick="setAddCat('${c.id}')"><span class="add-ci">${c.icon}</span><span class="add-cl">${c.name}</span></div>`;
-  });
-  catBar.innerHTML = ch;
+  const cur = addModalCategory === 'all'
+    ? { id: 'all', name: '全部', icon: '🏠' }
+    : (CATEGORIES.find(c => c.id === addModalCategory) || { id: 'all', name: '全部', icon: '🏠' });
+  catBar.innerHTML = `<button type="button" class="add-cat-btn" onclick="openAddCatPicker()">`
+    + `<span class="acb-icon">${cur.icon}</span>`
+    + `<span class="acb-name">${_escAttr(cur.name)}</span>`
+    + `<span class="acb-arrow">▾</span></button>`;
   renderAddList();
+}
+// v3.5.125 首页添加弹窗：点分类按钮 → 打开通用分类选择弹窗（含「全部」）
+function openAddCatPicker() {
+  const items = [{ id: 'all', name: '全部', icon: '🏠' }]
+    .concat(CATEGORIES.map(c => ({ id: c.id, name: c.name, icon: c.icon })));
+  openCatPicker('选择分类', items, addModalCategory, (id) => { addModalCategory = id; renderAddModal(); });
+}
+
+/* ---------- v3.5.125 通用「分类选择」下拉弹窗（首页添加弹窗 + 知识库改分类共用一套） ---------- */
+let _catPickCb = null;
+function openCatPicker(title, items, curId, cb) {
+  _catPickCb = cb || null;
+  const tEl = document.getElementById('catPickTitle'); if (tEl) tEl.textContent = title || '选择分类';
+  const list = document.getElementById('catPickList'); if (!list) return;
+  list.innerHTML = (items || []).map(it => {
+    const on = String(it.id) === String(curId);
+    return `<div class="cat-pick-item${on ? ' on' : ''}" data-c="${_escAttr(it.id)}" onclick="pickCatItem('${_escAttr(it.id)}')">`
+      + `<span class="cp-icon">${it.icon || '🏷️'}</span>`
+      + `<span class="cp-name">${_escAttr(it.name)}</span>`
+      + `<span class="cp-check">✓</span></div>`;
+  }).join('');
+  showModal('catPickModal');
+}
+function pickCatItem(id) {
+  const cb = _catPickCb; _catPickCb = null;
+  hideModal('catPickModal');
+  if (cb) cb(id);
 }
 
 function renderAddList(filterText) {
@@ -3278,11 +3308,13 @@ function buildReportText() {
   return text;
 }
 function copyReport() { copyTextToClipboard(buildReportText()); }
-function copyTextToClipboard(text) {
-  if (navigator.clipboard) { navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板')).catch(() => fallbackCopyText(text)); }
-  else fallbackCopyText(text);
+// v3.5.125 okMsg 可选：允许调用方自定义成功提示（默认为「已复制到剪贴板」）
+function copyTextToClipboard(text, okMsg) {
+  const m = okMsg || '已复制到剪贴板';
+  if (navigator.clipboard) { navigator.clipboard.writeText(text).then(() => showToast(m)).catch(() => fallbackCopyText(text, m)); }
+  else fallbackCopyText(text, m);
 }
-function fallbackCopyText(text) { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); showToast('已复制到剪贴板'); } catch { showToast('复制失败'); } document.body.removeChild(ta); }
+function fallbackCopyText(text, okMsg) { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); showToast(okMsg || '已复制到剪贴板'); } catch { showToast('复制失败'); } document.body.removeChild(ta); }
 
 /* ==================== 备忘录 ==================== */
 const MEMO_KEY = 'memo_data_v1';
@@ -4526,6 +4558,8 @@ async function enrichMilestonesWithLLM(items) {
 
 // ==================== v3.5.109 AI 育儿问答（入口=去上传的头像；底部抽屉：对话 + 知识库） ====================
 const KB_CATS = ['奶粉喂养','辅食','睡眠','早教','穿衣','户外','医疗'];
+// v3.5.125 知识库分类图标（分类选择弹窗内展示）
+const KB_CAT_ICON = { '奶粉喂养':'🍼','辅食':'🍚','睡眠':'😴','早教':'📚','穿衣':'👕','户外':'🌳','医疗':'💊','综合':'📌' };
 const KB_KEY = 'ai_kb_v1';
 const KB_CLOUD_KEY = '_ai_kb';
 const AI_HIST_CLOUD_KEY = '_ai_hist';   // v3.5.114 历史对话也加密同步家庭云（此前只存本机，清缓存/换入口即丢）
@@ -4696,7 +4730,8 @@ function renderAIHistory() {
   if (!AI_HIST.length) { box.innerHTML = '<div class="ai-hist-empty">还没有历史对话。<br>关闭 AI 育儿页面时，当前对话会自动存到这里，<br>并加密同步到家庭云（换设备/清理缓存也不会丢）。</div>'; return; }
   box.innerHTML = AI_HIST.map((h, i) => (
     `<div class="ai-hist-item" data-i="${i}">`
-    + `<div class="ai-hist-time">🕘 ${escapeHtml(h.time)}</div>`
+    + `<div class="ai-hist-head"><div class="ai-hist-time">🕘 ${escapeHtml(h.time)}</div>`
+    + `<span class="ai-hist-copy" onclick="event.stopPropagation();copyAIHist(${i})">复制</span></div>`
     + `<div class="ai-hist-prev">${escapeHtml(mdToText(h.preview))}</div>`
     + `<div class="ai-hist-body">${h.msgs.map(m => `<div class="ai-hist-msg"><b>${m.role === 'me' ? '我' : 'AI'}</b> ${aiMsgHtml(m.text)}</div>`).join('')}</div>`
     + `</div>`
@@ -4704,6 +4739,14 @@ function renderAIHistory() {
   box.querySelectorAll('.ai-hist-item').forEach(el => {
     el.addEventListener('click', () => el.classList.toggle('open'));
   });
+}
+// v3.5.125 历史对话复制：把该段对话整理成「时间 + 我/AI + 内容」的纯文本拷到剪贴板
+function copyAIHist(i) {
+  const h = AI_HIST[i];
+  if (!h) { showToast('内容不存在'); return; }
+  let txt = '【' + (h.time || '') + '】';
+  (h.msgs || []).forEach(m => { txt += '\n' + (m.role === 'me' ? '我' : 'AI') + '：' + mdToText(m.text); });
+  copyTextToClipboard(txt, '已复制整段对话');
 }
 function clearAIHistory() {
   if (!AI_HIST.length) return;
@@ -5087,10 +5130,14 @@ function kbEditKey(e) {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) { e.preventDefault(); saveKbEdit(); }
   else if (e.key === 'Escape') { e.preventDefault(); hideModal('kbEditModal'); }
 }
+// v3.5.125 知识库「改分类」：由原生 prompt 改为与首页添加弹窗同一套分类选择下拉弹窗
 function reTagKb(i) {
-  const cur = KB[i].cat;
-  const next = prompt('修改分类（可选：' + KB_CATS.join(' / ') + ' / 综合）：', cur);
-  if (next && (KB_CATS.includes(next.trim()) || next.trim() === '综合')) { KB[i].cat = next.trim(); saveKBLocal(); saveKBCloud(); renderKb(); }
+  if (i < 0 || i >= KB.length) return;
+  const items = KB_CATS.concat(['综合']).map(c => ({ id: c, name: c, icon: KB_CAT_ICON[c] || '🏷️' }));
+  openCatPicker('选择分类', items, KB[i].cat, (id) => {
+    if (!id) return;
+    KB[i].cat = id; saveKBLocal(); saveKBCloud(); renderKb();
+  });
 }
 function filterKb(f) {
   KB_FILTER = f;
@@ -5710,8 +5757,37 @@ function switchAnalysisTab(tab) {
 }
 
 /* ==================== 模态框 ==================== */
-function showModal(id) { document.getElementById(id).classList.add('show'); document.body.style.overflow = 'hidden'; }
-function hideModal(id) { document.getElementById(id).classList.remove('show'); document.body.style.overflow = ''; }
+/* ---------- v3.5.125 弹窗全屏（备忘录 / 分析 / 历史 / 管理） ---------- */
+const MODAL_FS_TARGETS = ['memoModal', 'analysisModal', 'historyModal', 'manageModal'];
+// 给目标弹窗标题栏注入「全屏」按钮（关闭按钮左侧）
+function initModalFullscreen() {
+  MODAL_FS_TARGETS.forEach(id => {
+    const ov = document.getElementById(id); if (!ov) return;
+    const box = ov.querySelector('.modal-box'); if (!box || box.querySelector('.modal-fs-btn')) return;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'modal-fs-btn'; b.title = '全屏';
+    b.innerHTML = AI_FS_ENTER_SVG;
+    b.addEventListener('click', (e) => { e.stopPropagation(); toggleModalFullscreen(id); });
+    box.appendChild(b);
+  });
+}
+function toggleModalFullscreen(id) {
+  const ov = document.getElementById(id); if (!ov) return;
+  const box = ov.querySelector('.modal-box'); if (!box) return;
+  const on = box.classList.toggle('modal-fs');
+  const b = box.querySelector('.modal-fs-btn');
+  if (b) { b.innerHTML = on ? AI_FS_EXIT_SVG : AI_FS_ENTER_SVG; b.title = on ? '退出全屏' : '全屏'; }
+}
+// 每次打开（或关闭）弹窗都复位为常态，下次进入永远是普通大小
+function resetModalFullscreen(el) {
+  const box = (el && el.querySelector) ? el.querySelector('.modal-box') : null;
+  if (!box || !box.classList.contains('modal-fs')) return;
+  box.classList.remove('modal-fs');
+  const b = box.querySelector('.modal-fs-btn');
+  if (b) { b.innerHTML = AI_FS_ENTER_SVG; b.title = '全屏'; }
+}
+function showModal(id) { const el = document.getElementById(id); if (!el) return; resetModalFullscreen(el); el.classList.add('show'); document.body.style.overflow = 'hidden'; }
+function hideModal(id) { const el = document.getElementById(id); if (!el) return; resetModalFullscreen(el); el.classList.remove('show'); document.body.style.overflow = ''; }
 function closeModal(e, id) { if (e.target.id === id) hideModal(id); }
 function showToast(msg, ms) { const toast = document.getElementById('toast'); toast.textContent = msg; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), ms || 1800); }
 
