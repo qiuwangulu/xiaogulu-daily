@@ -1298,7 +1298,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.125'; // ①首页添加弹窗的「分类」栏与知识库「改分类」统一为同一个分类选择下拉弹窗;②知识库条目宽度一致、编辑/删除按钮右对齐;③备忘录/分析/历史/管理弹窗新增全屏按钮;④AI 语音按钮交互与首页语音统一(按住高亮+波纹+提示)、历史对话支持复制
+const APP_VERSION = 'v3.5.126'; // 历史对话每条记录去掉前面的 🕘 时针图标(时间文字保留,前缀图标移除)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4730,7 +4730,7 @@ function renderAIHistory() {
   if (!AI_HIST.length) { box.innerHTML = '<div class="ai-hist-empty">还没有历史对话。<br>关闭 AI 育儿页面时，当前对话会自动存到这里，<br>并加密同步到家庭云（换设备/清理缓存也不会丢）。</div>'; return; }
   box.innerHTML = AI_HIST.map((h, i) => (
     `<div class="ai-hist-item" data-i="${i}">`
-    + `<div class="ai-hist-head"><div class="ai-hist-time">🕘 ${escapeHtml(h.time)}</div>`
+    + `<div class="ai-hist-head"><div class="ai-hist-time">${escapeHtml(h.time)}</div>`
     + `<span class="ai-hist-copy" onclick="event.stopPropagation();copyAIHist(${i})">复制</span></div>`
     + `<div class="ai-hist-prev">${escapeHtml(mdToText(h.preview))}</div>`
     + `<div class="ai-hist-body">${h.msgs.map(m => `<div class="ai-hist-msg"><b>${m.role === 'me' ? '我' : 'AI'}</b> ${aiMsgHtml(m.text)}</div>`).join('')}</div>`
