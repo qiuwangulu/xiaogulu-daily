@@ -954,6 +954,8 @@ function updateOverview(skipPush) {
   // v3.5.106 总览内「日报」小组件：点击弹窗看完整日报（图标同修改前，不显示条数）
   // v3.5.109 日报胶囊右移并改添加按钮底色（右对齐包裹）
   html += `<div class="ov-report-row"><div class="ov-report-pill" onclick="openReport()">&#128200; 日报 <span class="pill-chev">&#8250;</span></div></div>`;
+  // v3.5.132 首页总览「今日计划」卡片（默认收起，点击展开；无 AI 任务则不显示）
+  html += renderTodayPlanCardHTML();
 
   bar.innerHTML = html;
   // 推送检查改为脏位标记，由统一调度器延迟合并执行
@@ -1357,7 +1359,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.131'; // AI 育儿三项增强:①回车发送后blur收键盘+双次滚动定位(输入框readonly防并发、保持可点);②system prompt注入当前时刻(时分+周几);③formatDayForAI改逐条时间点输出(保留recTime)并按"现在时刻"计算间隔;④方案A:知识库新增「权威资料」分类并种子投喂崔玉涛体系要点(摘要+出处)
+const APP_VERSION = 'v3.5.132'; // 定时任务+今日计划:①管理弹窗新增「任务」标签页(频率/时间/AI自动生成或自定义/启停);②AI任务触发前12h调大模型按天气+知识库+宝宝档案生成今日计划(衣+行+健康/食/住),触发时复用今日成就的PushPlus配置推送群组;③首页总览新增「今日计划」卡片(默认收起、点击展开、无编辑图标);④已推送且未到下次前12h则计划只读、点击提示;⑤天气地址可配置并加密同步家庭云(不写死);⑥更新订阅推送与AI大模型设置提示
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3071,6 +3073,9 @@ function openManage() {
   renderCustomOptionsSection();
   // v3.5.94 恢复上次所在分类
   switchManageTab(currentManageTab);
+  // v3.5.132 打开管理即载入天气地址与定时任务列表
+  const wa = document.getElementById('weatherAddrInput'); if (wa) wa.value = getWeatherAddr();
+  renderSchedTasks();
   document.getElementById('readOnlyToggle').checked = isReadOnlyMode();
   loadPushTokenUI();
   loadPushTopicUI();
@@ -4629,6 +4634,7 @@ function aiInit() {
   } else {
     seedAuthoritativeKB();   // 未配置同步时也投喂（仅本机）
   }
+  initScheduler();   // v3.5.132 启动定时任务调度（含天气地址云端恢复）
 }
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
@@ -5101,6 +5107,414 @@ function aiInputKey(e) {
 /* ---------- 知识库（7 类 + 综合兜底；AI 自动分类；加密同步家庭云） ---------- */
 function loadKBLocal() { try { KB = JSON.parse(localStorage.getItem(KB_KEY) || '[]'); } catch { KB = []; } if (!Array.isArray(KB)) KB = []; }
 function saveKBLocal() { try { localStorage.setItem(KB_KEY, JSON.stringify(KB)); } catch (e) {} }
+
+/* ==================== v3.5.132 定时任务 + 今日计划 ==================== */
+const SCHED_TASKS_KEY = 'sched_tasks';
+const WEATHER_ADDR_KEY = 'weather_addr';
+const WEATHER_ADDR_CLOUD_KEY = 'weather_addr_v1';   // 加密家庭云（地址不写死、可配置）
+const WEATHER_GEO_CACHE_KEY = 'weather_geo_cache';
+const SCHED_DEFAULT_ADDR = '上海市闵行区七宝镇宝南路55弄九星家园';
+const SCHED_GEN_LEAD = 12 * 3600000;     // 提前 12 小时生成计划
+const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内才推送（避免补推历史）
+const SCHED_GEN_COOLDOWN = 30 * 60000;   // AI 生成失败重试冷却 30 分钟
+let SCHED_TASKS = [];
+let todayPlanExpanded = false;
+const _pad2 = n => String(n).padStart(2, '0');
+
+function loadSchedTasks() {
+  try { SCHED_TASKS = JSON.parse(localStorage.getItem(SCHED_TASKS_KEY) || '[]'); } catch (e) { SCHED_TASKS = []; }
+  if (!Array.isArray(SCHED_TASKS)) SCHED_TASKS = [];
+}
+function saveSchedTasks() { try { localStorage.setItem(SCHED_TASKS_KEY, JSON.stringify(SCHED_TASKS)); } catch (e) {} }
+
+/* ---------- 天气地址（可配置 + 加密家庭云） ---------- */
+function getWeatherAddr() { return localStorage.getItem(WEATHER_ADDR_KEY) || SCHED_DEFAULT_ADDR; }
+function setWeatherAddr(addr) {
+  const a = (addr || '').trim() || SCHED_DEFAULT_ADDR;
+  localStorage.setItem(WEATHER_ADDR_KEY, a);
+  saveWeatherAddrCloud(a);
+}
+async function saveWeatherAddrCloud(addr) {
+  if (!isSyncReady()) return;
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const { data, iv } = await encrypt(key, JSON.stringify({ addr: addr }));
+    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: WEATHER_ADDR_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
+  } catch (e) { console.warn('[天气地址] 云端保存失败', e); }
+}
+async function loadWeatherAddrCloud() {
+  if (!isSyncReady()) return;
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${WEATHER_ADDR_CLOUD_KEY}&select=encrypted_data,iv`);
+    if (rows.length && rows[0].encrypted_data && rows[0].iv) {
+      const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
+      const o = JSON.parse(json || '{}');
+      if (o && o.addr) localStorage.setItem(WEATHER_ADDR_KEY, o.addr);
+    }
+  } catch (e) { console.warn('[天气地址] 云端读取失败', e); }
+}
+function saveWeatherAddrUI() {
+  const inp = document.getElementById('weatherAddrInput'); if (!inp) return;
+  const v = inp.value.trim();
+  if (!v) { showToast('地址不能为空'); return; }
+  setWeatherAddr(v);
+  showToast('天气地址已保存（加密同步家庭云）');
+}
+
+/* ---------- 天气（Open-Meteo 免密钥 API） ---------- */
+const WMO_CODES = {0:'晴',1:'大致晴朗',2:'局部多云',3:'阴',45:'雾',48:'雾凇',51:'毛毛雨(弱)',53:'毛毛雨',55:'毛毛雨(强)',56:'冻毛毛雨',57:'冻毛毛雨',61:'小雨',63:'中雨',65:'大雨',66:'冻雨',67:'冻雨',71:'小雪',73:'中雪',75:'大雪',77:'雪粒',80:'阵雨(弱)',81:'阵雨',82:'阵雨(强)',85:'阵雪',86:'阵雪(强)',95:'雷阵雨',96:'雷阵雨伴小冰雹',99:'雷阵雨伴大冰雹'};
+async function geocodeAddr(addr) {
+  try {
+    const cache = JSON.parse(localStorage.getItem(WEATHER_GEO_CACHE_KEY) || '{}');
+    if (cache[addr]) return cache[addr];
+    const url = 'https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(addr) + '&count=1&language=zh&format=json';
+    const res = await fetch(url);
+    const j = await res.json();
+    if (j && j.results && j.results[0]) {
+      const r = j.results[0];
+      const out = { lat: r.latitude, lon: r.longitude, name: (r.name || '') + (r.admin1 ? '·' + r.admin1 : '') };
+      cache[addr] = out; localStorage.setItem(WEATHER_GEO_CACHE_KEY, JSON.stringify(cache));
+      return out;
+    }
+  } catch (e) { console.warn('[天气] 地理编码失败', e); }
+  return null;
+}
+async function fetchWeather(addr, dateStr) {
+  const geo = await geocodeAddr(addr); if (!geo) return null;
+  try {
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + geo.lat + '&longitude=' + geo.lon
+      + '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max'
+      + '&timezone=Asia%2FShanghai&start_date=' + dateStr + '&end_date=' + dateStr;
+    const res = await fetch(url);
+    const j = await res.json();
+    const d = j && j.daily;
+    if (!d || !d.time || !d.time.length) return null;
+    return { code: d.weather_code[0], tmax: d.temperature_2m_max[0], tmin: d.temperature_2m_min[0],
+      pop: d.precipitation_probability_max[0], wind: d.wind_speed_10m_max[0], name: geo.name };
+  } catch (e) { console.warn('[天气] 获取失败', e); return null; }
+}
+function weatherText(w) {
+  if (!w) return '（天气获取失败，请手动参考天气预报）';
+  const desc = WMO_CODES[w.code] != null ? WMO_CODES[w.code] : ('天气代码' + w.code);
+  return w.name + ' ' + desc + '，最高' + Math.round(w.tmax) + '℃/最低' + Math.round(w.tmin) + '℃，降水概率' + (w.pop != null ? w.pop : '—') + '%，最大风速' + (w.wind != null ? Math.round(w.wind) : '—') + 'km/h';
+}
+
+/* ---------- 触发时间计算 ---------- */
+function taskFirstTrigger(task) {
+  const p = task.startDate.split('-').map(Number), q = task.startTime.split(':').map(Number);
+  return new Date(p[0], p[1] - 1, p[2], q[0], q[1], 0, 0);
+}
+function addMonths(date, n) {
+  const d = new Date(date.getTime()); const day = d.getDate();
+  d.setDate(1); d.setMonth(d.getMonth() + n);
+  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+  return d;
+}
+function stepFwd(t, freq) {
+  if (freq === 'daily') return new Date(t.getTime() + 86400000);
+  if (freq === 'weekly') return new Date(t.getTime() + 7 * 86400000);
+  if (freq === 'monthly') return addMonths(t, 1);
+  return null;
+}
+function stepBack(t, freq) {
+  if (freq === 'daily') return new Date(t.getTime() - 86400000);
+  if (freq === 'weekly') return new Date(t.getTime() - 7 * 86400000);
+  if (freq === 'monthly') return addMonths(t, -1);
+  return null;
+}
+function computeTriggers(task, now) {
+  const first = taskFirstTrigger(task);
+  if (task.freq === 'once') {
+    return { prev: first.getTime() <= now.getTime() ? first : null,
+             next: first.getTime() > now.getTime() ? first : null };
+  }
+  let prev = new Date(first.getTime());
+  if (prev.getTime() > now.getTime()) {
+    while (prev.getTime() > now.getTime()) prev = stepBack(prev, task.freq);
+  } else {
+    while (stepFwd(prev, task.freq).getTime() <= now.getTime()) prev = stepFwd(prev, task.freq);
+  }
+  return { prev: prev, next: stepFwd(prev, task.freq) };
+}
+function periodKey(task, trig) {
+  const y = trig.getFullYear();
+  if (task.freq === 'once') return 'once';
+  if (task.freq === 'daily') return y + '-' + _pad2(trig.getMonth() + 1) + '-' + _pad2(trig.getDate());
+  if (task.freq === 'weekly') {
+    const onejan = new Date(y, 0, 1);
+    const wk = Math.ceil((((trig - onejan) / 86400000) + onejan.getDay() + 1) / 7);
+    return y + '-W' + _pad2(wk);
+  }
+  if (task.freq === 'monthly') return y + '-' + _pad2(trig.getMonth() + 1);
+  return '';
+}
+
+/* ---------- 计划生成（AI） ---------- */
+function buildPlanSystemPrompt(dateStr, wText) {
+  const ad = getAgeDetail(dateStr);
+  const birthStr = BIRTH_DATE.getFullYear() + '-' + _pad2(BIRTH_DATE.getMonth() + 1) + '-' + _pad2(BIRTH_DATE.getDate());
+  const h = localStorage.getItem('babyHeight') || '';
+  const w = localStorage.getItem('babyWeight') || '';
+  const kbPart = KB.slice(0, 50).map(x => '- [' + x.cat + '] ' + x.text).join('\n');
+  return '你是一位专业、贴心的婴幼儿育儿规划助手，服务对象是长辈（外婆）带小宝宝，目标是提前生成「今日计划」以减少带娃决策压力。\n'
+    + '请用简体中文，具体、可操作；不要使用 markdown 标记（不用 * 和 #），分点请用「·」或「1. 2. 3.」。\n\n'
+    + '【宝宝档案】\n- 姓名：' + BABY_NAME + '；出生：' + birthStr + '；当前 ' + ad.months + ' 月龄 ' + ad.days + ' 天\n'
+    + ((h || w) ? '- 身高 ' + (h || '—') + 'cm，体重 ' + (w || '—') + 'kg\n' : '')
+    + '\n【家庭知识库（优先参考，含权威育儿资料）】\n' + (kbPart || '（暂无）') + '\n'
+    + '\n【目标日期天气】' + dateStr + ' ' + wText + '\n'
+    + '\n【规划规则——请严格按以下三部分输出】\n'
+    + '【衣+行+健康】根据天气，结合知识库与宝宝情况，推荐户外活动时间与时长、穿衣、防病注意事项（如大风不出门、起雾少开窗、降温添衣、雾霾减少外出等）。\n'
+    + '【食】单次奶量、喝奶次数、乳糖酶用量、辅食建议尝试的食物及具体量、注意事项（过敏/防呛等）。\n'
+    + '【住】是否洗澡（结合天气与知识库，提醒开暖风等）、是否剪指甲、营养补剂、排便关注（据此前情况与知识库提醒，如近期易腹泻需肚子保暖）。\n'
+    + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 30 字的关键提示；之后换行写「计划：」，再按【衣+行+健康】【食】【住】分块给出内容。';
+}
+function splitPlan(full) {
+  if (!full) return { summary: '', detail: '' };
+  let summary = '', detail = String(full);
+  const m = detail.match(/摘要[:：]\s*([^\n]*)/);
+  if (m) summary = m[1].trim();
+  const idx = detail.indexOf('计划：');
+  if (idx >= 0) detail = detail.slice(idx + 3).trim();
+  if (!summary) summary = (String(full).split('\n')[0] || '').slice(0, 30);
+  return { summary: summary, detail: detail };
+}
+async function getAITagConfigWait() {
+  let cfg = getAITagConfig();
+  if (!cfg && (typeof _cloudAITagKeyLoaded === 'undefined' || !_cloudAITagKeyLoaded)) {
+    try { await Promise.race([loadCloudAITagKey(), new Promise(r => setTimeout(r, 4000))]); } catch (e) {}
+    cfg = getAITagConfig();
+  }
+  return cfg;
+}
+async function generatePlanForTask(task, trig) {
+  const cfg = await getAITagConfigWait();
+  if (!cfg) { console.warn('[计划] 未配置 AI 密钥，跳过生成'); return; }
+  const dateStr = trig.getFullYear() + '-' + _pad2(trig.getMonth() + 1) + '-' + _pad2(trig.getDate());
+  let wText = '（未获取）';
+  try { wText = weatherText(await fetchWeather(getWeatherAddr(), dateStr)); } catch (e) {}
+  const r = await callAIChat(cfg, [
+    { role: 'system', content: buildPlanSystemPrompt(dateStr, wText) },
+    { role: 'user', content: '请为 ' + dateStr + '（地址：' + getWeatherAddr() + '）生成今日计划，严格按格式输出。' }
+  ]);
+  if (typeof r === 'string' && r.indexOf('__FAIL__:') === 0) { console.warn('[计划] AI 生成失败', r); return; }
+  task.content = String(r).trim();
+  task.genPeriod = periodKey(task, trig);
+  task.genDate = dateStr;
+  saveSchedTasks();
+}
+
+/* ---------- 推送（复用今日成就的 PushPlus 配置） ---------- */
+async function pushTask(task, trig, pk) {
+  let title, content;
+  if (task.mode === 'ai') {
+    const sp = splitPlan(task.content);
+    const ds = task.genDate || (trig.getFullYear() + '-' + _pad2(trig.getMonth() + 1) + '-' + _pad2(trig.getDate()));
+    title = '📅 ' + ds + ' 今日计划';
+    const sum = sp.summary ? '<p style="font-size:16px;font-weight:600;">📌 ' + escapeHtml(sp.summary) + '</p>' : '';
+    content = '<h3>小咕噜 ' + ds + ' 今日计划</h3>' + sum + '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(sp.detail || task.content || '') + '</pre>';
+  } else {
+    title = '⏰ 定时提醒';
+    content = '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(task.content || '') + '</pre>';
+  }
+  const ok = await notifyPushplus(title, content);
+  if (ok) {
+    task.pushPeriod = pk; task.pushTs = Date.now();
+    if (task.freq === 'once') task.enabled = false;
+    saveSchedTasks();
+  }
+  return ok;
+}
+
+/* ---------- 调度器（静态站点：页面打开时由定时器检查触发） ---------- */
+function isPlanEditable(task) {
+  if (task.mode !== 'ai') return true;
+  const now = new Date();
+  const { next } = computeTriggers(task, now);
+  if (!next) return false;
+  if (periodKey(task, next) !== getTodayDateStr()) return false;
+  const winStart = new Date(next.getTime() - SCHED_GEN_LEAD);
+  return now >= winStart && now < next;
+}
+async function runScheduler() {
+  if (!isPushSender()) return;
+  const now = new Date();
+  for (const task of SCHED_TASKS) {
+    if (!task.enabled) continue;
+    const { prev, next } = computeTriggers(task, now);
+    // AI 计划生成：进入 [触发-12h, 触发) 窗口且本周期未生成
+    if (task.mode === 'ai' && next) {
+      const winStart = new Date(next.getTime() - SCHED_GEN_LEAD);
+      if (now >= winStart && now < next) {
+        const pk = periodKey(task, next);
+        if (task.genPeriod !== pk && (Date.now() - (task.genTryTs || 0)) > SCHED_GEN_COOLDOWN) {
+          task.genTryTs = Date.now(); saveSchedTasks();
+          await generatePlanForTask(task, next);
+        }
+      }
+    }
+    // 触发推送：触发时刻起、宽限 3 小时内
+    const trig = next || (task.freq === 'once' ? prev : null);
+    if (trig && now >= trig && now < new Date(trig.getTime() + SCHED_PUSH_GRACE)) {
+      const pk = periodKey(task, trig);
+      if (task.pushPeriod !== pk) {
+        if (task.mode === 'ai' && !task.content) { await generatePlanForTask(task, trig); }
+        await pushTask(task, trig, pk);
+      }
+    }
+  }
+  if (currentManageTab === 'tasks') renderSchedTasks();
+  renderTodayPlanCard();
+}
+function initScheduler() {
+  loadSchedTasks();
+  loadWeatherAddrCloud().catch(() => {});
+  runScheduler();
+  setInterval(runScheduler, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) runScheduler(); });
+}
+
+/* ---------- 今日计划（首页总览卡片） ---------- */
+function getCurrentPlan() {
+  const task = SCHED_TASKS.find(t => t.enabled && t.mode === 'ai');
+  if (!task) return null;
+  const now = new Date();
+  const { prev, next } = computeTriggers(task, now);
+  const todayStr = getTodayDateStr();
+  if (prev && periodKey(task, prev) === todayStr && task.pushPeriod === periodKey(task, prev) && task.content) {
+    return { text: task.content, editable: false, date: todayStr };
+  }
+  if (next && periodKey(task, next) === todayStr) {
+    const winStart = new Date(next.getTime() - SCHED_GEN_LEAD);
+    if (now >= winStart && now < next) {
+      return { text: task.content || '', editable: true, date: todayStr, pending: !task.content };
+    }
+  }
+  return null;
+}
+function renderTodayPlanCardHTML() {
+  const p = getCurrentPlan();
+  if (!p) return '';
+  const sp = splitPlan(p.text);
+  const disp = sp.summary || (p.text ? p.text.split('\n')[0].slice(0, 40) : '（尚未生成）');
+  const full = sp.detail || p.text || '（尚未生成）';
+  const detailStyle = todayPlanExpanded ? 'display:block;' : 'display:none;';
+  const chev = todayPlanExpanded ? '▾' : '▸';
+  const note = p.editable ? '' : ' <span class="ov-plan-lock">已推送·只读</span>';
+  return '<div class="ov-plan-card" onclick="toggleTodayPlan()">'
+    + '<div class="ov-plan-head"><span class="ov-plan-title">📅 今日计划</span>'
+    + '<span class="ov-plan-summary">' + escapeHtml(disp) + '</span>'
+    + '<span class="ov-plan-chev">' + chev + '</span></div>'
+    + '<div class="ov-plan-detail" style="' + detailStyle + '">' + escapeHtml(full) + note + '</div>'
+    + '</div>';
+}
+function renderTodayPlanCard() { try { updateOverview(true); } catch (e) {} }
+function toggleTodayPlan() { todayPlanExpanded = !todayPlanExpanded; renderTodayPlanCard(); }
+
+/* ---------- 定时任务 UI ---------- */
+const SCHED_FREQ_LABEL = { once: '仅一次', daily: '每天', weekly: '每周', monthly: '每月' };
+function renderSchedTasks() {
+  const box = document.getElementById('tasksList'); if (!box) return;
+  if (!SCHED_TASKS.length) { box.innerHTML = '<div class="sf-empty">暂无定时任务，点右上角「+ 添加」新建</div>'; return; }
+  let h = '';
+  SCHED_TASKS.forEach(t => {
+    const editable = isPlanEditable(t);
+    h += '<div class="task-card">'
+      + '<div class="task-row">'
+      + '<div class="task-info">'
+      + '<div class="task-name">' + (t.mode === 'ai' ? '🤖' : '✏️') + ' ' + SCHED_FREQ_LABEL[t.freq] + ' ' + t.startDate + ' ' + t.startTime + '</div>'
+      + '<div class="task-sub">' + (t.mode === 'ai' ? 'AI 自动生成计划' : '自定义内容') + (t.enabled ? '' : ' · 已停止') + '</div>'
+      + '</div>'
+      + '<div class="task-actions">'
+      + '<button class="icon-btn" onclick="openTaskEditor(\'' + t.id + '\')">✎</button>'
+      + '<button class="icon-btn" onclick="deleteTask(\'' + t.id + '\')">🗑</button>'
+      + '<div class="toggle-switch ' + (t.enabled ? 'on' : '') + '" data-tid="' + t.id + '" onclick="toggleTask(\'' + t.id + '\')"></div>'
+      + '</div></div>';
+    if (t.mode === 'ai') {
+      h += '<textarea class="task-plan" id="plan_' + t.id + '" ' + (editable ? '' : 'readonly') + ' onfocus="onPlanFocus(\'' + t.id + '\')" onclick="onPlanFocus(\'' + t.id + '\')" oninput="onPlanInput(\'' + t.id + '\',this.value)">' + escapeHtml(t.content || '') + '</textarea>';
+    } else {
+      h += '<textarea class="task-plan" id="plan_' + t.id + '" oninput="onPlanInput(\'' + t.id + '\',this.value)">' + escapeHtml(t.content || '') + '</textarea>';
+    }
+    h += '</div>';
+  });
+  box.innerHTML = h;
+}
+function onPlanInput(id, val) {
+  const t = SCHED_TASKS.find(x => x.id === id); if (!t) return;
+  t.content = val; saveSchedTasks();
+}
+function onPlanFocus(id) {
+  const t = SCHED_TASKS.find(x => x.id === id); if (!t) return;
+  if (!isPlanEditable(t)) {
+    showToast('因今日计划已推送，明日计划未生成，无法编辑');
+    const el = document.getElementById('plan_' + id); if (el) el.blur();
+  }
+}
+function openTaskEditor(id) {
+  document.getElementById('taskEditId').value = id || '';
+  if (id) {
+    const t = SCHED_TASKS.find(x => x.id === id);
+    setRadio('taskFreq', t.freq); setRadio('taskMode', t.mode);
+    document.getElementById('taskStartDate').value = t.startDate;
+    document.getElementById('taskStartTime').value = t.startTime;
+    document.getElementById('taskCustom').value = t.content || '';
+  } else {
+    setRadio('taskFreq', 'daily'); setRadio('taskMode', 'ai');
+    document.getElementById('taskStartDate').value = getTodayDateStr();
+    document.getElementById('taskStartTime').value = '08:00';
+    document.getElementById('taskCustom').value = '';
+  }
+  onFreqChange(); onModeChange();
+  showModal('taskEditorModal');
+}
+function saveTask() {
+  const id = document.getElementById('taskEditId').value;
+  const freq = document.querySelector('input[name="taskFreq"]:checked').value;
+  const startDate = document.getElementById('taskStartDate').value;
+  const startTime = document.getElementById('taskStartTime').value || '08:00';
+  const mode = document.querySelector('input[name="taskMode"]:checked').value;
+  if (!startDate) { showToast('请选择开始日期'); return; }
+  if (id) {
+    const t = SCHED_TASKS.find(x => x.id === id);
+    t.freq = freq; t.startDate = startDate; t.startTime = startTime; t.mode = mode;
+    if (mode === 'custom') t.content = document.getElementById('taskCustom').value;
+  } else {
+    SCHED_TASKS.push({ id: 't_' + Date.now(), freq: freq, startDate: startDate, startTime: startTime, mode: mode,
+      content: mode === 'custom' ? document.getElementById('taskCustom').value : '', enabled: true,
+      genPeriod: '', pushPeriod: '', genTryTs: 0 });
+  }
+  saveSchedTasks(); hideModal('taskEditorModal'); renderSchedTasks(); runScheduler();
+}
+function deleteTask(id) {
+  if (!window.confirm('确定删除该定时任务？')) return;
+  SCHED_TASKS = SCHED_TASKS.filter(t => t.id !== id);
+  saveSchedTasks(); renderSchedTasks();
+}
+function toggleTask(id) {
+  const t = SCHED_TASKS.find(x => x.id === id); if (!t) return;
+  t.enabled = !t.enabled; saveSchedTasks(); renderSchedTasks();
+}
+function syncSeg(radio) {
+  const seg = radio.closest('.te-seg'); if (!seg) return;
+  seg.querySelectorAll('.cat-tag').forEach(l => l.classList.toggle('active', l.querySelector('input').checked));
+}
+function setRadio(name, val) {
+  const radios = document.querySelectorAll('input[name="' + name + '"]');
+  radios.forEach(r => { r.checked = (r.value === val); });
+  const seg = radios[0] && radios[0].closest('.te-seg');
+  if (seg) seg.querySelectorAll('.cat-tag').forEach(l => l.classList.toggle('active', l.querySelector('input').checked));
+}
+function onFreqChange() {
+  const freq = document.querySelector('input[name="taskFreq"]:checked').value;
+  const hint = document.getElementById('taskFreqHint');
+  const map = { once: '仅在该日期时刻执行一次', daily: '每天该时刻执行（AI 任务提前 12 小时生成次日计划）', weekly: '每周该日期时刻执行', monthly: '每月该日期时刻执行' };
+  if (hint) hint.textContent = map[freq] || '';
+}
+function onModeChange() {
+  const mode = document.querySelector('input[name="taskMode"]:checked').value;
+  const f = document.getElementById('taskCustomField');
+  if (f) f.style.display = mode === 'custom' ? 'block' : 'none';
+}
 // v3.5.131 方案A：首次启动把权威育儿资料（崔玉涛体系等）投喂进家庭知识库，标注「权威资料」。
 // 仅摘要+注明出处，不整本搬运；一次性（按 kb_auth_seed 版本号），用户删除后不会重复投喂。
 const KB_SEED_VER = '1';

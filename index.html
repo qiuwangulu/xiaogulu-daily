@@ -1772,6 +1772,51 @@
   body.theme-day div[style*="color:#b2bec3"] { color: #636e72 !important; }
   body.theme-day div[style*="color:#dfe6e9"] { color: #3d4852 !important; }
   body.theme-day input[style*="accent-color:#74b9ff"] { accent-color: #0984e3 !important; }
+
+  /* ===== v3.5.132 定时任务 / 今日计划 ===== */
+  .tasks-head { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 10px 0; }
+  .tasks-title { font-size: 16px; font-weight: 700; color: #dfe6e9; }
+  body.theme-day .tasks-title { color: #2d3436; }
+  .tasks-list { max-height: 52vh; overflow-y: auto; }
+  .task-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+  body.theme-day .task-card { background: rgba(9,132,227,0.05); border-color: rgba(9,132,227,0.15); }
+  .task-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .task-info { min-width: 0; }
+  .task-name { font-size: 14px; color: #dfe6e9; font-weight: 600; }
+  body.theme-day .task-name { color: #2d3436; }
+  .task-sub { font-size: 12px; color: #b2bec3; margin-top: 2px; }
+  .task-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .icon-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #dfe6e9; border-radius: 8px; width: 30px; height: 30px; font-size: 14px; cursor: pointer; }
+  body.theme-day .icon-btn { background: rgba(9,132,227,0.08); border-color: rgba(9,132,227,0.2); color: #2d3436; }
+  .task-plan { width: 100%; box-sizing: border-box; margin-top: 10px; min-height: 90px; resize: vertical; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.2); color: #dfe6e9; padding: 8px; font-size: 13px; line-height: 1.5; font-family: inherit; }
+  .task-plan[readonly] { background: rgba(0,0,0,0.32); color: #95a5a6; }
+  body.theme-day .task-plan { background: #fff; border-color: rgba(9,132,227,0.2); color: #2d3436; }
+  body.theme-day .task-plan[readonly] { background: #f1f3f5; color: #b2bec3; }
+  /* 编辑弹窗字段 */
+  .te-field { margin: 12px 0; }
+  .te-label { font-size: 14px; color: #b2bec3; margin-bottom: 6px; }
+  .te-seg { display: flex; gap: 10px; }
+  .te-seg .cat-tag { flex: 1 1 0; min-width: 0; flex-direction: row; justify-content: center; gap: 4px; padding: 7px 6px; font-size: 13px; cursor: pointer; }
+  .te-seg .cat-tag input { display: none; }
+  .te-seg .cat-tag.active { background: rgba(116,185,255,0.18); border-color: #74b9ff; color: #dfe6e9; }
+  body.theme-day .te-seg .cat-tag.active { background: rgba(9,132,227,0.12); border-color: #0984e3; color: #2d3436; }
+  .te-hint { font-size: 12px; color: #b2bec3; margin-top: 6px; }
+  .te-time-row { display: flex; gap: 10px; }
+  .te-date, .te-time { flex: 1; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; color: #dfe6e9; padding: 8px; font-size: 14px; font-family: inherit; }
+  body.theme-day .te-date, body.theme-day .te-time { background: #fff; border-color: rgba(9,132,227,0.2); color: #2d3436; }
+  .te-textarea { width: 100%; box-sizing: border-box; min-height: 110px; resize: vertical; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.2); color: #dfe6e9; padding: 10px; font-size: 14px; line-height: 1.6; font-family: inherit; }
+  body.theme-day .te-textarea { background: #fff; border-color: rgba(9,132,227,0.2); color: #2d3436; }
+  /* 首页总览今日计划卡片 */
+  .ov-plan-card { margin-top: 10px; background: rgba(116,185,255,0.1); border: 1px solid rgba(116,185,255,0.25); border-radius: 12px; padding: 8px 10px; cursor: pointer; }
+  body.theme-day .ov-plan-card { background: rgba(9,132,227,0.07); border-color: rgba(9,132,227,0.2); }
+  .ov-plan-head { display: flex; align-items: center; gap: 8px; }
+  .ov-plan-title { font-size: 15px; color: #dfe6e9; font-weight: 600; flex-shrink: 0; }
+  body.theme-day .ov-plan-title { color: #2d3436; }
+  .ov-plan-summary { flex: 1; font-size: 13px; color: #ffeaa7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ov-plan-chev { color: #b2bec3; font-size: 13px; flex-shrink: 0; }
+  .ov-plan-detail { margin-top: 8px; font-size: 13px; color: #dfe6e9; white-space: pre-wrap; line-height: 1.6; word-break: break-word; }
+  body.theme-day .ov-plan-detail { color: #3d4852; }
+  .ov-plan-lock { color: #95a5a6; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -2057,6 +2102,7 @@
     <div class="manage-tab-bar" id="manageTabBar">
       <div class="cat-tag active" data-mtab="settings" onclick="switchManageTab('settings')"><span class="cat-icon">⚙️</span><span class="cat-label">设置</span></div>
       <div class="cat-tag" data-mtab="acts" onclick="switchManageTab('acts')"><span class="cat-icon">🏃</span><span class="cat-label">活动</span></div>
+      <div class="cat-tag" data-mtab="tasks" onclick="switchManageTab('tasks')"><span class="cat-icon">⏰</span><span class="cat-label">任务</span></div>
     </div>
     <div class="manage-tab-panel" data-mpanel="settings">
     <div class="sync-section">
@@ -2106,11 +2152,11 @@
       <div class="push-token-row" style="justify-content: space-between;">
         <label class="xf-see-row"><input type="checkbox" id="pushSenderToggle" onchange="togglePushSender()"><span style="font-size:13px;color:#b2bec3;">由本设备负责推送</span></label>
       </div>
-      <div class="push-token-hint">pushplus.plus → 发送消息 → 一对多消息 → 群组编码填到这里，家人扫码入群即可同步接收成就提醒<br><b>重要：</b>多台设备都开着本应用时会各自推送一遍造成重复。<b>请只在一台设备（如妈妈的手机）勾选「由本设备负责推送」</b>，其他设备取消勾选即可。取消勾选的设备仍可正常记录与查看，只是不再发推送。</div>
+      <div class="push-token-hint">pushplus.plus → 发送消息 → 一对多消息 → 群组编码填到这里，家人扫码入群即可同步接收成就提醒。<b>「定时任务」（管理页「任务」标签）的 AI 今日计划与提醒也复用本配置推送到同一群组</b>，无需单独设置。<br><b>重要：</b>多台设备都开着本应用时会各自推送一遍造成重复。<b>请只在一台设备（如妈妈的手机）勾选「由本设备负责推送」</b>，其他设备取消勾选即可。取消勾选的设备仍可正常记录与查看，只是不再发推送。</div>
     </div>
     <div class="sync-section">
       <div class="cos-title">💡 AI 大模型</div>
-      <div style="font-size:13px;color:#b2bec3;padding:2px 0 8px 0;">用于<b style="color:#74b9ff;">AI 育儿问答</b>的智能回复与<b style="color:#74b9ff;">成长里程碑归类</b>（替代关键词规则）。默认使用<b style="color:#74b9ff;">家庭云端加密同步的默认密钥</b>（同记录端到端加密，仅家人可解密，不可见明文）；也可在此填写自己的密钥（仅存本机）覆盖。密钥永不明文显示。</div>
+      <div style="font-size:13px;color:#b2bec3;padding:2px 0 8px 0;">用于<b style="color:#74b9ff;">AI 育儿问答</b>的智能回复、<b style="color:#74b9ff;">成长里程碑归类</b>（替代关键词规则），以及<b style="color:#74b9ff;">定时任务的「今日计划」自动生成</b>。默认使用<b style="color:#74b9ff;">家庭云端加密同步的默认密钥</b>（同记录端到端加密，仅家人可解密，不可见明文）；也可在此填写自己的密钥（仅存本机）覆盖。密钥永不明文显示。</div>
       <div class="xf-config-row"><label>服务商:</label>
         <select id="aiTagProvider" onchange="onAITagProviderChange()" style="flex:1;">
           <option value="deepseek">DeepSeek</option>
@@ -2128,13 +2174,70 @@
       </div>
       <div class="push-token-hint" id="aiTagHint"></div>
     </div>
+    <div class="sync-section">
+      <div class="cos-title">🌤️ 天气地址（今日计划用）</div>
+      <div class="xf-config-row"><label>地址:</label><input type="text" id="weatherAddrInput" placeholder="如：上海市闵行区七宝镇宝南路55弄九星家园" autocomplete="off"></div>
+      <div class="push-token-row" style="justify-content: flex-end;">
+        <button class="btn btn-primary" onclick="saveWeatherAddrUI()">保存</button>
+      </div>
+      <div class="push-token-hint">用于「定时任务」AI 今日计划的天气查询（衣+行+健康建议）。地址<b>可自由修改、不写死</b>，并<b>加密保存在家庭云</b>（同记录端到端加密，仅家人可解密）；默认已填示例地址，改为宝宝实际所在地即可。</div>
+    </div>
     </div>
     <div class="manage-tab-panel" data-mpanel="acts" style="display:none;">
     <div class="manage-list" id="manageList"></div>
     </div>
+    <!-- v3.5.132 定时任务面板（最右侧「任务」标签） -->
+    <div class="manage-tab-panel" data-mpanel="tasks" style="display:none;">
+      <div class="tasks-head">
+        <div class="tasks-title">⏰ 定时任务</div>
+        <button class="fab-btn" onclick="openTaskEditor()"><span class="fab-plus">+</span> 添加</button>
+      </div>
+      <div class="tasks-list" id="tasksList"></div>
+    </div>
     <!-- v3.5.69 底部固定操作条：选项区很长，滚到最底下也能一键关闭（选项为即时保存，无需"保存"按钮） -->
     <div class="manage-footer">
       <button class="btn btn-primary" onclick="hideModal('manageModal')">完成</button>
+    </div>
+  </div>
+</div>
+<!-- v3.5.132 定时任务编辑弹窗 -->
+<div class="modal-overlay" id="taskEditorModal" onclick="closeModal(event,'taskEditorModal')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="hideModal('taskEditorModal')">&times;</button>
+    <div class="modal-title">⏰ 定时任务</div>
+    <input type="hidden" id="taskEditId">
+    <div class="te-field">
+      <div class="te-label">触发频率</div>
+      <div class="te-seg" id="taskFreqSeg">
+        <label class="cat-tag"><input type="radio" name="taskFreq" value="once" onchange="syncSeg(this);onFreqChange()"><span>仅一次</span></label>
+        <label class="cat-tag"><input type="radio" name="taskFreq" value="daily" checked onchange="syncSeg(this);onFreqChange()"><span>每天</span></label>
+        <label class="cat-tag"><input type="radio" name="taskFreq" value="weekly" onchange="syncSeg(this);onFreqChange()"><span>每周</span></label>
+        <label class="cat-tag"><input type="radio" name="taskFreq" value="monthly" onchange="syncSeg(this);onFreqChange()"><span>每月</span></label>
+      </div>
+      <div class="te-hint" id="taskFreqHint"></div>
+    </div>
+    <div class="te-field">
+      <div class="te-label">开始时间</div>
+      <div class="te-time-row">
+        <input type="date" id="taskStartDate" class="te-date">
+        <input type="time" id="taskStartTime" class="te-time" value="08:00">
+      </div>
+      <div class="te-hint">触发当天按该时刻执行；AI 任务会提前 12 小时生成计划</div>
+    </div>
+    <div class="te-field">
+      <div class="te-label">任务内容</div>
+      <div class="te-seg" id="taskModeSeg">
+        <label class="cat-tag"><input type="radio" name="taskMode" value="ai" checked onchange="syncSeg(this);onModeChange()"><span>🤖 AI 自动生成</span></label>
+        <label class="cat-tag"><input type="radio" name="taskMode" value="custom" onchange="syncSeg(this);onModeChange()"><span>✏️ 自定义</span></label>
+      </div>
+    </div>
+    <div class="te-field" id="taskCustomField" style="display:none;">
+      <div class="te-label">自定义内容</div>
+      <textarea id="taskCustom" class="te-textarea" placeholder="输入要推送的消息内容"></textarea>
+    </div>
+    <div class="manage-footer">
+      <button class="btn" onclick="hideModal('taskEditorModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveTask()">保存</button>
     </div>
   </div>
 </div>
@@ -2272,6 +2375,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.131"></script>
+<script src="app.js?v=v3.5.132"></script>
 </body>
 </html>
