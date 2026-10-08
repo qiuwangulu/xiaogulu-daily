@@ -94,7 +94,8 @@ let hiddenActivities = [];
 // v3.5.115 首页筛选：默认全部分类选中（=显示全部活动）；actSearchQuery 为活动名搜索关键字
 let selectedCategories = new Set(CATEGORIES.map(c => c.id));
 let actSearchQuery = '';
-let addModalCategory = 'all';
+// v3.5.127 添加弹窗：分类改为多选（默认全选=显示全部活动），与首页分类一致
+let addModalCats = new Set(CATEGORIES.map(c => c.id));
 let addSelectedSet = new Set(); // 跨分类保留已勾选活动
 let grossMotorOptions = [];
 let fineMotorOptions = [];
@@ -230,6 +231,8 @@ function init() {
   aiInit();
   loadMemoCloud().catch(() => {});   // v3.5.115 备忘录启动即从家庭云恢复（本地优先合并）
   bindVoiceTouch();
+  bindVoiceButton('kbVoiceBtn', 'kb');     // v3.5.127 知识库添加区语音按钮
+  bindVoiceButton('memoVoiceBtn', 'memo'); // v3.5.127 备忘录添加区语音按钮
   bindFastTaps();
   initModalFullscreen();   // v3.5.125 备忘录/分析/历史/管理弹窗注入「全屏」按钮
   // 自动清理测试残留数据（仅一次， harmless）
@@ -1002,11 +1005,67 @@ function renderCategoryBar() {
 }
 function toggleCatDropdown() { const p = document.getElementById('catDropdownPanel'); if (p) p.classList.toggle('open'); }
 // v3.5.118 点击下拉框以外区域时关闭分类下拉面板
+// v3.5.127 改为关闭所有已展开的分类下拉（首页/添加弹窗/知识库共用同一套面板结构）
 function _catOutsideClose(e) {
-  const p = document.getElementById('catDropdownPanel');
-  if (p && p.classList.contains('open') && !(e.target.closest && e.target.closest('.cat-dropdown'))) p.classList.remove('open');
+  document.querySelectorAll('.cat-dropdown-panel.open').forEach(p => {
+    const dd = p.closest('.cat-dropdown');
+    if (dd && !dd.contains(e.target)) p.classList.remove('open');
+  });
 }
 document.addEventListener('click', _catOutsideClose);
+
+/* ==================== v3.5.127 通用「分类多选下拉」组件（首页筛选 / 添加弹窗 / 知识库 共用） ==================== */
+// 通过命名空间 ns 区分三处实例：'home' 复用原有 selectedCategories/renderCategoryBar；'add' / 'kb' 各自管理
+function catDpCfg(ns) {
+  if (ns === 'add') return {
+    panelId: 'addCatPanel', btnId: 'addCatBtn',
+    selected: addModalCats,
+    cats: CATEGORIES.map(c => ({ id: c.id, icon: c.icon, name: c.name })),
+    onChange: renderAddList
+  };
+  if (ns === 'kb') return {
+    panelId: 'kbCatPanel', btnId: 'kbCatBtn',
+    selected: kbSelectedCats,
+    cats: KB_FILTER_CATS.map(c => ({ id: c, icon: KB_CAT_ICON[c] || '🏷️', name: c })),
+    onChange: renderKb
+  };
+  return null;
+}
+// 渲染某命名空间的下拉面板 + 按钮文案
+function renderCatDropdownPanel(ns) {
+  const cfg = catDpCfg(ns); if (!cfg) return;
+  const panel = document.getElementById(cfg.panelId);
+  const allOn = cfg.selected.size === cfg.cats.length;
+  let h = `<label class="cat-dp-item"><input type="checkbox" ${allOn ? 'checked' : ''} onchange="catDpToggleAll('${ns}',this)"> ${cfg.iconAll || '📂'} ${cfg.allLabel || '全部'}</label>`;
+  cfg.cats.forEach(c => {
+    const on = cfg.selected.has(c.id);
+    h += `<label class="cat-dp-item"><input type="checkbox" data-cat="${c.id}" ${on ? 'checked' : ''} onchange="catDpToggleOne('${ns}','${_escAttr(c.id)}',this)"> ${c.icon} ${c.name}</label>`;
+  });
+  if (panel) panel.innerHTML = h;
+  const btn = document.getElementById(cfg.btnId);
+  if (btn) btn.innerHTML = (allOn ? `${cfg.iconAll || '📂'} ${cfg.allLabel || '全部'}` : `${cfg.iconAll || '📂'} 已选 ${cfg.selected.size} 类`) + ' <span class="cat-arrow">&#9662;</span>';
+}
+function catDpToggleAll(ns, cb) {
+  const cfg = catDpCfg(ns); if (!cfg) return;
+  const next = cb.checked ? new Set(cfg.cats.map(c => c.id)) : new Set();
+  if (ns === 'add') addModalCats = next; else kbSelectedCats = next;
+  renderCatDropdownPanel(ns); cfg.onChange();
+}
+function catDpToggleOne(ns, id, cb) {
+  const cfg = catDpCfg(ns); if (!cfg) return;
+  if (cb.checked) cfg.selected.add(id); else cfg.selected.delete(id);
+  renderCatDropdownPanel(ns); cfg.onChange();
+}
+function toggleCatDropdownNs(ns) {
+  const cfg = catDpCfg(ns); if (!cfg) return;
+  const p = document.getElementById(cfg.panelId); if (p) p.classList.toggle('open');
+}
+// 知识库搜索（文本过滤，与多选分类叠加生效）
+function onKbSearch() {
+  const el = document.getElementById('kbSearch');
+  kbSearchQuery = el ? el.value.trim().toLowerCase() : '';
+  renderKb();
+}
 function toggleCatAll(cb) {
   selectedCategories = cb.checked ? new Set(CATEGORIES.map(c => c.id)) : new Set();
   renderCategoryBar(); renderCards();
@@ -1298,7 +1357,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.126'; // 历史对话每条记录去掉前面的 🕘 时针图标(时间文字保留,前缀图标移除)
+const APP_VERSION = 'v3.5.127'; // ①知识库上方标签改「左侧多选下拉+右侧搜索框」(同首页分类样式);②添加弹窗分类多选+搜索并排同一行;③首页活动名称不加粗;④AI 语音按钮改回话筒图标、按住蓝色波纹扩大1倍;⑤知识库/备忘录添加按钮上方新增语音按钮(功能同首页);⑥分析/备忘录/历史/管理/AI育儿默认全屏;⑦浅色模式蓝底按钮外框改为同底色(深色不变)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -1306,7 +1365,7 @@ function openAddModal(ds) {
   _addModalOpening = true;
   setTimeout(() => { _addModalOpening = false; }, 400);
   _addTargetDate = ds || null;
-  addModalCategory = 'all';
+  addModalCats = new Set(CATEGORIES.map(c => c.id));   // v3.5.127 多选分类重置为全选
   addSelectedSet = new Set();
   document.getElementById('addSearchInput').value = '';
   const addTitleEl = document.getElementById('addModalTitle');
@@ -1449,22 +1508,9 @@ if (document.body && !document.body.hasAttribute('onclick')) {
 }
 
 function renderAddModal() {
-  // v3.5.125 分类栏由横排标签改为「下拉弹窗」按钮：点它弹出分类选择弹窗（与知识库改分类同一套），选中即过滤
-  const catBar = document.getElementById('addCatBar');
-  const cur = addModalCategory === 'all'
-    ? { id: 'all', name: '全部', icon: '🏠' }
-    : (CATEGORIES.find(c => c.id === addModalCategory) || { id: 'all', name: '全部', icon: '🏠' });
-  catBar.innerHTML = `<button type="button" class="add-cat-btn" onclick="openAddCatPicker()">`
-    + `<span class="acb-icon">${cur.icon}</span>`
-    + `<span class="acb-name">${_escAttr(cur.name)}</span>`
-    + `<span class="acb-arrow">▾</span></button>`;
+  // v3.5.127 分类栏改为「左侧多选下拉 + 右侧搜索」并排（同首页分类样式）；筛选活动按所选分类 + 搜索关键字
+  renderCatDropdownPanel('add');
   renderAddList();
-}
-// v3.5.125 首页添加弹窗：点分类按钮 → 打开通用分类选择弹窗（含「全部」）
-function openAddCatPicker() {
-  const items = [{ id: 'all', name: '全部', icon: '🏠' }]
-    .concat(CATEGORIES.map(c => ({ id: c.id, name: c.name, icon: c.icon })));
-  openCatPicker('选择分类', items, addModalCategory, (id) => { addModalCategory = id; renderAddModal(); });
 }
 
 /* ---------- v3.5.125 通用「分类选择」下拉弹窗（首页添加弹窗 + 知识库改分类共用一套） ---------- */
@@ -1496,7 +1542,7 @@ function renderAddList(filterText) {
 
   ACTIVITIES.forEach(act => {
     if (hiddenActivities.includes(act.id)) return;
-    if (addModalCategory !== 'all' && act.category !== addModalCategory) return;
+    if (!addModalCats.has(act.category)) return;   // v3.5.127 多选分类：只显示所选分类下的活动
     if (filterText && !act.name.toLowerCase().includes(filterText) && !act.icon.includes(filterText)) return;
 
     let inputsHtml = '';
@@ -1566,14 +1612,6 @@ function filterAddList() {
   renderAddList(val);
 }
 
-function setAddCat(cid) {
-  addModalCategory = cid;
-  // 只更新分类栏高亮和列表，不重新渲染整个弹窗
-  const catBar = document.getElementById('addCatBar');
-  const tags = catBar.querySelectorAll('.add-cat-tag');
-  tags.forEach(t => t.classList.toggle('active', t.dataset.cat === cid));
-  renderAddList();
-}
 function toggleAddSelect(id) {
   const ck = document.querySelector(`.add-check[data-id="${id}"]`);
   const inp = document.getElementById(`adinputs_${id}`);
@@ -2307,7 +2345,12 @@ const VOICE_LABEL = { idle: '语音', recording: '录音中' };
 // v3.5.114 语音目标：'record' = 首页「语音」按钮（识别后弹解析弹窗）；
 //                 'ai'     = AI 对话输入框（识别后把文字回填输入框，不弹解析弹窗）
 let voiceTarget = 'record';
-function voiceBtnEl() { return document.getElementById(voiceTarget === 'ai' ? 'aiVoiceBtn' : 'voiceHoldBtn'); }
+function voiceBtnEl() {
+  if (voiceTarget === 'ai') return document.getElementById('aiVoiceBtn');
+  if (voiceTarget === 'kb') return document.getElementById('kbVoiceBtn');
+  if (voiceTarget === 'memo') return document.getElementById('memoVoiceBtn');
+  return document.getElementById('voiceHoldBtn');
+}
 function setVoiceState(state) {
   const btn = voiceBtnEl();
   if (!btn) return;
@@ -2352,6 +2395,9 @@ function finishVoiceRecognition() {
   setVoiceState('idle');
   if (_voiceHoldCanceled) { _voiceHoldCanceled = false; return; }
   if (!voiceFinalText) { showToast('未识别到语音，请靠近一点再试试'); return; }
+  // 知识库 / 备忘录：识别结果直接回填对应文本域（可编辑后再保存），不弹解析弹窗
+  if (target === 'kb') { fillVoiceIntoTextarea('kbInput'); return; }
+  if (target === 'memo') { fillVoiceIntoTextarea('memoInput'); return; }
   // AI 对话：识别结果直接回填输入框（可编辑后再发送），不弹解析弹窗
   if (target === 'ai') {
     const ta = document.getElementById('aiChatInput');
@@ -2366,6 +2412,15 @@ function finishVoiceRecognition() {
   const r = parseVoiceText(voiceFinalText);
   voiceItems = r.items;
   showVoiceModal(voiceFinalText, r.unmatched);
+}
+// v3.5.127 把识别文字回填到指定文本域（知识库/备忘录语音按钮）：保留已有内容并追加
+function fillVoiceIntoTextarea(elId) {
+  const ta = document.getElementById(elId);
+  if (!ta) return;
+  const prev = ta.value.replace(/\s+$/, '');
+  ta.value = prev ? prev + ' ' + voiceFinalText.trim() : voiceFinalText.trim();
+  try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
+  showToast('已转成文字，可直接发送');
 }
 
 function startVoiceHold(target) {
@@ -2425,42 +2480,14 @@ function stopVoiceHold() {
   if (xfSession) { stopXfyunDictation(); return; }
   if (voiceRecog && voiceRecActive) { try { voiceRecog.stop(); } catch (e) {} }
 }
-// 语音按钮触摸事件绑定（仅 touch，不支持 click；上滑移出=取消）
-function bindVoiceTouch() {
-  const btn = document.getElementById('voiceHoldBtn');
-  if (!btn) return;
-  let startY = 0, startX = 0, movedOut = false;
-  btn.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    const t = e.touches[0];
-    startX = t.clientX; startY = t.clientY; movedOut = false;
-    startVoiceHold();
-  }, { passive: false });
-  btn.addEventListener('touchmove', (e) => {
-    if (!voiceRecActive && !btn.classList.contains('holding') && !btn.classList.contains('recording')) return;
-    const t = e.touches[0];
-    const dx = t.clientX - startX, dy = t.clientY - startY;
-    // 判定是否滑出按钮区域（向上滑出或移出边界视为取消）
-    const r = btn.getBoundingClientRect();
-    const outX = t.clientX < r.left - 6 || t.clientX > r.right + 6;
-    const outY = t.clientY < r.top - 6 || t.clientY > r.bottom + 6;
-    if ((dy < -30) || outX || outY) { // 上滑>30px 或移出边界 → 取消
-      if (!movedOut) { movedOut = true; cancelVoiceHold(); }
-    } else { movedOut = false; }
-    e.preventDefault();
-  }, { passive: false });
-  const endVoice = (e) => { e.preventDefault(); if (voiceRecActive || btn.classList.contains('holding') || btn.classList.contains('recording')) { if (!_voiceHoldCanceled) stopVoiceHold(); } };
-  btn.addEventListener('touchend', endVoice, { passive: false });
-  btn.addEventListener('touchcancel', (e) => { e.preventDefault(); cancelVoiceHold(); }, { passive: false });
-}
-// v3.5.114 AI 对话输入框话筒：按住说话（与首页语音同一套识别链路：优先讯飞，回退 Web Speech）
-// 关键点：touchstart 里 preventDefault + CSS touch-callout/user-select:none，避免长按弹出系统「粘贴」菜单
-function bindAIVoiceTouch() {
-  const btn = document.getElementById('aiVoiceBtn');
+// 语音按钮触摸事件绑定（按住说话：touch 按住 + 鼠标按住兜底；上滑移出=取消）
+// v3.5.127 抽出通用函数，首页(record)/AI(ai)/知识库(kb)/备忘录(memo) 共用，识别结果按 target 路由
+function bindVoiceButton(id, target) {
+  const btn = document.getElementById(id);
   if (!btn || btn.dataset.bound === '1') return;
   btn.dataset.bound = '1';
   let sx = 0, sy = 0, movedOut = false, active = false;
-  const begin = (x, y) => { sx = x; sy = y; movedOut = false; active = true; startVoiceHold('ai'); };
+  const begin = (x, y) => { sx = x; sy = y; movedOut = false; active = true; startVoiceHold(target); };
   const move = (x, y) => {
     if (!active) return;
     const r = btn.getBoundingClientRect();
@@ -2474,12 +2501,14 @@ function bindAIVoiceTouch() {
   btn.addEventListener('touchmove', (e) => { const t = e.touches[0]; move(t.clientX, t.clientY); e.preventDefault(); }, { passive: false });
   btn.addEventListener('touchend', (e) => { e.preventDefault(); end(); }, { passive: false });
   btn.addEventListener('touchcancel', (e) => { e.preventDefault(); active = false; cancelVoiceHold(); }, { passive: false });
-  // 桌面端：鼠标按住同样可用（便于在电脑上调试）
   btn.addEventListener('mousedown', (e) => { e.preventDefault(); begin(e.clientX, e.clientY); });
   window.addEventListener('mouseup', () => { if (active) end(); });
-  // 屏蔽长按系统菜单
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
 }
+// 首页底部「语音」按钮（识别后弹解析弹窗）
+function bindVoiceTouch() { bindVoiceButton('voiceHoldBtn', 'record'); }
+// v3.5.114 AI 对话输入框话筒：按住说话（与首页语音同一套识别链路：优先讯飞，回退 Web Speech）
+function bindAIVoiceTouch() { bindVoiceButton('aiVoiceBtn', 'ai'); }
 
 // 触摸直发兜底：部分手机浏览器 click 合成可能失效（尤其语音按钮 preventDefault 之后），
 // 对底部栏关键按钮直接用 touchend 触发，确保点击必定响应；桌面端仍走 onclick
@@ -4560,6 +4589,9 @@ async function enrichMilestonesWithLLM(items) {
 const KB_CATS = ['奶粉喂养','辅食','睡眠','早教','穿衣','户外','医疗'];
 // v3.5.125 知识库分类图标（分类选择弹窗内展示）
 const KB_CAT_ICON = { '奶粉喂养':'🍼','辅食':'🍚','睡眠':'😴','早教':'📚','穿衣':'👕','户外':'🌳','医疗':'💊','综合':'📌' };
+const KB_FILTER_CATS = KB_CATS.concat(['综合']);   // v3.5.127 知识库筛选下拉的全部可选分类
+let kbSelectedCats = new Set(KB_FILTER_CATS);      // v3.5.127 多选（默认全选=显示全部）
+let kbSearchQuery = '';                            // v3.5.127 知识库搜索关键字
 const KB_KEY = 'ai_kb_v1';
 const KB_CLOUD_KEY = '_ai_kb';
 const AI_HIST_CLOUD_KEY = '_ai_hist';   // v3.5.114 历史对话也加密同步家庭云（此前只存本机，清缓存/换入口即丢）
@@ -4640,7 +4672,9 @@ function openAI() {
   overlay.classList.add('show');
   bindAIVoiceTouch();   // v3.5.114 话筒按住说话
   renderTokenBanner(); renderAIMsgs(); renderKb(); updateKbCntLine(); renderAIHistory();
-  const fsBtn = document.getElementById('aiFsBtn'); if (fsBtn) fsBtn.innerHTML = AI_FS_ENTER_SVG;
+  renderCatDropdownPanel('kb');   // v3.5.127 知识库分类下拉面板在 AI 打开时一并渲染
+  const s = document.querySelector('.ai-sheet'); if (s) s.classList.add('ai-fullscreen');  // v3.5.127 默认全屏
+  const fsBtn = document.getElementById('aiFsBtn'); if (fsBtn) fsBtn.innerHTML = AI_FS_EXIT_SVG;
 }
 // v3.5.110 关闭弹窗：自动把当前对话归档进「历史对话」并清空当前对话
 function closeAI() {
@@ -5139,11 +5173,6 @@ function reTagKb(i) {
     KB[i].cat = id; saveKBLocal(); saveKBCloud(); renderKb();
   });
 }
-function filterKb(f) {
-  KB_FILTER = f;
-  document.querySelectorAll('#kbFilter .kf').forEach(b => b.classList.toggle('on', b.dataset.f === f));
-  renderKb();
-}
 // v3.5.122 知识库条目折叠/展开：编辑/删除/改分类需 stopPropagation，避免误触整条折叠切换
 function toggleKbExpand(i) {
   if (kbExpanded.has(i)) kbExpanded.delete(i); else kbExpanded.add(i);
@@ -5151,7 +5180,9 @@ function toggleKbExpand(i) {
 }
 function renderKb() {
   const list = document.getElementById('kbList'); if (!list) return;
-  const arr = KB_FILTER === '全部' ? KB : KB.filter(x => x.cat === KB_FILTER);
+  // v3.5.127 知识库筛选：多选分类 + 文本搜索（默认全选+空搜索=显示全部）
+  const q = (kbSearchQuery || '').trim().toLowerCase();
+  const arr = KB.filter(x => kbSelectedCats.has(x.cat) && (!q || (x.text || '').toLowerCase().includes(q)));
   const cnt = document.getElementById('kbCnt'); if (cnt) cnt.textContent = KB.length;
   if (!arr.length) { list.innerHTML = '<div class="ai-kb-empty">该分类下还没有内容～</div>'; return; }
   list.innerHTML = arr.map(x => {
@@ -5786,7 +5817,20 @@ function resetModalFullscreen(el) {
   const b = box.querySelector('.modal-fs-btn');
   if (b) { b.innerHTML = AI_FS_ENTER_SVG; b.title = '全屏'; }
 }
-function showModal(id) { const el = document.getElementById(id); if (!el) return; resetModalFullscreen(el); el.classList.add('show'); document.body.style.overflow = 'hidden'; }
+function showModal(id) {
+  const el = document.getElementById(id); if (!el) return;
+  resetModalFullscreen(el);
+  // v3.5.127 默认全屏：备忘录/分析/历史/管理 打开即撑满整个视口（再点退出按钮回到普通大小）
+  if (MODAL_FS_TARGETS.indexOf(id) >= 0) {
+    const box = el.querySelector('.modal-box');
+    if (box) {
+      box.classList.add('modal-fs');
+      const b = box.querySelector('.modal-fs-btn');
+      if (b) { b.innerHTML = AI_FS_EXIT_SVG; b.title = '退出全屏'; }
+    }
+  }
+  el.classList.add('show'); document.body.style.overflow = 'hidden';
+}
 function hideModal(id) { const el = document.getElementById(id); if (!el) return; resetModalFullscreen(el); el.classList.remove('show'); document.body.style.overflow = ''; }
 function closeModal(e, id) { if (e.target.id === id) hideModal(id); }
 function showToast(msg, ms) { const toast = document.getElementById('toast'); toast.textContent = msg; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), ms || 1800); }

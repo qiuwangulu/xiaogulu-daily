@@ -271,7 +271,7 @@
     margin-bottom: 10px;
   }
   .card-name {
-    font-size: 16px; font-weight: 700;
+    font-size: 16px; font-weight: 400;
     color: #fff;
     display: flex; align-items: center; gap: 6px;
     flex: 1;
@@ -569,7 +569,7 @@
   #memoModal .modal-box { height: 85vh; }
   /* v3.5.123 知识库编辑弹窗：复用首页「编辑记录」弹窗样式；层级必须高于 AI 抽屉(.ai-overlay z-index:300)，否则被盖住 */
   .kb-edit-overlay { z-index: 400; }
-  /* v3.5.126 通用「分类选择」下拉弹窗（首页添加弹窗 + 知识库改分类共用）：层级最高，需盖住 AI 抽屉(300) 与知识库编辑弹窗(400) */
+  /* v3.5.127 通用「分类选择」下拉弹窗（首页添加弹窗 + 知识库改分类共用）：层级最高，需盖住 AI 抽屉(300) 与知识库编辑弹窗(400) */
   .cat-pick-overlay { z-index: 500; }
   .cat-pick-list { display: flex; flex-direction: column; gap: 8px; max-height: 52vh; overflow-y: auto; padding: 2px; }
   .cat-pick-item { display: flex; align-items: center; gap: 10px; padding: 13px 14px; border-radius: 12px;
@@ -585,7 +585,7 @@
   body.theme-day .cat-pick-item.on { background: rgba(9,132,227,0.15); border-color: rgba(9,132,227,0.5); color: #0984e3; }
   body.theme-day .cat-pick-item.on .cp-check { color: #0984e3; }
 
-  /* v3.5.126 弹窗全屏（备忘录 / 分析 / 历史 / 管理）：点标题栏「全屏」按钮撑满整个视口，再点退出 */
+  /* v3.5.127 弹窗全屏（备忘录 / 分析 / 历史 / 管理）：点标题栏「全屏」按钮撑满整个视口，再点退出 */
   .modal-fs-btn { position: absolute; top: 14px; right: 52px; width: 30px; height: 30px; padding: 0;
     background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
     color: #b2bec3; z-index: 1; }
@@ -677,7 +677,7 @@
   .ai-hist-list { flex:1; overflow-y:auto; margin-top:6px; }
   .ai-hist-list::-webkit-scrollbar { width:0; }
   .ai-hist-item { padding:9px 4px; border-bottom:1px solid var(--rec-bd); cursor:pointer; }
-  /* v3.5.126 历史对话支持复制：条目头部右侧「复制」按钮（复制整段对话） */
+  /* v3.5.127 历史对话支持复制：条目头部右侧「复制」按钮（复制整段对话） */
   .ai-hist-head { display:flex; align-items:center; gap:8px; }
   .ai-hist-head .ai-hist-time { flex:1 1 auto; min-width:0; }
   .ai-hist-copy { flex:0 0 auto; font-size:11px; color:#74b9ff; opacity:.75; padding:2px 7px; border-radius:8px;
@@ -721,27 +721,7 @@
   .ai-mic.recording svg { stroke:#74b9ff; }
   @keyframes aiMicPulse {
     0%, 100% { transform:scale(1); box-shadow:0 0 0 0 rgba(116,185,255,.45); }
-    50%      { transform:scale(1.12); box-shadow:0 0 0 6px rgba(116,185,255,.18); }
-  }
-  /* v3.5.126 AI 语音按钮 = 首页 .voice-hold-btn 的小号版本：结构与交互完全统一（按住高亮边框+图标变白放大+tip、
-     录音中隐藏图标显示声波竖纹+呼吸光晕+文字「录音中」），仅尺寸/定位按输入框内嵌做缩放 */
-  #aiVoiceBtn {
-    position:absolute; right:5px; bottom:5px;
-    width:auto; height:auto;
-    padding:6px 12px 6px 9px; border-radius:16px; gap:6px;
-    font-size:13px;
-  }
-  #aiVoiceBtn .voice-icon { width:19px; height:19px; }
-  #aiVoiceBtn .voice-label { font-size:13px; }
-  #aiVoiceBtn .voice-wave { height:20px; gap:3px; }
-  #aiVoiceBtn .voice-wave .vwb { width:3px; animation-name:voiceBarAI; }
-  #aiVoiceBtn.recording .voice-wave { height:20px; }
-  #aiVoiceBtn .voice-tip { bottom:calc(100% + 8px); }
-  @keyframes voiceBarAI { 0% { height:5px; } 100% { height:20px; } }
-  #aiVoiceBtn.recording { animation:voiceBreatheAI 1200ms ease-in-out infinite; }
-  @keyframes voiceBreatheAI {
-    0%, 100% { box-shadow:0 0 0 4px rgba(116,185,255,.25); }
-    50%      { box-shadow:0 0 0 14px rgba(116,185,255,.45); }
+    50%      { transform:scale(1.12); box-shadow:0 0 0 12px rgba(116,185,255,.18); }
   }
   /* 录音中提示条：浮在输入框上方 */
   .ai-rec-bar {
@@ -755,20 +735,24 @@
   body.theme-day .ai-rec-bar { background:#fff; border-color:#0984e3; color:#0984e3; }
   .ai-chat-tools { display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:11px; color:var(--muted); }
   .ai-chat-tools .ai-clear { font-size:11px; color:var(--muted); background:none; border:1px solid var(--row-bd); border-radius:9px; padding:3px 10px; cursor:pointer; font-family:inherit; }
-  .ai-kb-filter { display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; margin-bottom:6px; }
-  .ai-kb-filter::-webkit-scrollbar { display:none; }
-  .kf { flex-shrink:0; padding:5px 12px; border-radius:13px; font-size:12.5px; cursor:pointer; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14); color:var(--muted); font-family:inherit; }
-  .kf.on { background:rgba(100,149,237,.3); border-color:rgba(100,149,237,.5); color:#fff; font-weight:700; }
-  body.theme-day .kf { background:rgba(9,132,227,.05); border-color:rgba(9,132,227,.2); }
-  /* v3.5.111 选中标签样式对齐首页「选中的分类标签」(.cat-tag.active) */
-  body.theme-day .kf.on { background:rgba(9,132,227,.12); border-color:rgba(9,132,227,.5); color:#0984e3; }
+  /* v3.5.127 知识库上方筛选：左侧多选下拉 + 右侧搜索框（同首页分类样式） */
+  .kb-filter-row { display:flex; gap:8px; padding:0 0 8px; }
+  .kb-filter-row .cat-dropdown { flex:0 0 38%; min-width:0; }
+  .kb-filter-row .act-search { flex:1 1 auto; min-width:0; }
+  /* v3.5.127 添加弹窗筛选：左侧多选下拉 + 右侧搜索框并排（同首页分类样式） */
+  .add-filter-row { display:flex; gap:8px; margin-bottom:12px; }
+  .add-filter-row .cat-dropdown { flex:0 0 38%; min-width:0; }
+  .add-filter-row .act-search { flex:1 1 auto; min-width:0; }
   /* v3.5.119 知识库「添加」按钮高度与首页底部「添加」按钮一致(45px)，顶部与输入框上边框平齐 */
   .ai-kb-add { display:flex; gap:8px; align-items:flex-start; margin:6px 0 10px; }
   .ai-kb-ta { flex:1; min-height:112px; padding:9px 11px; border-radius:12px; font-size:13.5px; resize:none; outline:none; background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.18); color:var(--fg); font-family:inherit; line-height:1.45; }
   body.theme-day .ai-kb-ta { background:#fff; border-color:rgba(9,132,227,.25); }
+  /* v3.5.127 添加按钮右侧新增「语音」列：语音按钮在添加按钮上方、右对齐 */
+  .kb-add-actions { flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
+  .memo-add-actions { flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
   /* v3.5.111 知识库「添加」按钮对齐首页底部「添加」按钮（深色 #25375f/#b2bec3，浅色 #0984e3/#fff） */
-  .ai-kb-add button { flex-shrink:0; align-self:flex-start; width:60px; min-height:45px; box-sizing:border-box; display:flex; align-items:center; justify-content:center; padding:6px 0; border-radius:12px; background:#25375f; border:1px solid #b2bec3; color:#b2bec3; font-weight:600; font-size:13.5px; cursor:pointer; font-family:inherit; }
-  body.theme-day .ai-kb-add button { background:#0984e3; border-color:#b2bec3; color:#fff; }
+  .kb-add-btn { width:60px; min-height:45px; box-sizing:border-box; display:flex; align-items:center; justify-content:center; padding:6px 0; border-radius:12px; background:#25375f; border:1px solid #b2bec3; color:#b2bec3; font-weight:600; font-size:13.5px; cursor:pointer; font-family:inherit; }
+  body.theme-day .kb-add-btn { background:#0984e3; border-color:#0984e3; color:#fff; }
   /* v3.5.111 提示语改为浅色黑字 / 深色白字 */
   .ai-kb-classify-note { font-size:10px; color:#fff; text-align:center; padding:2px 0 4px; }
   body.theme-day .ai-kb-classify-note { color:#000; }
@@ -779,7 +763,7 @@
   .ai-kb-list::-webkit-scrollbar { width:0; }
   .ai-kb-item { display:flex; gap:9px; align-items:flex-start; padding:11px 0; border-bottom:1px solid var(--rec-bd); font-size:13.5px; line-height:1.5;
     width:100%; max-width:100%; box-sizing:border-box; }
-  /* v3.5.126 知识库条目宽度统一 + 编辑/删除按钮右对齐：kb-body 占满剩余宽度且可收缩(min-width:0)，
+  /* v3.5.127 知识库条目宽度统一 + 编辑/删除按钮右对齐：kb-body 占满剩余宽度且可收缩(min-width:0)，
      按钮固定 24px 不被文本挤压，因此每条右侧图标位置完全一致 */
   .ai-kb-item .kb-body { flex:1 1 0; min-width:0; overflow:hidden; }
   .ai-kb-item .kb-txt { overflow-wrap:anywhere; word-break:break-word; }
@@ -863,7 +847,7 @@
   .add-search-wrap input::placeholder { color: rgba(255,255,255,0.35); }
 
   .add-cat-bar { display: block; margin-bottom: 14px; }
-  /* v3.5.126 首页添加弹窗的分类改为「下拉弹窗」按钮（原横排标签已弃用；.add-cat-tag 样式保留以防回退） */
+  /* v3.5.127 首页添加弹窗的分类改为「下拉弹窗」按钮（原横排标签已弃用；.add-cat-tag 样式保留以防回退） */
   .add-cat-btn {
     width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 8px;
     padding: 9px 12px; border-radius: 12px;
@@ -1053,7 +1037,7 @@
   /* v3.5.107 备忘录「添加」按钮直接复用首页底部「添加」按钮样式(.fab-btn)，此处仅约束不收缩 */
   /* v3.5.116 去掉加号图标并收窄宽度 */
   /* v3.5.119 备忘录「添加」按钮高度与首页底部「添加」按钮一致(45px)，顶部与输入框上边框平齐 */
-  .memo-input-row .fab-btn { flex-shrink: 0; align-self: flex-start; min-height: 45px; box-sizing: border-box; padding: 9px 14px; gap: 0; }
+  .memo-input-row .fab-btn { flex-shrink: 0; min-height: 45px; box-sizing: border-box; padding: 9px 14px; gap: 0; }
   .memo-section-title { font-size: 14px; font-weight: 700; color: #fff; margin: 14px 0 8px;
     display: flex; justify-content: flex-start; align-items: baseline; gap: 6px; }
   .memo-section-title .cnt { color: #74b9ff; font-size: 13px; }
@@ -1557,9 +1541,9 @@
 
   /* ===== 底部栏（按钮位置不变：添加在左、语音在右；白天蓝底白字） ===== */
   body.theme-day .bottom-bar { background: rgba(255,255,255,0.95); box-shadow: 0 -6px 20px rgba(9,132,227,0.08); }
-  body.theme-day .fab-btn { background: #0984e3; border-color: #b2bec3; color: #fff; }
+  body.theme-day .fab-btn { background: #0984e3; border-color: #0984e3; color: #fff; }
   body.theme-day .fab-btn .fab-icon svg { stroke: #fff; }
-  body.theme-day .voice-hold-btn { background: #0984e3; border-color: #b2bec3; color: #fff; }
+  body.theme-day .voice-hold-btn { background: #0984e3; border-color: #0984e3; color: #fff; }
   body.theme-day .voice-hold-btn .voice-icon svg { stroke: #fff; }
   body.theme-day .voice-hold-btn.holding { background: #0a7bc4; border-color: #0984e3; box-shadow: 0 0 0 1px #0984e3; }
   body.theme-day .voice-hold-btn.holding .voice-icon svg { stroke: #fff; }
@@ -1580,9 +1564,9 @@
   body.theme-day .modal-version { color: rgba(99,110,114,0.7); }
   body.theme-day .modal-close { color: rgba(61,72,82,0.5); }
   body.theme-day .modal-actions { border-top-color: rgba(9,132,227,0.12); }
-  body.theme-day .btn { background: #0984e3; border-color: #b2bec3; color: #fff; }
-  body.theme-day .btn-primary { background: #0984e3; border-color: #b2bec3; color: #fff; }
-  body.theme-day .btn-success { background: #0984e3; border-color: #b2bec3; color: #fff; }
+  body.theme-day .btn { background: #0984e3; border-color: #0984e3; color: #fff; }
+  body.theme-day .btn-primary { background: #0984e3; border-color: #0984e3; color: #fff; }
+  body.theme-day .btn-success { background: #0984e3; border-color: #0984e3; color: #fff; }
 
   /* ===== 添加弹窗 ===== */
   body.theme-day .add-search-wrap input { background: #ffffff; border-color: rgba(9,132,227,0.25); color: #3d4852; }
@@ -1766,7 +1750,7 @@
   body.theme-day .chart-svg .stdline { stroke: #00b894; }
 
   /* ===== 日报复制悬浮按钮 ===== */
-  body.theme-day .copy-float .btn { background: #0984e3; border-color: #b2bec3; color: #fff; box-shadow: 0 4px 14px rgba(9,132,227,0.3); }
+  body.theme-day .copy-float .btn { background: #0984e3; border-color: #0984e3; color: #fff; box-shadow: 0 4px 14px rgba(9,132,227,0.3); }
 
   /* ===== toast ===== */
   body.theme-day .toast { background: rgba(255,255,255,0.96); color: #3d4852; box-shadow: 0 4px 20px rgba(9,132,227,0.18); }
@@ -1922,15 +1906,8 @@
         <div class="ai-input-wrap">
           <div class="ai-rec-bar" id="aiRecBar">🎙️ 正在录音…松开结束，上滑取消</div>
           <textarea class="ai-cta" id="aiChatInput" placeholder="输入问题，回车发送…" onkeydown="aiInputKey(event)"></textarea>
-          <!-- v3.5.126 AI 语音按钮：结构与交互与首页「语音」按钮完全一致（按住高亮 + 波纹 + 提示） -->
-          <button class="voice-hold-btn" id="aiVoiceBtn" type="button" title="按住说话">
-            <span class="voice-icon"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>
-            <span class="voice-label">语音</span>
-            <span class="voice-wave" aria-hidden="true">
-              <span class="vwb" style="height:6px"></span><span class="vwb" style="height:12px"></span><span class="vwb" style="height:16px"></span><span class="vwb" style="height:10px"></span><span class="vwb" style="height:8px"></span>
-            </span>
-            <span class="voice-tip">松开结束录音</span>
-          </button>
+          <!-- v3.5.127 还原为话筒图标按钮（v3.5.114 风格）；按住蓝色波纹扩大1倍 -->
+          <button class="ai-mic" id="aiVoiceBtn" type="button" title="按住说话"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
         </div>
       </div>
       <div class="ai-chat-tools">
@@ -1941,20 +1918,24 @@
 
     <!-- 知识库页 -->
     <div class="ai-pane" id="pane-kb">
-      <div class="ai-kb-filter" id="kbFilter">
-        <button class="kf on" data-f="全部" onclick="filterKb('全部')">全部</button>
-        <button class="kf" data-f="奶粉喂养" onclick="filterKb('奶粉喂养')">奶粉喂养</button>
-        <button class="kf" data-f="辅食" onclick="filterKb('辅食')">辅食</button>
-        <button class="kf" data-f="睡眠" onclick="filterKb('睡眠')">睡眠</button>
-        <button class="kf" data-f="早教" onclick="filterKb('早教')">早教</button>
-        <button class="kf" data-f="穿衣" onclick="filterKb('穿衣')">穿衣</button>
-        <button class="kf" data-f="户外" onclick="filterKb('户外')">户外</button>
-        <button class="kf" data-f="医疗" onclick="filterKb('医疗')">医疗</button>
-        <button class="kf" data-f="综合" onclick="filterKb('综合')">综合</button>
+      <div class="kb-filter-row">
+        <div class="cat-dropdown" id="kbCatDropdown">
+          <button class="cat-dropdown-btn" id="kbCatBtn" type="button" onclick="toggleCatDropdownNs('kb')">📂 全部 ▾</button>
+          <div class="cat-dropdown-panel" id="kbCatPanel"></div>
+        </div>
+        <input class="act-search" id="kbSearch" type="text" placeholder="🔍 搜索知识库…" oninput="onKbSearch()">
       </div>
       <div class="ai-kb-add">
         <textarea class="ai-kb-ta" id="kbInput" placeholder="输入要加入知识库的内容，例如：我家宝宝对牛奶蛋白过敏，请避开含乳清蛋白的配方奶…"></textarea>
-        <button onclick="addKb()">添加</button>
+        <div class="kb-add-actions">
+          <button class="voice-hold-btn" id="kbVoiceBtn" type="button" title="按住说话">
+            <span class="voice-icon"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>
+            <span class="voice-label">语音</span>
+            <span class="voice-wave" aria-hidden="true"><span class="vwb" style="height:6px"></span><span class="vwb" style="height:12px"></span><span class="vwb" style="height:16px"></span><span class="vwb" style="height:10px"></span><span class="vwb" style="height:8px"></span></span>
+            <span class="voice-tip">松开结束录音</span>
+          </button>
+          <button class="kb-add-btn" onclick="addKb()">添加</button>
+        </div>
       </div>
       <div class="ai-kb-classify-note">🤖 自动分类/点标签改类</div>
       <div class="ai-kb-head"><span>已添加 <b id="kbCnt">0</b> 条</span></div>
@@ -1969,9 +1950,17 @@
     <div class="modal-title">&#128221; 备忘录</div>
     <div class="memo-input-row">
       <textarea class="memo-textarea" id="memoInput" placeholder="输入待办事项…"></textarea>
-      <button class="fab-btn" onclick="addMemo()">
-        添加
-      </button>
+      <div class="memo-add-actions">
+        <button class="voice-hold-btn" id="memoVoiceBtn" type="button" title="按住说话">
+          <span class="voice-icon"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>
+          <span class="voice-label">语音</span>
+          <span class="voice-wave" aria-hidden="true"><span class="vwb" style="height:6px"></span><span class="vwb" style="height:12px"></span><span class="vwb" style="height:16px"></span><span class="vwb" style="height:10px"></span><span class="vwb" style="height:8px"></span></span>
+          <span class="voice-tip">松开结束录音</span>
+        </button>
+        <button class="fab-btn" onclick="addMemo()">
+          添加
+        </button>
+      </div>
     </div>
     <div class="memo-section-title">待办事项 <span class="cnt" id="memoTodoCnt">0</span></div>
     <div id="memoTodoList"></div>
@@ -2154,8 +2143,13 @@
   <div class="modal-box" onclick="event.stopPropagation()">
     <button class="modal-close" onclick="hideModal('addModal')">&times;</button>
     <div class="modal-title" id="addModalTitle">添加记录</div>
-    <div class="add-search-wrap"><input type="text" id="addSearchInput" placeholder="&#128269; 搜索活动..." oninput="filterAddList()"></div>
-    <div class="add-cat-bar" id="addCatBar"></div>
+    <div class="add-filter-row">
+      <div class="cat-dropdown" id="addCatDropdown">
+        <button class="cat-dropdown-btn" id="addCatBtn" type="button" onclick="toggleCatDropdownNs('add')">📂 全部 ▾</button>
+        <div class="cat-dropdown-panel" id="addCatPanel"></div>
+      </div>
+      <input class="act-search" id="addSearchInput" type="text" placeholder="&#128269; 搜索活动..." oninput="filterAddList()">
+    </div>
     <div class="add-list" id="addList"></div>
     <div class="modal-actions">
       <button class="btn btn-success" onclick="confirmAdd()">确定</button>
@@ -2243,7 +2237,7 @@
     </div>
   </div>
 </div>
-<!-- v3.5.126 通用「分类选择」下拉弹窗：首页添加弹窗 + 知识库「改分类」共用（层级最高，覆盖面包括 AI 抽屉） -->
+<!-- v3.5.127 通用「分类选择」下拉弹窗：首页添加弹窗 + 知识库「改分类」共用（层级最高，覆盖面包括 AI 抽屉） -->
 <div class="modal-overlay cat-pick-overlay" id="catPickModal" onclick="closeModal(event,'catPickModal')">
   <div class="modal-box" onclick="event.stopPropagation()">
     <button class="modal-close" onclick="hideModal('catPickModal')">&times;</button>
@@ -2268,8 +2262,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.126"></script>
-<script src="app-config.js?v=v3.5.126"></script>
-<script src="app.js?v=v3.5.126"></script>
+<script src="std-config.js?v=v3.5.127"></script>
+<script src="app-config.js?v=v3.5.127"></script>
+<script src="app.js?v=v3.5.127"></script>
 </body>
 </html>
