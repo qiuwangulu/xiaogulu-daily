@@ -1359,7 +1359,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.135'; // 定时任务「开始日期」改为应用内日历选择器(同历史弹窗「选日」样式):复用#historyDatePickerModal,新增_dpMode模式(history禁未来/task可选未来),任务模式隐藏快捷(昨天/前天/上周)、回填到开始日期按钮;日期选择器浮层z-index提至600以盖住任务/管理弹窗
+const APP_VERSION = 'v3.5.136'; // 定时任务修复与增强:①AI计划的生成不再受"由本设备负责推送"限制(未开启推送的设备上计划一直空白),切到「任务」页立即跑一次调度,可编辑判定改为对齐"提前12h生成窗口"(20:00后可编辑次日计划,不再误报只读);②任务新增「任务名称」,卡片标题显示名称、副标题显示频率/时间/类型;③卡片去掉删除按钮,编辑改为首页同款铅笔图标,开关沿用活动页开关并加"开启将会推送微信消息"提示
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3069,6 +3069,8 @@ function switchManageTab(tab) {
   });
   const box = document.querySelector('#manageModal .modal-box');
   if (box) box.scrollTop = 0;
+  // v3.5.136 切到「任务」页时立即跑一次调度：进入生成窗口的任务可当场生成计划并显示（计划为空则无视冷却重试）
+  if (tab === 'tasks') { try { runScheduler(true); } catch (e) {} }
 }
 // v3.5.94 活动列表：喝奶下方接奶量/乳糖酶默认值；大运动/精细动作/辅食开关的下一行接各自选项区插槽
 function buildManageListHTML() {
@@ -5357,33 +5359,49 @@ async function pushTask(task, trig, pk) {
 }
 
 /* ---------- 调度器（静态站点：页面打开时由定时器检查触发） ---------- */
+// v3.5.136 是否处于「提前 12 小时生成窗口」，即 [下次触发-12h, 下次触发)
+// 跨天也成立：每天 08:00 的任务，当天 20:00 起即可生成/编辑次日计划
+function planGenWindowOpen(task, now) {
+  const n = now || new Date();
+  const { next } = computeTriggers(task, n);
+  if (!next) return false;
+  const winStart = new Date(next.getTime() - SCHED_GEN_LEAD);
+  return n >= winStart && n < next;
+}
+// v3.5.136 可编辑判定直接对齐生成窗口（原来要求"下次触发的周期=今天"，导致 20:00 后生成的次日计划被误判为不可编辑）
 function isPlanEditable(task) {
   if (task.mode !== 'ai') return true;
-  const now = new Date();
-  const { next } = computeTriggers(task, now);
-  if (!next) return false;
-  if (periodKey(task, next) !== getTodayDateStr()) return false;
-  const winStart = new Date(next.getTime() - SCHED_GEN_LEAD);
-  return now >= winStart && now < next;
+  return planGenWindowOpen(task);
 }
-async function runScheduler() {
-  if (!isPushSender()) return;
+// v3.5.136 只读提示：本周期已推送完成且下一周期计划尚未生成时，沿用原有文案
+function planLockMsg(task) {
   const now = new Date();
+  const { prev } = computeTriggers(task, now);
+  if (prev && task.pushPeriod === periodKey(task, prev)) return '因今日计划已推送，明日计划未生成，无法编辑';
+  return '未到计划生成时间，暂无法编辑';
+}
+async function runScheduler(forceGen) {
+  const now = new Date();
+  const canPush = isPushSender();
   for (const task of SCHED_TASKS) {
     if (!task.enabled) continue;
     const { prev, next } = computeTriggers(task, now);
-    // AI 计划生成：进入 [触发-12h, 触发) 窗口且本周期未生成
+    // AI 计划生成：进入 [触发-12h, 触发) 窗口且本周期未生成。
+    // v3.5.136 生成不再受"由本设备负责推送"限制——任务为本机所有，否则未开启推送的设备上计划会一直空白。
+    // forceGen=true（用户主动打开任务页/新建/开启任务）时忽略失败冷却，计划内容仍为空则当场重试。
     if (task.mode === 'ai' && next) {
       const winStart = new Date(next.getTime() - SCHED_GEN_LEAD);
       if (now >= winStart && now < next) {
         const pk = periodKey(task, next);
-        if (task.genPeriod !== pk && (Date.now() - (task.genTryTs || 0)) > SCHED_GEN_COOLDOWN) {
+        const cooling = (Date.now() - (task.genTryTs || 0)) <= SCHED_GEN_COOLDOWN;
+        if (task.genPeriod !== pk && (!cooling || (forceGen && !task.content))) {
           task.genTryTs = Date.now(); saveSchedTasks();
           await generatePlanForTask(task, next);
         }
       }
     }
-    // 触发推送：触发时刻起、宽限 3 小时内
+    // 触发推送：触发时刻起、宽限 3 小时内（仅"由本设备负责推送"的设备执行，避免多设备重复推送）
+    if (!canPush) continue;
     const trig = next || (task.freq === 'once' ? prev : null);
     if (trig && now >= trig && now < new Date(trig.getTime() + SCHED_PUSH_GRACE)) {
       const pk = periodKey(task, trig);
@@ -5449,21 +5467,25 @@ function renderSchedTasks() {
   let h = '';
   SCHED_TASKS.forEach(t => {
     const editable = isPlanEditable(t);
+    // v3.5.136 任务名称（用户可自定，未填则给默认名）
+    const nm = (t.name && String(t.name).trim()) ? String(t.name).trim() : (t.mode === 'ai' ? '今日计划' : '定时提醒');
+    const icon = t.mode === 'ai' ? '🤖' : '✏️';
     h += '<div class="task-card">'
       + '<div class="task-row">'
       + '<div class="task-info">'
-      + '<div class="task-name">' + (t.mode === 'ai' ? '🤖' : '✏️') + ' ' + SCHED_FREQ_LABEL[t.freq] + ' ' + t.startDate + ' ' + t.startTime + '</div>'
-      + '<div class="task-sub">' + (t.mode === 'ai' ? 'AI 推荐计划' : '自定义内容') + (t.enabled ? '' : ' · 已停止') + '</div>'
+      + '<div class="task-name">' + icon + ' ' + escapeHtml(nm) + '</div>'
+      + '<div class="task-sub">' + SCHED_FREQ_LABEL[t.freq] + ' ' + t.startDate + ' ' + t.startTime + ' · ' + (t.mode === 'ai' ? 'AI 推荐计划' : '自定义内容') + (t.enabled ? '' : ' · 已停止') + '</div>'
       + '</div>'
       + '<div class="task-actions">'
-      + '<button class="icon-btn" onclick="openTaskEditor(\'' + t.id + '\')">✎</button>'
-      + '<button class="icon-btn" onclick="deleteTask(\'' + t.id + '\')">🗑</button>'
-      + '<div class="toggle-switch ' + (t.enabled ? 'on' : '') + '" data-tid="' + t.id + '" onclick="toggleTask(\'' + t.id + '\')"></div>'
-      + '</div></div>';
+      + '<span class="rec-edit" onclick="openTaskEditor(\'' + t.id + '\')" title="编辑"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>'
+      + '<div class="toggle-switch ' + (t.enabled ? 'on' : '') + '" data-tid="' + t.id + '" onclick="toggleTask(\'' + t.id + '\')" title="开启/关闭该任务"></div>'
+      + '</div></div>'
+      // v3.5.136 开关含义提示（开启后会通过微信推送）
+      + '<div class="task-push-hint">' + (t.enabled ? '已开启，到点将推送微信消息' : '开启将会推送微信消息') + '</div>';
     if (t.mode === 'ai') {
-      h += '<textarea class="task-plan" id="plan_' + t.id + '" ' + (editable ? '' : 'readonly') + ' onfocus="onPlanFocus(\'' + t.id + '\')" onclick="onPlanFocus(\'' + t.id + '\')" oninput="onPlanInput(\'' + t.id + '\',this.value)">' + escapeHtml(t.content || '') + '</textarea>';
+      h += '<textarea class="task-plan" id="plan_' + t.id + '" placeholder="AI 推荐计划会在触发前 12 小时自动生成为此，可直接编辑"' + (editable ? '' : ' readonly') + ' onfocus="onPlanFocus(\'' + t.id + '\')" onclick="onPlanFocus(\'' + t.id + '\')" oninput="onPlanInput(\'' + t.id + '\',this.value)">' + escapeHtml(t.content || '') + '</textarea>';
     } else {
-      h += '<textarea class="task-plan" id="plan_' + t.id + '" oninput="onPlanInput(\'' + t.id + '\',this.value)">' + escapeHtml(t.content || '') + '</textarea>';
+      h += '<textarea class="task-plan" id="plan_' + t.id + '" placeholder="输入到点要推送的消息内容" oninput="onPlanInput(\'' + t.id + '\',this.value)">' + escapeHtml(t.content || '') + '</textarea>';
     }
     h += '</div>';
   });
@@ -5476,7 +5498,7 @@ function onPlanInput(id, val) {
 function onPlanFocus(id) {
   const t = SCHED_TASKS.find(x => x.id === id); if (!t) return;
   if (!isPlanEditable(t)) {
-    showToast('因今日计划已推送，明日计划未生成，无法编辑');
+    showToast(planLockMsg(t));
     const el = document.getElementById('plan_' + id); if (el) el.blur();
   }
 }
@@ -5487,11 +5509,13 @@ function openTaskEditor(id) {
     setRadio('taskFreq', t.freq); setRadio('taskMode', t.mode);
     setTaskStartDateValue(t.startDate);
     document.getElementById('taskStartTime').value = t.startTime;
+    document.getElementById('taskName').value = t.name || '';
     document.getElementById('taskCustom').value = t.content || '';
   } else {
     setRadio('taskFreq', 'daily'); setRadio('taskMode', 'ai');
     setTaskStartDateValue(getTodayDateStr());
     document.getElementById('taskStartTime').value = '08:00';
+    document.getElementById('taskName').value = '';
     document.getElementById('taskCustom').value = '';
   }
   onFreqChange(); onModeChange();
@@ -5503,26 +5527,26 @@ function saveTask() {
   const startDate = document.getElementById('taskStartDate').value;
   const startTime = document.getElementById('taskStartTime').value || '08:00';
   const mode = document.querySelector('input[name="taskMode"]:checked').value;
+  const nameEl = document.getElementById('taskName');
+  const name = nameEl ? nameEl.value.trim() : '';
   if (!startDate) { showToast('请选择开始日期'); return; }
   if (id) {
     const t = SCHED_TASKS.find(x => x.id === id);
+    t.name = name;
     t.freq = freq; t.startDate = startDate; t.startTime = startTime; t.mode = mode;
     if (mode === 'custom') t.content = document.getElementById('taskCustom').value;
   } else {
-    SCHED_TASKS.push({ id: 't_' + Date.now(), freq: freq, startDate: startDate, startTime: startTime, mode: mode,
+    SCHED_TASKS.push({ id: 't_' + Date.now(), name: name, freq: freq, startDate: startDate, startTime: startTime, mode: mode,
       content: mode === 'custom' ? document.getElementById('taskCustom').value : '', enabled: true,
       genPeriod: '', pushPeriod: '', genTryTs: 0 });
   }
-  saveSchedTasks(); hideModal('taskEditorModal'); renderSchedTasks(); runScheduler();
-}
-function deleteTask(id) {
-  if (!window.confirm('确定删除该定时任务？')) return;
-  SCHED_TASKS = SCHED_TASKS.filter(t => t.id !== id);
-  saveSchedTasks(); renderSchedTasks();
+  saveSchedTasks(); hideModal('taskEditorModal'); renderSchedTasks(); runScheduler(true);
 }
 function toggleTask(id) {
   const t = SCHED_TASKS.find(x => x.id === id); if (!t) return;
   t.enabled = !t.enabled; saveSchedTasks(); renderSchedTasks();
+  showToast(t.enabled ? '已开启，到点将推送微信消息' : '已关闭，不再推送');
+  if (t.enabled) runScheduler(true);
 }
 function syncSeg(radio) {
   const seg = radio.closest('.te-seg'); if (!seg) return;
