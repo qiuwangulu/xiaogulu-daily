@@ -1297,7 +1297,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.120'; // ①备忘录行内编辑由单行 input 改为多行 textarea(可换行、随内容自动增高至 200px,长文本完整可见;Ctrl/Cmd+回车保存、Esc 取消),「保存/取消」独立一行右对齐;②AI 对话每条消息下方新增「复制」按钮(复制时用 mdToText 去掉 markdown 记号,粘贴为干净文字)
+const APP_VERSION = 'v3.5.121'; // 修复 AI 问答偶发无响应：单次超时 15s→60s(长 prompt 生成常需 20~40s,原超时会把正常回答误判为失败)、网络/超时/5xx/限流自动重试(最多 2 次,指数退避)、429 区分「限流」与「额度耗尽」、失败按原因给出具体提示、失败气泡下方新增「重试」按钮、失败占位文本不再进入后续对话上下文、发送前等待家庭云端默认密钥加载完成、防止连点并发重复请求
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4458,9 +4458,10 @@ function getAITagConfig() {
 }
 function msDomainById(id) { return MILESTONE_DOMAINS.find(d => d.id === id) || MILESTONE_OTHER; }
 // 统一的 OpenAI 兼容 chat/completions 调用；任何异常/非 200/解析失败都返回 null（由上层回退规则）
+// v3.5.121 超时 9s→15s：JSON 归类在网络较慢时同样容易被误判失败（与 AI 问答无响应同源问题）
 async function callChatCompletions(cfg, messages) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 9000);
+  const timer = setTimeout(() => ctrl.abort(), 15000);
   try {
     const res = await fetch(cfg.base, {
       method: 'POST',
@@ -4716,9 +4717,14 @@ function renderAIMsgs() {
   if (!AI_CHAT.length) {
     box.innerHTML = `<div class="ai-msg ai"><span class="ai-mini">AI 育儿助手</span>你好呀～我是咕噜的育儿小助手。我已经读过宝宝档案和你录入的「家庭知识库」，可以直接问我喂养、睡眠、发育相关的问题 🍼</div>`;
   } else {
-    box.innerHTML = AI_CHAT.map((m, i) => m.role === 'me'
-      ? `<div class="ai-msg-wrap me"><div class="ai-msg me">${aiMsgHtml(m.text)}</div><span class="ai-copy" onclick="copyAICur(${i})">复制</span></div>`
-      : `<div class="ai-msg-wrap ai"><div class="ai-msg ai"><span class="ai-mini">AI 育儿助手</span>${aiMsgHtml(m.text)}</div><span class="ai-copy" onclick="copyAICur(${i})">复制</span></div>`).join('');
+    // v3.5.121 失败回复下方额外给「重试」；两类消息都保留「复制」
+    box.innerHTML = AI_CHAT.map((m, i) => {
+      const tools = (isAIFailMsg(m) ? `<span class="ai-retry" onclick="retryAIMsg(${i})">↻ 重试</span>` : '')
+        + `<span class="ai-copy" onclick="copyAICur(${i})">复制</span>`;
+      return m.role === 'me'
+        ? `<div class="ai-msg-wrap me"><div class="ai-msg me">${aiMsgHtml(m.text)}</div><span class="ai-tools">${tools}</span></div>`
+        : `<div class="ai-msg-wrap ai"><div class="ai-msg ai${isAIFailMsg(m) ? ' fail' : ''}"><span class="ai-mini">AI 育儿助手</span>${aiMsgHtml(m.text)}</div><span class="ai-tools">${tools}</span></div>`;
+    }).join('');
   }
   box.scrollTop = box.scrollHeight;
   const c = document.getElementById('aiLocalCnt'); if (c) c.textContent = AI_CHAT.length;
@@ -4804,10 +4810,41 @@ function buildAISystemPrompt() {
     + '请直接引用上面的数据作答，不要说"我看不到宝宝的情况"；某项当天没有记录时，直接说明"当天的记录里没有这一项"。）'
     + kbText;
 }
-// 非 JSON 模式的对话调用：返回文本；429(额度上限)→返回特殊标记并置 banner；其它异常→null
-async function callAIChat(cfg, messages) {
+/* ---------- v3.5.121 AI 问答稳定性修复 ----------
+ * 线上反馈：AI 有时回"（抱歉，AI 暂时没有回应，请稍后再试）"。定位到 6 个原因：
+ *  ① 单次请求超时只有 15s——system prompt 里带了宝宝档案 + 近 7 天逐日明细 + 家庭知识库，
+ *     模型生成一段完整回答通常要 20~40s（移动网络更久），于是正常回答被 abort 掉，误报失败；
+ *  ② 失败后没有任何重试，一次网络抖动/服务端 5xx 就直接放弃；
+ *  ③ 429 一律当作"token 额度耗尽"并弹 banner，但移动网络下 429 大多是短时频率限制，等几秒即可；
+ *  ④ 失败占位文本被当成 AI 的正式回复写进对话，还会随下一轮请求发给模型，污染上下文；
+ *  ⑤ 家庭云端默认密钥是异步加载的，冷启动后立刻提问会读到空配置；
+ *  ⑥ 没有并发保护，回车连点会同时发多个请求，更容易触发限流。
+ * 下面逐条修掉，并且失败时在气泡下方给「重试」按钮，一键用最近的提问重新请求。 */
+const AI_REQ_TIMEOUT = 60000;   // 单次请求超时（原 15000ms）
+const AI_REQ_RETRY = 2;         // 可重试错误的最大重试次数（总尝试 = 3）
+const AI_FAIL_RE = /抱歉，AI 暂时没有回应|模型 token 额度已达上限|AI 响应超时|AI 服务端暂时故障|AI 返回了空内容|AI 请求过于频繁|AI 密钥无效|模型不可用/;
+let aiBusy = false;             // 请求进行中标记（防并发）
+let aiReqSeq = 0;               // 请求序号：清空对话/关闭页面后，旧请求的结果作废
+
+// 判断一条已存在的 AI 回复是否为"失败占位"（含旧版本写进历史的老文案）
+function isAIFailMsg(m) { return !!(m && m.role === 'ai' && (m.failed || AI_FAIL_RE.test(String(m.text || '')))); }
+function aiFailReasonText(reason) {
+  switch (reason) {
+    case 'quota': return '⚠️ 当前模型 token 额度已达上限，AI 暂时无法回复。请稍后再试，或联系管理员调整额度。';
+    case 'ratelimit': return '⚠️ AI 请求过于频繁（服务端限流），已自动重试仍未成功，请等十几秒后再问。';
+    case 'auth': return '（AI 密钥无效或已过期：请到「管理」页重新配置密钥）';
+    case 'model': return '（模型不可用：请到「管理」页检查模型名称与接口地址）';
+    case 'server': return '（AI 服务端暂时故障，已自动重试仍未成功，请稍后点下方「重试」）';
+    case 'timeout': return '（AI 响应超时，网络较慢时较常见，请点下方「重试」）';
+    case 'network': return '（网络异常导致请求中断，请检查网络后点下方「重试」）';
+    case 'empty': return '（AI 返回了空内容，请点下方「重试」）';
+    default: return '（抱歉，AI 暂时没有回应，请点下方「重试」）';
+  }
+}
+// 单次请求：成功 {ok:true,content}；失败 {ok:false,reason,status?,retryAfter?}
+async function _aiFetchOnce(cfg, messages) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 15000);
+  const timer = setTimeout(() => ctrl.abort(), AI_REQ_TIMEOUT);
   try {
     const res = await fetch(cfg.base, {
       method: 'POST',
@@ -4815,37 +4852,125 @@ async function callAIChat(cfg, messages) {
       body: JSON.stringify({ model: cfg.model, messages: messages, temperature: 0.6 }),
       signal: ctrl.signal
     });
-    if (res.status === 429) { setTokenExceeded(true); return '__QUOTA__'; }
-    if (!res.ok) return null;
-    const j = await res.json();
-    const content = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
-    return content || null;
-  } catch { return null; }
-  finally { clearTimeout(timer); }
+    if (res.ok) {
+      let j = null;
+      try { j = await res.json(); } catch { return { ok: false, reason: 'empty', status: res.status }; }
+      const content = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+      if (!content || !String(content).trim()) return { ok: false, reason: 'empty', status: res.status };
+      return { ok: true, content: String(content) };
+    }
+    // 非 2xx：读响应体，用于区分「短时限流」与「额度/余额耗尽」
+    let body = '';
+    try { body = String((await res.text()) || ''); } catch {}
+    const hint = (body + ' ' + (res.headers.get('retry-after') || '')).toLowerCase();
+    if (res.status === 429 || res.status === 402) {
+      const isQuota = /insufficient|balance|quota|arrears|欠费|余额|额度/.test(hint);
+      return { ok: false, reason: isQuota ? 'quota' : 'ratelimit', status: res.status, retryAfter: Number(res.headers.get('retry-after')) || 0 };
+    }
+    if (res.status === 401 || res.status === 403) return { ok: false, reason: 'auth', status: res.status };
+    if (res.status === 404) return { ok: false, reason: 'model', status: res.status };
+    if (res.status === 400 && /model|not found|不存在|invalid/.test(hint)) return { ok: false, reason: 'model', status: res.status };
+    if (res.status >= 500) return { ok: false, reason: 'server', status: res.status };
+    return { ok: false, reason: 'other', status: res.status };
+  } catch (e) {
+    const aborted = !!(e && (e.name === 'AbortError' || e.name === 'TimeoutError'));
+    return { ok: false, reason: aborted ? 'timeout' : 'network' };
+  } finally { clearTimeout(timer); }
+}
+// 带自动重试的对话调用：成功返回文本；失败返回 '__FAIL__:<reason>'
+async function callAIChat(cfg, messages) {
+  const RETRYABLE = { timeout: 1, network: 1, server: 1, ratelimit: 1, empty: 1 };
+  let last = { ok: false, reason: 'other' };
+  for (let attempt = 0; attempt <= AI_REQ_RETRY; attempt++) {
+    if (attempt > 0) {
+      let wait = (last.reason === 'ratelimit') ? 3000 : 1200 * attempt;   // 指数退避
+      if (last.retryAfter > 0) wait = Math.max(wait, Math.min(last.retryAfter * 1000, 15000));  // 服务端指定优先级更高
+      _setAITypingText(`AI 正在思考…（第 ${attempt + 1} 次尝试）`);
+      try { console.warn('[AI] 第 ' + attempt + ' 次请求失败(' + last.reason + ')，' + Math.round(wait / 1000) + 's 后重试'); } catch {}
+      await new Promise(r => setTimeout(r, wait));
+    }
+    const r = await _aiFetchOnce(cfg, messages);
+    if (r.ok) return r.content;
+    last = r;
+    if (!RETRYABLE[r.reason]) break;   // auth/model/quota 重试无意义
+  }
+  try { console.warn('[AI] 请求最终失败：', last); } catch {}
+  return '__FAIL__:' + last.reason;
+}
+function _setAITypingText(t) { const el = document.getElementById('aiTyping'); if (el) el.textContent = t; }
+
+// 发起一轮请求（调用前需保证最后一条是用户提问）；失败时写入带 failed 标记的回复
+async function runAIRequest() {
+  if (aiBusy) return;
+  aiBusy = true;
+  const seq = ++aiReqSeq;
+  const box = document.getElementById('aiMsgs');
+  const typing = document.createElement('div');
+  typing.className = 'ai-typing'; typing.id = 'aiTyping'; typing.textContent = 'AI 正在思考…';
+  if (box) { box.appendChild(typing); box.scrollTop = box.scrollHeight; }
+  // 每秒刷新等待时长：超过 12 秒补一句说明，避免长回答期间看起来像卡死
+  const t0 = Date.now();
+  const tick = setInterval(() => {
+    const s = Math.round((Date.now() - t0) / 1000);
+    if (s > 12) _setAITypingText(`AI 仍在生成回答…（已等待 ${s} 秒）`);
+  }, 1000);
+
+  let reply = '', failed = false, reason = '';
+  try {
+    let cfg = getAITagConfig();
+    if (!cfg && !_cloudAITagKeyLoaded) {
+      // 家庭云端默认密钥是异步加载的：冷启动后马上提问会读到空配置，这里等一次（最多 4 秒）
+      try { await Promise.race([loadCloudAITagKey(), new Promise(r => setTimeout(r, 4000))]); } catch {}
+      cfg = getAITagConfig();
+    }
+    if (!cfg) {
+      reply = '（尚未配置 AI 密钥：请到「管理」页配置 DeepSeek 等大模型密钥后再使用本功能）';
+    } else {
+      const msgs = [{ role: 'system', content: buildAISystemPrompt() }]
+        .concat(AI_CHAT.filter(m => (m.role === 'me' || m.role === 'ai') && !isAIFailMsg(m))
+          .map(m => ({ role: m.role === 'me' ? 'user' : 'assistant', content: m.text })));
+      const r = await callAIChat(cfg, msgs);
+      if (typeof r === 'string' && r.indexOf('__FAIL__:') === 0) {
+        reason = r.slice(9); failed = true; reply = aiFailReasonText(reason);
+        setTokenExceeded(reason === 'quota');
+      } else {
+        setTokenExceeded(false);
+        reply = r;
+      }
+    }
+  } finally {
+    clearInterval(tick);
+    aiBusy = false;
+  }
+  if (seq !== aiReqSeq) return;   // 期间对话被清空/用户已离开，丢弃结果
+  const t = document.getElementById('aiTyping'); if (t) t.remove();
+  AI_CHAT.push(failed ? { role: 'ai', text: reply, failed: true, reason } : { role: 'ai', text: reply });
+  saveAIChat(); renderAIMsgs();
 }
 async function sendAIMsg() {
+  if (aiBusy) { showToast('AI 正在回答，请稍候'); return; }
   const el = document.getElementById('aiChatInput'); if (!el) return;
   const v = el.value.trim(); if (!v) return;
   AI_CHAT.push({ role: 'me', text: v }); el.value = ''; saveAIChat(); renderAIMsgs();
-  const box = document.getElementById('aiMsgs');
-  const typing = document.createElement('div'); typing.className = 'ai-typing'; typing.id = 'aiTyping'; typing.textContent = 'AI 正在思考…';
-  box.appendChild(typing); box.scrollTop = box.scrollHeight;
-  const cfg = getAITagConfig();
-  let reply;
-  if (!cfg) {
-    reply = '（尚未配置 AI 密钥：请到「管理」页配置 DeepSeek 等大模型密钥后再使用本功能）';
-  } else {
-    const msgs = [{ role: 'system', content: buildAISystemPrompt() }]
-      .concat(AI_CHAT.filter(m => m.role === 'me' || m.role === 'ai').map(m => ({ role: m.role === 'me' ? 'user' : 'assistant', content: m.text })));
-    const r = await callAIChat(cfg, msgs);
-    if (r === '__QUOTA__') reply = '⚠️ 当前模型 token 额度已达上限，AI 暂时无法回复。请稍后再试，或联系管理员调整额度。';
-    else if (r === null) reply = '（抱歉，AI 暂时没有回应，请稍后再试）';
-    else reply = r;
-  }
-  const t = document.getElementById('aiTyping'); if (t) t.remove();
-  AI_CHAT.push({ role: 'ai', text: reply }); saveAIChat(); renderAIMsgs();
+  await runAIRequest();
 }
-function clearAIChat() { AI_CHAT = []; saveAIChat(); renderAIMsgs(); }
+// 一键重试：删掉这条失败的 AI 回复，用最近的用户提问重新请求（提问本身保留）
+async function retryAIMsg(i) {
+  if (aiBusy) { showToast('AI 正在回答，请稍候'); return; }
+  const m = AI_CHAT[i];
+  if (!isAIFailMsg(m)) return;
+  AI_CHAT.splice(i, 1);
+  saveAIChat(); renderAIMsgs();
+  let hasMe = false;
+  for (let k = AI_CHAT.length - 1; k >= 0; k--) { if (AI_CHAT[k].role === 'me') { hasMe = true; break; } }
+  if (!hasMe) { showToast('没有可重试的问题'); return; }
+  await runAIRequest();
+}
+function clearAIChat() {
+  aiReqSeq++;                                   // 使在途请求的结果作废
+  const t = document.getElementById('aiTyping'); if (t) t.remove();
+  AI_CHAT = []; saveAIChat(); renderAIMsgs();
+}
 // 回车发送（Shift+Enter 换行）
 function aiInputKey(e) {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
