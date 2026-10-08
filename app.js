@@ -1359,7 +1359,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.132'; // 定时任务+今日计划:①管理弹窗新增「任务」标签页(频率/时间/AI自动生成或自定义/启停);②AI任务触发前12h调大模型按天气+知识库+宝宝档案生成今日计划(衣+行+健康/食/住),触发时复用今日成就的PushPlus配置推送群组;③首页总览新增「今日计划」卡片(默认收起、点击展开、无编辑图标);④已推送且未到下次前12h则计划只读、点击提示;⑤天气地址可配置并加密同步家庭云(不写死);⑥更新订阅推送与AI大模型设置提示
+const APP_VERSION = 'v3.5.133'; // 定时任务UI调整:①任务编辑弹窗去掉取消按钮、保存改「确定」并移至弹窗右下角(btn-success同首页添加弹窗确定按钮);②任务页添加按钮改带圆圈加号(同首页fab)、下移一行与「点添加新建任务」提示并排;③管理弹窗所有标签页「完成」改「确定」置于右下角(btn-success);④弹窗内「AI自动生成」改「AI推荐」(卡片文案同步)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5423,7 +5423,7 @@ function renderSchedTasks() {
       + '<div class="task-row">'
       + '<div class="task-info">'
       + '<div class="task-name">' + (t.mode === 'ai' ? '🤖' : '✏️') + ' ' + SCHED_FREQ_LABEL[t.freq] + ' ' + t.startDate + ' ' + t.startTime + '</div>'
-      + '<div class="task-sub">' + (t.mode === 'ai' ? 'AI 自动生成计划' : '自定义内容') + (t.enabled ? '' : ' · 已停止') + '</div>'
+      + '<div class="task-sub">' + (t.mode === 'ai' ? 'AI 推荐计划' : '自定义内容') + (t.enabled ? '' : ' · 已停止') + '</div>'
       + '</div>'
       + '<div class="task-actions">'
       + '<button class="icon-btn" onclick="openTaskEditor(\'' + t.id + '\')">✎</button>'

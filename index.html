@@ -1305,11 +1305,12 @@
   }
   .manage-footer {
     position: sticky; bottom: 0; z-index: 6;
+    display: flex; justify-content: flex-end;
     margin: 16px -20px -20px; padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
     background: linear-gradient(to top, rgba(24,30,34,0.98) 60%, rgba(24,30,34,0.86));
     border-top: 1px solid rgba(255,255,255,0.1);
   }
-  .manage-footer .btn { width: 100%; }
+  .manage-footer .btn { width: auto; }
 
   /* ===== 云端同步 ===== */
   .sync-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); }
@@ -1774,9 +1775,12 @@
   body.theme-day input[style*="accent-color:#74b9ff"] { accent-color: #0984e3 !important; }
 
   /* ===== v3.5.132 定时任务 / 今日计划 ===== */
-  .tasks-head { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 10px 0; }
+  .tasks-head { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin: 4px 0 10px 0; }
   .tasks-title { font-size: 16px; font-weight: 700; color: #dfe6e9; }
   body.theme-day .tasks-title { color: #2d3436; }
+  .tasks-add-row { display: flex; align-items: center; gap: 10px; }
+  .tasks-hint { font-size: 13px; color: #b2bec3; }
+  body.theme-day .tasks-hint { color: #636e72; }
   .tasks-list { max-height: 52vh; overflow-y: auto; }
   .task-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
   body.theme-day .task-card { background: rgba(9,132,227,0.05); border-color: rgba(9,132,227,0.15); }
@@ -2188,15 +2192,18 @@
     </div>
     <!-- v3.5.132 定时任务面板（最右侧「任务」标签） -->
     <div class="manage-tab-panel" data-mpanel="tasks" style="display:none;">
-      <div class="tasks-head">
-        <div class="tasks-title">⏰ 定时任务</div>
-        <button class="fab-btn" onclick="openTaskEditor()"><span class="fab-plus">+</span> 添加</button>
+    <div class="tasks-head">
+      <div class="tasks-title">⏰ 定时任务</div>
+      <div class="tasks-add-row">
+        <span class="tasks-hint">点添加新建任务</span>
+        <button class="fab-btn" onclick="openTaskEditor()"><span class="fab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></span> 添加</button>
       </div>
+    </div>
       <div class="tasks-list" id="tasksList"></div>
     </div>
     <!-- v3.5.69 底部固定操作条：选项区很长，滚到最底下也能一键关闭（选项为即时保存，无需"保存"按钮） -->
     <div class="manage-footer">
-      <button class="btn btn-primary" onclick="hideModal('manageModal')">完成</button>
+      <button class="btn btn-success" onclick="hideModal('manageModal')">确定</button>
     </div>
   </div>
 </div>
@@ -2227,7 +2234,7 @@
     <div class="te-field">
       <div class="te-label">任务内容</div>
       <div class="te-seg" id="taskModeSeg">
-        <label class="cat-tag"><input type="radio" name="taskMode" value="ai" checked onchange="syncSeg(this);onModeChange()"><span>🤖 AI 自动生成</span></label>
+        <label class="cat-tag"><input type="radio" name="taskMode" value="ai" checked onchange="syncSeg(this);onModeChange()"><span>🤖 AI 推荐</span></label>
         <label class="cat-tag"><input type="radio" name="taskMode" value="custom" onchange="syncSeg(this);onModeChange()"><span>✏️ 自定义</span></label>
       </div>
     </div>
@@ -2235,9 +2242,8 @@
       <div class="te-label">自定义内容</div>
       <textarea id="taskCustom" class="te-textarea" placeholder="输入要推送的消息内容"></textarea>
     </div>
-    <div class="manage-footer">
-      <button class="btn" onclick="hideModal('taskEditorModal')">取消</button>
-      <button class="btn btn-primary" onclick="saveTask()">保存</button>
+    <div class="modal-actions">
+      <button class="btn btn-success" onclick="saveTask()">确定</button>
     </div>
   </div>
 </div>
@@ -2375,6 +2381,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.132"></script>
+<script src="app.js?v=v3.5.133"></script>
 </body>
 </html>
