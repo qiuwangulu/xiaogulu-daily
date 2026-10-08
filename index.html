@@ -567,6 +567,11 @@
   /* v3.5.108 备忘录弹窗高度与历史/分析等弹窗一致：统一撑满 85vh（与 .modal-box 的 max-height 一致），
      避免内容少时弹窗过矮、与历史/分析弹窗视觉不齐 */
   #memoModal .modal-box { height: 85vh; }
+  /* v3.5.123 知识库编辑弹窗：复用首页「编辑记录」弹窗样式；层级必须高于 AI 抽屉(.ai-overlay z-index:300)，否则被盖住 */
+  .kb-edit-overlay { z-index: 400; }
+  #kbEditModal .input-row > label { font-size: 14px; color: #b2bec3; }
+  #kbEditModal .input-row > select { flex: 1 1 auto; min-width: 0; }
+  #kbEditTa { min-height: 120px; max-height: 200px; overflow-y: auto; resize: none; }
 
   /* ===== v3.5.109 AI 育儿问答底部抽屉 ===== */
   .ai-overlay { position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,.6); display: none; align-items: flex-end; justify-content: center; }
@@ -610,7 +615,7 @@
   body.theme-day .ai-msg.ai { background:#f1f5fa; border-color:rgba(9,132,227,.12); }
   .ai-msg.me { align-self:flex-end; background:#0984e3; color:#fff; border-bottom-right-radius:5px; }
   .ai-msg .ai-mini { display:block; font-size:10.5px; opacity:.7; margin-bottom:4px; }
-  /* v3.5.120 AI 对话每条消息支持复制；v3.5.122 新增失败重试 */
+  /* v3.5.120 AI 对话每条消息支持复制；v3.5.121 新增失败重试 */
   .ai-msg-wrap { display:flex; flex-direction:column; gap:4px; max-width:82%; }
   .ai-msg-wrap.ai { align-self:flex-start; align-items:flex-start; }
   .ai-msg-wrap.me { align-self:flex-end; align-items:flex-end; }
@@ -620,7 +625,7 @@
     user-select:none; -webkit-user-select:none; display:inline-block; line-height:1.6; }
   .ai-copy:active { opacity:1; }
   body.theme-day .ai-copy { color:#0984e3; }
-  /* v3.5.122 失败回复：淡红边 + 可点「重试」 */
+  /* v3.5.121 失败回复：淡红边 + 可点「重试」 */
   .ai-msg.ai.fail { border-color:rgba(255,118,117,.5); background:rgba(255,118,117,.09); }
   body.theme-day .ai-msg.ai.fail { background:#fff1f0; border-color:rgba(214,48,49,.32); }
   .ai-retry { font-size:11px; font-weight:700; color:#ff7675; opacity:.9; cursor:pointer; padding:0 6px;
@@ -2149,6 +2154,23 @@
     </div>
   </div>
 </div>
+<!-- v3.5.123 编辑知识库：复用首页「编辑记录」弹窗同一套样式（modal-overlay/modal-box + add-inputs 输入框），支持多行 -->
+<div class="modal-overlay kb-edit-overlay" id="kbEditModal" onclick="closeModal(event,'kbEditModal')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="hideModal('kbEditModal')">&times;</button>
+    <div class="modal-title">✏️ 编辑知识库</div>
+    <div id="kbEditForm" class="add-inputs show">
+      <div class="input-row" id="kbEditCatRow"></div>
+      <div class="input-row add-note-row">
+        <textarea id="kbEditTa" rows="5" placeholder="知识库内容（支持多行）" oninput="_memoEditAutoGrow(this)" onkeydown="kbEditKey(event)"></textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="hideModal('kbEditModal')">取消</button>
+      <button class="btn btn-success" onclick="saveKbEdit()">确认</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="optionsResetModal" onclick="closeModal(event,'optionsResetModal')">
   <div class="modal-box" onclick="event.stopPropagation()">
     <button class="modal-close" onclick="hideModal('optionsResetModal')">&times;</button>
@@ -2166,8 +2188,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="std-config.js?v=v3.5.122"></script>
-<script src="app-config.js?v=v3.5.122"></script>
-<script src="app.js?v=v3.5.122"></script>
+<script src="std-config.js?v=v3.5.123"></script>
+<script src="app-config.js?v=v3.5.123"></script>
+<script src="app.js?v=v3.5.123"></script>
 </body>
 </html>

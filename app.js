@@ -1297,7 +1297,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.122'; // ①AI 育儿对话页新增「全屏」按钮(点击切换页面内全屏,覆盖整个视口,再点退出),便于长对话阅读;②知识库每条记录默认只显示一行(单行省略、保留开头信息),点击该条可展开查看完整内容(再点收起),编辑/删除/改分类按钮已加 stopPropagation 避免误触折叠
+const APP_VERSION = 'v3.5.123'; // 知识库「编辑」由浏览器原生 prompt(单行,长文本看不到后面)改为与首页「编辑记录」同一套弹窗样式:多行文本域(自动增高至 200px,超出内部滚动)、带「分类」下拉、取消/确认按钮;Ctrl/Cmd+回车保存、Esc 取消
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5043,9 +5043,49 @@ function delKb(i) {
   }
   saveKBLocal(); saveKBCloud(); renderKb(); updateKbCntLine();
 }
+// v3.5.123 编辑知识库：由浏览器原生 prompt（单行，长文本看不全）改为与首页「编辑记录」同一套弹窗样式，
+// 支持多行文本（textarea 自动增高，最长 200px，超出内部滚动）
+let _kbEditIdx = -1, _kbEditOrigCat = '';
 function editKb(i) {
-  const t = prompt('编辑知识库内容：', KB[i].text);
-  if (t !== null && t.trim()) { KB[i].text = t.trim(); KB[i].cat = aiClassifyKb(t.trim()); saveKBLocal(); saveKBCloud(); renderKb(); updateKbCntLine(); }
+  if (i < 0 || i >= KB.length) return;
+  _kbEditIdx = i; _kbEditOrigCat = KB[i].cat;
+  // 分类下拉：可选分类 + 综合；若该条分类不在预设里（历史自定义），临时补进去，避免选择被重置
+  const cats = KB_CATS.concat(['综合']);
+  if (KB[i].cat && !cats.includes(KB[i].cat)) cats.unshift(KB[i].cat);
+  const catRow = document.getElementById('kbEditCatRow');
+  if (catRow) {
+    catRow.innerHTML = '<label>分类:</label>'
+      + '<select id="kbEditCat">'
+      + cats.map(c => `<option value="${_escAttr(c)}"${c === KB[i].cat ? ' selected' : ''}>${_escAttr(c)}</option>`).join('')
+      + '</select>';
+  }
+  const ta = document.getElementById('kbEditTa');
+  if (ta) ta.value = KB[i].text;
+  showModal('kbEditModal');
+  // 等弹窗可见后再量高度/聚焦（隐藏态量不出 scrollHeight）
+  setTimeout(() => {
+    const t2 = document.getElementById('kbEditTa');
+    if (t2) { _memoEditAutoGrow(t2); t2.focus(); try { t2.setSelectionRange(t2.value.length, t2.value.length); } catch {} }
+  }, 60);
+}
+function saveKbEdit() {
+  const i = _kbEditIdx;
+  if (i < 0 || i >= KB.length) { hideModal('kbEditModal'); return; }
+  const ta = document.getElementById('kbEditTa');
+  const v = ta ? ta.value.trim() : '';
+  if (!v) { showToast('内容不能为空'); if (ta) ta.focus(); return; }
+  const sel = document.getElementById('kbEditCat');
+  const chosen = sel ? sel.value : _kbEditOrigCat;
+  KB[i].text = v;
+  // 用户主动改了分类 → 尊重用户选择；未改分类 → 沿用原有关键词自动重分类（保持旧行为）
+  KB[i].cat = (chosen && chosen !== _kbEditOrigCat) ? chosen : aiClassifyKb(v);
+  hideModal('kbEditModal');
+  saveKBLocal(); saveKBCloud(); renderKb(); updateKbCntLine();
+}
+// Ctrl/Cmd+回车 = 保存；Esc = 取消（回车本身用于换行）
+function kbEditKey(e) {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) { e.preventDefault(); saveKbEdit(); }
+  else if (e.key === 'Escape') { e.preventDefault(); hideModal('kbEditModal'); }
 }
 function reTagKb(i) {
   const cur = KB[i].cat;
