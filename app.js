@@ -1357,7 +1357,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.129'; // 备忘录的「添加」与「语音」按钮形状改为与首页添加按钮一致的胶囊形(圆角22.5px,原为12px方角)
+const APP_VERSION = 'v3.5.130'; // KB 语音按钮形状改为与 KB「添加」按钮一致(60×45/圆角12px);备忘录的「语音」「添加」形状也改为与 KB「添加」按钮一致(圆角12px)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
