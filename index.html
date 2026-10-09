@@ -730,6 +730,20 @@
   /* 录音态：呼吸高亮（小按钮不适用首页大范围扩散光晕，改用缩放+透明度呼吸） */
   .ai-mic.recording { background:rgba(116,185,255,.22); animation:aiMicPulse 1100ms ease-in-out infinite; }
   .ai-mic.recording svg { stroke:#74b9ff; }
+  /* v3.5.150 输入框有内容时：话筒隐藏，同位置显示「发送」按钮（蓝色圆底 + 白色向上箭头） */
+  .ai-mic.hide { display:none; }
+  .ai-send {
+    position:absolute; right:5px; bottom:5px; width:30px; height:30px; padding:0;
+    border:none; border-radius:50%; cursor:pointer;
+    display:none; align-items:center; justify-content:center;
+    background:#6388FF;
+    -webkit-tap-highlight-color:transparent;
+    transition:transform .15s, background .2s, box-shadow .2s;
+  }
+  .ai-send.show { display:flex; }
+  .ai-send svg { width:16px; height:16px; fill:none; stroke:#fff; stroke-width:2.6; stroke-linecap:round; stroke-linejoin:round; }
+  .ai-send:active { transform:scale(.9); }
+  body.theme-day .ai-send { background:#0984e3; }
   @keyframes aiMicPulse {
     0%, 100% { transform:scale(1); box-shadow:0 0 0 0 rgba(116,185,255,.45); }
     50%      { transform:scale(1.12); box-shadow:0 0 0 24px rgba(116,185,255,.18); }
@@ -2019,9 +2033,11 @@
       <div class="ai-composer">
         <div class="ai-input-wrap">
           <div class="ai-rec-bar" id="aiRecBar">🎙️ 正在录音…松开结束，上滑取消</div>
-          <textarea class="ai-cta" id="aiChatInput" placeholder="输入问题，回车发送…" onkeydown="aiInputKey(event)"></textarea>
+          <textarea class="ai-cta" id="aiChatInput" placeholder="输入问题，回车发送…" oninput="aiSyncComposerBtn()" onkeydown="aiInputKey(event)"></textarea>
           <!-- v3.5.130 还原为话筒图标按钮（v3.5.114 风格）；按住蓝色波纹扩大1倍 -->
           <button class="ai-mic" id="aiVoiceBtn" type="button" title="按住说话"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+          <!-- v3.5.150 输入框有内容时，话筒替换为「发送」按钮（同位置，向上箭头，蓝底白箭头） -->
+          <button class="ai-send" id="aiSendBtn" type="button" title="发送" onclick="aiSendClick()"><svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></button>
         </div>
       </div>
       <div class="ai-chat-tools">
@@ -2449,6 +2465,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.149"></script>
+<script src="app.js?v=v3.5.150"></script>
 </body>
 </html>

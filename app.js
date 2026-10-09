@@ -1378,7 +1378,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.149'; // v3.5.149:①任务页添加按钮行下移且与已添加记录间距加大(tasks-head上12下28);②首页总览"详情"按钮深色模式改白色(浅色模式蓝色#0984e3不变)
+const APP_VERSION = 'v3.5.150'; // v3.5.150: AI育儿对话输入框为空时显示话筒(按住说话)，非空时同位置换为发送按钮(蓝底白色向上箭头)，可回车或点该按钮发送
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2426,6 +2426,7 @@ function finishVoiceRecognition() {
       const prev = ta.value.replace(/\s+$/, '');
       ta.value = prev ? prev + ' ' + voiceFinalText.trim() : voiceFinalText.trim();
       try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
+      aiSyncComposerBtn();   // v3.5.150 回填后同步按钮（非空 → 显示发送）
     }
     showToast('已转成文字，可直接发送');
     return;
@@ -4765,6 +4766,7 @@ function openAI() {
   const overlay = document.getElementById('aiOverlay'); if (!overlay) return;
   overlay.classList.add('show');
   bindAIVoiceTouch();   // v3.5.114 话筒按住说话
+  aiSyncComposerBtn();  // v3.5.150 按当前输入内容初始化右侧按钮（话筒/发送）
   renderTokenBanner(); renderAIMsgs(); renderKb(); updateKbCntLine(); renderAIHistory();
   renderCatDropdownPanel('kb');   // v3.5.127 知识库分类下拉面板在 AI 打开时一并渲染
   const s = document.querySelector('.ai-sheet'); if (s) s.classList.add('ai-fullscreen');  // v3.5.127 默认全屏
@@ -5132,7 +5134,7 @@ async function sendAIMsg() {
   const v = el.value.trim(); if (!v) return;
   el.blur();                  // 收起软键盘
   el.readOnly = true;          // 防并发（回复返回后由 runAIRequest 复位）
-  AI_CHAT.push({ role: 'me', text: v }); el.value = ''; saveAIChat(); renderAIMsgs();
+  AI_CHAT.push({ role: 'me', text: v }); el.value = ''; aiSyncComposerBtn(); saveAIChat(); renderAIMsgs();
   await runAIRequest();
 }
 // 一键重试：删掉这条失败的 AI 回复，用最近的用户提问重新请求（提问本身保留）
@@ -5151,6 +5153,7 @@ function clearAIChat() {
   aiReqSeq++;                                   // 使在途请求的结果作废
   const t = document.getElementById('aiTyping'); if (t) t.remove();
   AI_CHAT = []; saveAIChat(); renderAIMsgs();
+  aiSyncComposerBtn();
 }
 // 回车发送（Shift+Enter 换行）
 function aiInputKey(e) {
@@ -5158,6 +5161,22 @@ function aiInputKey(e) {
     e.preventDefault();
     sendAIMsg();
   }
+}
+// v3.5.150 AI 输入框右侧按钮切换：空 → 话筒（按住说话）；非空 → 发送按钮（向上箭头，点击发送）
+function aiSyncComposerBtn() {
+  const ta = document.getElementById('aiChatInput');
+  const mic = document.getElementById('aiVoiceBtn');
+  const send = document.getElementById('aiSendBtn');
+  if (!ta || !mic || !send) return;
+  const has = ta.value.trim().length > 0;
+  mic.classList.toggle('hide', has);
+  send.classList.toggle('show', has);
+}
+// v3.5.150 点击「发送」按钮发送（与回车等价）
+function aiSendClick() {
+  const ta = document.getElementById('aiChatInput');
+  if (!ta || !ta.value.trim()) return;
+  sendAIMsg();
 }
 
 /* ---------- 知识库（7 类 + 综合兜底；AI 自动分类；加密同步家庭云） ---------- */
