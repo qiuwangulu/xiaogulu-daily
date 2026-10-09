@@ -944,18 +944,17 @@ function updateOverview(skipPush) {
   html += `<div class="overview-item"><span class="ov-label">水+奶量:</span><span class="ov-value">${Math.round(totalMilk * 1.12)} ml</span></div>`;
   html += '</div>';
 
+  const planHtml = renderTodayPlanCardHTML();
   const achArr = computeAchievements(records);
+  let achHtml = '';
   if (achArr.length > 0) {
-    html += `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> ${achArr.join(' | ')}</span></div>`;
+    achHtml = `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> ${achArr.join(' | ')}</span></div>`;
   } else {
-    html += `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> 无</span></div>`;
+    achHtml = `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> 无</span></div>`;
   }
 
-  // v3.5.140 总览底部行：今日计划（左，可展开）+ 日报（右）并排
-  const planHtml = renderTodayPlanCardHTML();
-  html += '<div class="ov-bottom-row">' + planHtml
-        + '<div class="ov-report-pill" onclick="openReport()">&#128200; 日报 <span class="pill-chev">&#8250;</span></div>'
-        + '</div>';
+  // v3.5.145 总览卡片内：今日计划（上）→ 今日成就（中）；日报胶囊已移至卡片下方独立渲染
+  html += '<div class="ov-bottom-row">' + planHtml + achHtml + '</div>';
 
   bar.innerHTML = html;
   // 推送检查改为脏位标记，由统一调度器延迟合并执行
@@ -1350,7 +1349,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.144'; // v3.5.144:①恢复首页分类多选下拉(吃睡等),仅去掉下方活动分组标题;②总览今日计划标题不加粗,日报胶囊下移到贴底边框;③修复定时任务pushplus推送从不触发(next→prev,原来now>=next恒false);④设置区标题字体改黑色(浅#000/深#fff)
+const APP_VERSION = 'v3.5.145'; // v3.5.145:①历史弹窗记录名学逻辑→学算术(旧数据兼容),顶部水+奶量/今日成就数值改黄色(#ffeaa7/#d68910)且不加粗;②总览水+奶量与下次喝奶文本不加粗,今日成就移到今日计划下方,日报胶囊下移且总览底边框贴紧胶囊;③备忘录待办事项前加红色❓,待办数浅色黑深色白;④知识库提示"点标签改类"→"点编辑改分类";⑤任务页去掉"⏰定时任务"标题图标,添加行上移
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2787,7 +2786,8 @@ function openHistory() {
 function hardenHistoryColors() {
   const day = document.body.classList.contains('theme-day');
   const c = day ? '#3d4852' : '#ffffff';
-  document.querySelectorAll('#historyModal .hs-label, #historyModal .hs-value, #historyModal .history-body-row .hb-unit').forEach(el => { el.style.color = c; });
+  // v3.5.145 不再覆盖 .hs-value：其颜色/字重由 loadHistory 内联（黄色 #ffeaa7/#d68910、不加粗），此处仅兜底标签与单位
+  document.querySelectorAll('#historyModal .hs-label, #historyModal .history-body-row .hb-unit').forEach(el => { el.style.color = c; });
   document.querySelectorAll('#historyModal .history-body-row label').forEach((el, i) => { el.style.color = c; el.textContent = (i === 0 ? '高' : '重'); });
   ['historyHeightInput', 'historyWeightInput'].forEach(id => { const el = document.getElementById(id); if (el) el.style.color = c; });
 }
@@ -2809,10 +2809,12 @@ function loadHistory() {
   let totalMilk = 0;
   records.forEach(r => { if (r.type === 'milk' && r.milkAmount) totalMilk += r.milkAmount; });
   const achArr = computeAchievements(records);
-  // v3.5.82 颜色改为内联：不依赖可能被缓存的旧 CSS（v3.5.80 的 #ffeaa7 黄色），彻底消除"数值/单位/内容发黄"；主题自适应
+  // v3.5.82 颜色改为内联：不依赖可能被缓存的旧 CSS；标签主题自适应
+  // v3.5.145 数值改为黄色（与首页总览一致 #ffeaa7/#d68910）且不加粗
   const _hvc = document.body.classList.contains('theme-day') ? '#3d4852' : '#ffffff';
-  let sHtml = `<div class="history-sum-row"><span class="hs-label" style="color:${_hvc}">🍼 水+奶量</span><span class="hs-value" style="color:${_hvc}">${Math.round(totalMilk * 1.12)} ml</span></div>`;
-  sHtml += `<div class="history-sum-row"><span class="hs-label" style="color:${_hvc}">🏆 今日成就</span><span class="hs-value" style="color:${_hvc}">${achArr.length > 0 ? achArr.join(' | ') : '无'}</span></div>`;
+  const _hvVal = document.body.classList.contains('theme-day') ? '#d68910' : '#ffeaa7';
+  let sHtml = `<div class="history-sum-row"><span class="hs-label" style="color:${_hvc}">🍼 水+奶量</span><span class="hs-value" style="color:${_hvVal};font-weight:400">${Math.round(totalMilk * 1.12)} ml</span></div>`;
+  sHtml += `<div class="history-sum-row"><span class="hs-label" style="color:${_hvc}">🏆 今日成就</span><span class="hs-value" style="color:${_hvVal};font-weight:400">${achArr.length > 0 ? achArr.join(' | ') : '无'}</span></div>`;
   if (summary) { summary.innerHTML = sHtml; summary.style.display = 'flex'; }
   // 按活动开始时间正序排列
   const sorted = [...records].sort((a, b) => {
@@ -2828,7 +2830,7 @@ function loadHistory() {
     html += `<div class="history-record">` +
       `<div class="history-rec-main">` +
         `<div class="rec-time">${r.recTime || r.time}</div>` +
-        `<div class="rec-detail">${r.name}: ${formatRecordBrief(r, ds)}</div>` +
+        `<div class="rec-detail">${(r.name === '学逻辑' ? '学算术' : r.name)}: ${formatRecordBrief(r, ds)}</div>` +
       `</div>` +
       `<div class="history-rec-ops">` +
         `<span class="rec-edit" onclick="openEditRecord('${t}', ${ts}, '${ds}')" title="编辑"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>` +

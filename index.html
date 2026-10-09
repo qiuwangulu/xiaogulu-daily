@@ -128,11 +128,12 @@
   body.theme-day .ai-chip { background: #d8e9fa; border-color: #0984e3; color: #0984e3; }
 
   /* ===== 信息总览 ===== */
+  .ov-wrap { display: flex; flex-direction: column; margin: 12px 0 10px; }
   .overview {
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 12px; padding: 12px 16px 4px;
-    margin: 12px 0 14px;
+    border-radius: 12px; padding: 12px 16px 8px;
+    margin: 0;
     font-size: 15px;
   }
   .overview-row { display: flex; gap: 10px 20px; flex-wrap: wrap; justify-content: space-between; margin-bottom: 8px; }
@@ -140,10 +141,10 @@
   .overview-item { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
   .overview-item .ov-icon { font-size: 15px; }
   .overview-item .ov-label { color: #fff; }
-  .overview-item .ov-value { color: #ffeaa7; font-weight: 600; font-size: 14px; }
-  .overview-item .ov-time { color: #ffeaa7; font-weight: 600; font-size: 14px; }
+  .overview-item .ov-value { color: #ffeaa7; font-weight: 400; font-size: 14px; }
+  .overview-item .ov-time { color: #ffeaa7; font-weight: 400; font-size: 14px; }
   .overview-item .ov-countdown { color: #55efc4; }
-  .overview-achievement { color: #fff; font-size: 15px; text-align: justify; text-align-last: left; margin-top: 6px; display: flex; align-items: flex-start; gap: 5px; }
+  .overview-achievement { color: #fff; font-size: 15px; text-align: justify; text-align-last: left; margin-top: 0; display: flex; align-items: flex-start; gap: 5px; }
   .overview-achievement .ov-icon { font-size: 15px; flex-shrink: 0; }
   .overview-achievement .ov-text { flex: 1; color: #ffeaa7; font-size: 14px; }
   .overview-achievement .ov-text .ov-label { color: #fff; }
@@ -1054,7 +1055,8 @@
   .memo-input-row .fab-btn { flex-shrink: 0; width: 60px; min-height: 45px; box-sizing: border-box; padding: 9px 0; gap: 0; justify-content: center; border-radius: 12px; }
   .memo-section-title { font-size: 14px; font-weight: 700; color: #fff; margin: 14px 0 8px;
     display: flex; justify-content: flex-start; align-items: baseline; gap: 6px; }
-  .memo-section-title .cnt { color: #74b9ff; font-size: 13px; }
+  .memo-section-title .todo-q { color: #ff7675; font-weight: 700; }
+  .memo-section-title .cnt { color: #fff; font-size: 13px; }
   .memo-empty { text-align: center; color: #636e72; padding: 16px 0; font-size: 14px; }
   .memo-item { display: flex; align-items: flex-start; gap: 10px; padding: 11px 0;
     border-bottom: 1px solid rgba(255,255,255,0.06); }
@@ -1638,7 +1640,7 @@
   body.theme-day .memo-textarea::placeholder { color: rgba(61,72,82,0.4); }
   body.theme-day .memo-textarea:focus { border-color: rgba(9,132,227,0.5); }
   body.theme-day .memo-section-title { color: #3d4852; }
-  body.theme-day .memo-section-title .cnt { color: #0984e3; }
+  body.theme-day .memo-section-title .cnt { color: #2d3436; }
   body.theme-day .memo-content { color: #3d4852; }
   body.theme-day .memo-edit-input { background: #f5f8fa; border-color: rgba(9,132,227,0.4); color: #3d4852; }
   body.theme-day .memo-item { border-bottom-color: rgba(9,132,227,0.08); }
@@ -1786,7 +1788,7 @@
   body.theme-day input[style*="accent-color:#74b9ff"] { accent-color: #0984e3 !important; }
 
   /* ===== v3.5.132 定时任务 / 今日计划 ===== */
-  .tasks-head { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin: 4px 0 10px 0; }
+  .tasks-head { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin: 0 0 10px 0; }
   .tasks-title { font-size: 16px; font-weight: 700; color: #dfe6e9; }
   body.theme-day .tasks-title { color: #2d3436; }
   .tasks-add-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -1852,8 +1854,8 @@
   body.theme-day .te-textarea { background: #fff; border-color: rgba(9,132,227,0.2); color: #2d3436; }
   /* 首页总览底部行：今日计划（第一行，左对齐满宽）+ 日报（下一行，仍贴最右） */
   .ov-bottom-row { display: flex; flex-direction: column; align-items: stretch; gap: 6px; margin-top: 8px; }
-  /* 日报始终贴最右：即使今日计划缺席也靠右（align-self 保证换行后仍最右） */
-  .ov-bottom-row .ov-report-pill { margin-left: auto; align-self: flex-end; }
+  /* 日报胶囊：移出总览卡片，作为独立胶囊置于卡片下方并贴最右（v3.5.145） */
+  .ov-report-pill { align-self: flex-end; margin-top: 6px; }
   /* 首页总览今日计划卡片：去掉外框与底色，左对齐，仅显摘要 + 详情按钮 */
   .ov-plan-card { width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 8px; background: none; border: none; border-radius: 0; padding: 0; }
   body.theme-day .ov-plan-card { background: none; border: none; }
@@ -1920,7 +1922,10 @@
     </div>
   </div>
 
-  <div class="overview" id="overviewBar"></div>
+  <div class="ov-wrap">
+    <div class="overview" id="overviewBar"></div>
+    <div class="ov-report-pill" id="ovReportPill" onclick="openReport()">&#128200; 日报 <span class="pill-chev">&#8250;</span></div>
+  </div>
 
   <div class="home-filter" id="homeFilter">
     <div class="cat-dropdown" id="catDropdown">
@@ -2043,7 +2048,7 @@
           <button class="kb-add-btn" onclick="addKb()">添加</button>
         </div>
       </div>
-      <div class="ai-kb-classify-note">🤖 自动分类/点标签改类</div>
+      <div class="ai-kb-classify-note">🤖 自动分类/点编辑改分类</div>
       <div class="ai-kb-head"><span>已添加 <b id="kbCnt">0</b> 条</span></div>
       <div class="ai-kb-list" id="kbList"></div>
     </div>
@@ -2067,7 +2072,7 @@
         </button>
       </div>
     </div>
-    <div class="memo-section-title">待办事项 <span class="cnt" id="memoTodoCnt">0</span></div>
+    <div class="memo-section-title"><span class="todo-q">&#10067;</span>待办事项 <span class="cnt" id="memoTodoCnt">0</span></div>
     <div id="memoTodoList"></div>
     <div class="memo-done-head" id="memoDoneHead" onclick="toggleMemoDoneExpand()">
       <span class="chev">▶</span><span>✅ 已办事项</span><span class="cnt" id="memoDoneCnt">0</span>
@@ -2239,7 +2244,6 @@
     <!-- v3.5.132 定时任务面板（最右侧「任务」标签） -->
     <div class="manage-tab-panel" data-mpanel="tasks" style="display:none;">
     <div class="tasks-head">
-      <div class="tasks-title">⏰ 定时任务</div>
       <div class="tasks-add-row">
         <span class="tasks-hint">点添加新建任务</span>
         <button class="fab-btn" onclick="openTaskEditor()"><span class="fab-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></span> 添加</button>
@@ -2443,6 +2447,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.144"></script>
+<script src="app.js?v=v3.5.145"></script>
 </body>
 </html>
