@@ -1378,7 +1378,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.148'; // v3.5.148:①修复定时任务重复推送(pushTask进入即同步认领本周期并落盘,runScheduler加重入保护,新增跨设备云端去重);②定时提醒通知内容由"⏰定时提醒"改为任务名称(如"⏰育儿嫂午餐费")
+const APP_VERSION = 'v3.5.149'; // v3.5.149:①任务页添加按钮行下移且与已添加记录间距加大(tasks-head上12下28);②首页总览"详情"按钮深色模式改白色(浅色模式蓝色#0984e3不变)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {

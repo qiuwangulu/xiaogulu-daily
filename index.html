@@ -1788,7 +1788,8 @@
   body.theme-day input[style*="accent-color:#74b9ff"] { accent-color: #0984e3 !important; }
 
   /* ===== v3.5.132 定时任务 / 今日计划 ===== */
-  .tasks-head { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin: 0 0 10px 0; }
+  /* v3.5.149 添加按钮行下移，且与已添加记录（tasks-list）间距加大 */
+  .tasks-head { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin: 12px 0 28px 0; }
   .tasks-title { font-size: 16px; font-weight: 700; color: #dfe6e9; }
   body.theme-day .tasks-title { color: #2d3436; }
   .tasks-add-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -1863,7 +1864,8 @@
   body.theme-day .ov-plan-title { color: #2d3436; }
   .ov-plan-summary { flex: 1; min-width: 0; font-size: 14px; color: #ffeaa7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   body.theme-day .ov-plan-summary { color: #d68910; }
-  .ov-plan-detail-btn { flex-shrink: 0; font-size: 12px; color: #74b9ff; cursor: pointer; padding: 2px 6px; border: 1px solid rgba(116,185,255,0.4); border-radius: 8px; }
+  /* v3.5.149 详情按钮：深色模式=白色，浅色模式=蓝色(#0984e3)不变 */
+  .ov-plan-detail-btn { flex-shrink: 0; font-size: 12px; color: #fff; cursor: pointer; padding: 2px 6px; border: 1px solid rgba(255,255,255,0.45); border-radius: 8px; }
   .ov-plan-detail-btn:active { opacity: .7; }
   body.theme-day .ov-plan-detail-btn { color: #0984e3; border-color: rgba(9,132,227,0.35); }
   /* 今日计划详情弹窗 */
@@ -2447,6 +2449,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.148"></script>
+<script src="app.js?v=v3.5.149"></script>
 </body>
 </html>
