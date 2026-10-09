@@ -660,6 +660,35 @@ async function _cloudPushMark(sig) {
   } catch (e) { console.warn('[推送] 云端去重标记失败:', e); }
 }
 
+// ---- v3.5.148 定时任务推送的跨设备去重（独立 key，避免与成就推送互相覆盖）----
+const PUSH_SCHED_DEDUP_KEY = '_schedpushdedup';
+async function _cloudSchedDup(sig) {
+  try {
+    if (typeof isSyncReady !== 'function' || !isSyncReady()) return false;
+    const fid = getFamilyId();
+    if (!fid) return false;
+    const rows = await supabaseGet(`family_config?family_id=eq.${fid}&config_key=eq.${PUSH_SCHED_DEDUP_KEY}&select=encrypted_data`);
+    if (!Array.isArray(rows) || rows.length === 0) return false;
+    let rec = null;
+    try { rec = JSON.parse(rows[0].encrypted_data || 'null'); } catch (e) { return false; }
+    if (!rec || rec.sig !== sig) return false;
+    if (Date.now() - (rec.ts || 0) > PUSH_DEDUP_MAX_AGE) return false;
+    return true;
+  } catch (e) { return false; }
+}
+async function _cloudSchedMark(sig) {
+  try {
+    if (typeof isSyncReady !== 'function' || !isSyncReady()) return;
+    const fid = getFamilyId();
+    if (!fid) return;
+    await supabaseUpsert('family_config', {
+      family_id: fid, config_key: PUSH_SCHED_DEDUP_KEY,
+      encrypted_data: JSON.stringify({ sig: sig, ts: Date.now(), dev: getDeviceName() }),
+      iv: '', last_modified: Date.now()
+    });
+  } catch (e) { console.warn('[推送] 定时任务云端去重标记失败:', e); }
+}
+
 // ---- 设备级推送开关（跨设备去重）----
 // 多台设备共用同一群组编码时，每台都会各自推送一遍 → 重复消息。
 // 由用户指定唯一一台"负责推送"的设备；其他设备只记录、不推送。
@@ -1349,7 +1378,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.147'; // v3.5.147:①AI育儿胶囊与日报胶囊同字号(均12px)且均加粗(font-weight 800),两胶囊视觉一致
+const APP_VERSION = 'v3.5.148'; // v3.5.148:①修复定时任务重复推送(pushTask进入即同步认领本周期并落盘,runScheduler加重入保护,新增跨设备云端去重);②定时提醒通知内容由"⏰定时提醒"改为任务名称(如"⏰育儿嫂午餐费")
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5425,6 +5454,16 @@ async function generatePlanForTask(task, trig) {
 
 /* ---------- 推送（复用今日成就的 PushPlus 配置） ---------- */
 async function pushTask(task, trig, pk) {
+  // v3.5.148 防重复推送①：进入函数后立即"同步认领"本周期并落盘（await 之前），
+  // 这样并发/多次触发的 runScheduler 在推送尚未返回时也会看到已认领，从而跳过，避免同一条任务重复发送。
+  if (task.pushPeriod === pk) return true;      // 本周期已被认领（并发重复调用）
+  const _prevPk = task.pushPeriod;
+  task.pushPeriod = pk; task.pushTs = Date.now();
+  saveSchedTasks();
+  // v3.5.148 防重复推送②：跨设备去重——家庭内其他设备已推过本周期则本机跳过
+  const _sig = 'task|' + (task.id || task.name || '') + '|' + pk;
+  try { if (await _cloudSchedDup(_sig)) return true; } catch (e) {}
+
   let title, content;
   if (task.mode === 'ai') {
     const sp = splitPlan(task.content);
@@ -5433,14 +5472,18 @@ async function pushTask(task, trig, pk) {
     const sum = sp.summary ? '<p style="font-size:16px;font-weight:600;">📌 ' + escapeHtml(sp.summary) + '</p>' : '';
     content = '<h3>小咕噜 ' + ds + ' 今日计划</h3>' + sum + '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(sp.detail || task.content || '') + '</pre>';
   } else {
-    title = '⏰ 定时提醒';
+    // v3.5.148 通知内容改为任务名称（如「⏰ 育儿嫂午餐费」），不再统一显示"定时提醒"
+    const nm = (task.name && String(task.name).trim()) ? String(task.name).trim() : '定时提醒';
+    title = '⏰ ' + nm;
     content = '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(task.content || '') + '</pre>';
   }
   const ok = await notifyPushplus(title, content);
   if (ok) {
-    task.pushPeriod = pk; task.pushTs = Date.now();
-    if (task.freq === 'once') task.enabled = false;
-    saveSchedTasks();
+    try { _cloudSchedMark(_sig); } catch (e) {}
+    if (task.freq === 'once') { task.enabled = false; saveSchedTasks(); }
+  } else {
+    // 推送失败：回滚认领状态，允许下一次调度重试，避免漏推
+    task.pushPeriod = _prevPk; saveSchedTasks();
   }
   return ok;
 }
@@ -5467,7 +5510,14 @@ function planLockMsg(task) {
   if (prev && task.pushPeriod === periodKey(task, prev)) return '因今日计划已推送，明日计划未生成，无法编辑';
   return '未到计划生成时间，暂无法编辑';
 }
+let _schedRunning = false;
 async function runScheduler(forceGen) {
+  // v3.5.148 防重复推送③：调度器重入保护。
+  // 页面加载 / 切到任务页 / 可见性变化 / 60s 轮询 会几乎同时各触发一次 runScheduler，
+  // 若上一次尚未跑完（内部有 await 推送），会再次遍历到同一任务导致重复推送。此处直接跳过并发调用。
+  if (_schedRunning) return;
+  _schedRunning = true;
+  try {
   const now = new Date();
   const canPush = isPushSender();
   for (const task of SCHED_TASKS) {
@@ -5503,6 +5553,7 @@ async function runScheduler(forceGen) {
   }
   if (currentManageTab === 'tasks') renderSchedTasks();
   renderTodayPlanCard();
+  } finally { _schedRunning = false; }
 }
 // AI 计划 prompt 升级：检测到 prompt 版本变化则立即用最新 prompt 重新生成一次（不再等 12h 窗口），
 // 有内容则整段替换为最新；无内容（未配密钥/网络失败）则保留旧内容不空白。
