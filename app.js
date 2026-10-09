@@ -1090,8 +1090,8 @@ function renderCards(newestIds) {
   const records = getTodayRecords();
   const q = actSearchQuery;
 
-  // v3.5.143 首页不再按分类分组，直接扁平列出全部活动（去掉"吃睡"等分类标题）
-  let acts = ACTIVITIES.filter(act => !hiddenActivities.includes(act.id));
+  // v3.5.144 保留顶部分类多选下拉筛选（selectedCategories），但下方活动不再按分类分组、不显示分类标题
+  let acts = ACTIVITIES.filter(act => selectedCategories.has(act.category) && !hiddenActivities.includes(act.id));
   if (q) acts = acts.filter(act => act.name.toLowerCase().includes(q));
 
   acts.forEach(act => {
@@ -1350,7 +1350,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.143'; // v3.5.143:①首页去掉"吃睡"等分类(移除分类下拉+活动不再按分类分组,保留搜索);②总览今日计划卡去外框底色左对齐,黄色文字/数字字号统一,日报胶囊换下一行仍最右;③今日计划prompt要求给出具体温度;④学逻辑改学算术
+const APP_VERSION = 'v3.5.144'; // v3.5.144:①恢复首页分类多选下拉(吃睡等),仅去掉下方活动分组标题;②总览今日计划标题不加粗,日报胶囊下移到贴底边框;③修复定时任务pushplus推送从不触发(next→prev,原来now>=next恒false);④设置区标题字体改黑色(浅#000/深#fff)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5488,8 +5488,9 @@ async function runScheduler(forceGen) {
       }
     }
     // 触发推送：触发时刻起、宽限 3 小时内（仅"由本设备负责推送"的设备执行，避免多设备重复推送）
+    // v3.5.144 修复：原先用 next（永远在未来）导致 now>=trig 恒为 false，定时任务推送从不触发。改用 prev（刚过去的触发点）。
     if (!canPush) continue;
-    const trig = next || (task.freq === 'once' ? prev : null);
+    const trig = prev;
     if (trig && now >= trig && now < new Date(trig.getTime() + SCHED_PUSH_GRACE)) {
       const pk = periodKey(task, trig);
       if (task.pushPeriod !== pk) {

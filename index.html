@@ -131,7 +131,7 @@
   .overview {
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 12px; padding: 12px 16px;
+    border-radius: 12px; padding: 12px 16px 4px;
     margin: 12px 0 14px;
     font-size: 15px;
   }
@@ -1323,7 +1323,8 @@
 
   /* ===== 云端同步 ===== */
   .sync-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); }
-  .sync-section .cos-title { font-size: 15px; font-weight: 600; color: #74b9ff; margin-bottom: 10px; }
+  /* v3.5.144 设置区标题改为黑色（浅色模式 #000 / 深色模式 #fff，不再用蓝色） */
+  .sync-section .cos-title { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 10px; }
   .sync-status-row { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #b2bec3; margin-bottom: 10px; }
   .sync-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
   .sync-dot.on { background: #2ecc71; box-shadow: 0 0 6px #2ecc71; }
@@ -1719,7 +1720,7 @@
   body.theme-day .sf-tags .custom-tag { background: rgba(9,132,227,0.1); }
   body.theme-day .manage-footer { background: linear-gradient(to top, #ffffff 60%, rgba(255,255,255,0.88)); border-top-color: rgba(9,132,227,0.18); }
   body.theme-day .sync-section { border-top-color: rgba(9,132,227,0.15); }
-  body.theme-day .sync-section .cos-title { color: #0984e3; }
+  body.theme-day .sync-section .cos-title { color: #000; }
   body.theme-day .sync-status-row { color: #636e72; }
   body.theme-day .sync-config-row label { color: #636e72; }
   body.theme-day .sync-config-row input { background: #ffffff; border-color: rgba(9,132,227,0.25); color: #3d4852; }
@@ -1856,7 +1857,7 @@
   /* 首页总览今日计划卡片：去掉外框与底色，左对齐，仅显摘要 + 详情按钮 */
   .ov-plan-card { width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 8px; background: none; border: none; border-radius: 0; padding: 0; }
   body.theme-day .ov-plan-card { background: none; border: none; }
-  .ov-plan-title { font-size: 14px; color: #dfe6e9; font-weight: 600; flex-shrink: 0; }
+  .ov-plan-title { font-size: 14px; color: #dfe6e9; font-weight: 400; flex-shrink: 0; }
   body.theme-day .ov-plan-title { color: #2d3436; }
   .ov-plan-summary { flex: 1; min-width: 0; font-size: 14px; color: #ffeaa7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   body.theme-day .ov-plan-summary { color: #d68910; }
@@ -1922,6 +1923,10 @@
   <div class="overview" id="overviewBar"></div>
 
   <div class="home-filter" id="homeFilter">
+    <div class="cat-dropdown" id="catDropdown">
+      <button class="cat-dropdown-btn" id="catDropdownBtn" type="button" onclick="toggleCatDropdown()">📂 全部分类 ▾</button>
+      <div class="cat-dropdown-panel" id="catDropdownPanel"></div>
+    </div>
     <input class="act-search" id="actSearch" type="text" placeholder="🔍 搜索活动名称…" oninput="onActSearch()">
   </div>
 
@@ -2438,6 +2443,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.143"></script>
+<script src="app.js?v=v3.5.144"></script>
 </body>
 </html>
