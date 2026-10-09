@@ -1359,7 +1359,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.141'; // v3.5.141:①任务展开箭头改用备忘录「已办事项」同款(▶字符+旋转90°);②AI计划文本框默认高度加倍(90→180px);③部署后立即用最新prompt重新生成一次今日计划(不等12h窗口,失败保留旧内容);④首页总览今日计划改为「仅显摘要+详情按钮」,点详情弹窗看全文,日报保持最右
+const APP_VERSION = 'v3.5.142'; // v3.5.142:①修复首页总览不显示今日计划(getCurrentPlan不再苛求触发周期=今天,有内容即展示);②修复仅日报时未贴最右(margin-left:auto);③部署强制用新prompt重新生成计划内容;④任务/备忘录箭头缩70%+浅色蓝深色白;⑤知识库添加后跳转定位新记录并提示;⑥大便时间差y轴0-100等间隔20,>100折叠
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4207,7 +4207,24 @@ function makeLactaseDualChart(leftData, rightData, opts) {
   // —— 左轴刻度 ——
   const leftValid = leftData.filter(d => d.value != null).map(d => d.value);
   let lMin, lMax, lTicks;
-  if (opts.leftMin !== undefined && opts.leftStep) {            // 固定下限+步长（如体重趋势：min 3 step 1）
+  // v3.5.142 折叠轴：0~100 等间隔 20（主区），>100 压缩到顶部「折叠区」，便于观察 100 以内的变化
+  let foldAxis = null;
+  if (opts.leftFold) {
+    const F = opts.leftFold;                       // { base:100, step:20 }
+    const base = F.base || 100, step = F.step || 20;
+    const dMax = leftValid.length ? Math.max(...leftValid) : 0;
+    lMin = 0;
+    if (dMax <= base) {
+      lMax = base;                                  // 全在 100 以内：常规 0~100
+      lTicks = []; for (let v = 0; v <= base + 1e-6; v += step) lTicks.push(v);
+    } else {
+      const foldMax = Math.ceil(dMax / 50) * 50;    // 折叠区上界（取整到 50）
+      lMax = foldMax;
+      lTicks = []; for (let v = 0; v <= base + 1e-6; v += step) lTicks.push(v);
+      lTicks.push(foldMax);
+      foldAxis = { base: base, foldMax: foldMax };
+    }
+  } else if (opts.leftMin !== undefined && opts.leftStep) {            // 固定下限+步长（如体重趋势：min 3 step 1）
     const base = leftValid.length ? Math.max(...leftValid) : (opts.leftMin || 0);
     lMin = opts.leftMin;
     lMax = Math.ceil(base / opts.leftStep) * opts.leftStep;
@@ -4240,7 +4257,16 @@ function makeLactaseDualChart(leftData, rightData, opts) {
     if (hasT) return PL + (iw * (leftData[i].t - tMin)) / (tMax - tMin);
     return PL + (n <= 1 ? iw / 2 : (iw * i) / (n - 1));
   };
-  const yL = v => PT + ih - ((v - lMin) / (lMax - lMin)) * ih;
+  const yL = v => {
+    if (foldAxis) {
+      // 分段：0~base 占下方 FOLD_R 比例高度（等间隔），base~foldMax 压到上方剩余高度
+      const FOLD_R = 0.78;
+      if (v <= foldAxis.base) return PT + ih - (v / foldAxis.base) * ih * FOLD_R;
+      const span = foldAxis.foldMax - foldAxis.base || 1;
+      return PT + ih * (1 - FOLD_R) - ((v - foldAxis.base) / span) * ih * (1 - FOLD_R);
+    }
+    return PT + ih - ((v - lMin) / (lMax - lMin)) * ih;
+  };
   const yR = v => PT + ih - ((v - rMin) / (rMax - rMin)) * ih;
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, "\\'").replace(/"/g, '&quot;');
   const mkMtip = id => `<g id="${id}" style="display:none" pointer-events="none"><rect rx="4" ry="4" height="20" fill="#2ecc71" stroke="rgba(255,255,255,0.45)" stroke-width="0.5"/><text class="tiptext" font-size="11" font-weight="bold" fill="#ffffff" x="6" y="14">?</text></g>`;
@@ -4250,9 +4276,15 @@ function makeLactaseDualChart(leftData, rightData, opts) {
   let grid = '', ylabels = '';
   lTicks.forEach(v => {
     const gy = yL(v).toFixed(1);
-    grid += `<line class="gridln" x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
+    const isFoldLine = foldAxis && Math.abs(v - foldAxis.base) < 1e-6;   // 100 分界处用虚线强调
+    grid += `<line class="gridln" x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="${isFoldLine ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)'}" stroke-width="1"${isFoldLine ? ' stroke-dasharray="3 3"' : ''}/>`;
     ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${leftAxisColor}" font-size="9" text-anchor="end">${leftFmt(Math.round(v * 10) / 10)}</text>`;
   });
+  // v3.5.142 折叠区提示：在压缩区内标「⌇ 折叠」示意 y 轴在此被压缩
+  if (foldAxis) {
+    const fy = ((yL(foldAxis.base) + yL(foldAxis.foldMax)) / 2).toFixed(1);
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(fy) + 3).toFixed(1)}" fill="${leftAxisColor}" font-size="8" text-anchor="end" opacity="0.75">⌇</text>`;
+  }
   // 右轴刻度（轴文字为rightColor 主题色；对应折线为 rightLineColor 橙）
   rTicks.forEach(v => {
     const gy = yR(v).toFixed(1);
@@ -4641,6 +4673,7 @@ const AI_HIST_CAP = 10;            // v3.5.137 历史对话仅保留最近 10 �
 let KB = [];
 let KB_FILTER = '全部';
 const kbExpanded = new Set();      // v3.5.122 知识库已展开条目的全局索引（仅控制 UI 折叠态）
+let scrollKbToNew = false;         // v3.5.142 添加后滚动定位到新条目
 let AI_CHAT = [];
 let AI_HIST = [];
 let tokenExceeded = false;
@@ -5118,6 +5151,8 @@ const SCHED_DEFAULT_ADDR = '上海市闵行区七宝镇宝南路55弄九星家�
 const SCHED_GEN_LEAD = 12 * 3600000;     // 提前 12 小时生成计划
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内才推送（避免补推历史）
 const SCHED_GEN_COOLDOWN = 30 * 60000;   // AI 生成失败重试冷却 30 分钟
+// AI 计划 prompt 版本：内容与分类结构变化时递增，可强制所有 AI 任务用最新 prompt 重新生成
+const PLAN_PROMPT_VERSION = '3';
 let SCHED_TASKS = [];
 const _pad2 = n => String(n).padStart(2, '0');
 
@@ -5389,7 +5424,9 @@ async function generatePlanForTask(task, trig) {
   task.content = String(r).trim();
   task.genPeriod = periodKey(task, trig);
   task.genDate = dateStr;
+  task.planVer = PLAN_PROMPT_VERSION;   // v3.5.142 记录生成本内容所用的 prompt 版本
   saveSchedTasks();
+  renderTodayPlanCard();                // 生成后即时刷新首页总览
 }
 
 /* ---------- 推送（复用今日成就的 PushPlus 配置） ---------- */
@@ -5450,7 +5487,9 @@ async function runScheduler(forceGen) {
       if (now >= winStart && now < next) {
         const pk = periodKey(task, next);
         const cooling = (Date.now() - (task.genTryTs || 0)) <= SCHED_GEN_COOLDOWN;
-        if (task.genPeriod !== pk && (!cooling || (forceGen && !task.content))) {
+        // v3.5.142 内容版本过期也重生成：已有内容但用的是旧 prompt 版本，用户主动查看(forceGen)时立即刷新
+        const staleVer = (task.planVer || '') !== PLAN_PROMPT_VERSION;
+        if ((task.genPeriod !== pk || staleVer) && (!cooling || (forceGen && (!task.content || staleVer)))) {
           task.genTryTs = Date.now(); saveSchedTasks();
           await generatePlanForTask(task, next);
         }
@@ -5470,30 +5509,27 @@ async function runScheduler(forceGen) {
   if (currentManageTab === 'tasks') renderSchedTasks();
   renderTodayPlanCard();
 }
-// v3.5.140 AI 计划 prompt 升级：检测到 prompt 版本变化则清空 AI 任务的生成周期标记，
-// 使其在进入「提前 12h 生成窗口」时自动用新分类重新生成（旧内容先保留，不空白）
-const PLAN_PROMPT_VERSION = '2';
+// AI 计划 prompt 升级：检测到 prompt 版本变化则立即用最新 prompt 重新生成一次（不再等 12h 窗口），
+// 有内容则整段替换为最新；无内容（未配密钥/网络失败）则保留旧内容不空白。
+// v3.5.142 版本号升至 3——本次会强制把所有 AI 任务的内容刷新为新分类（喂养/起居护理/健康·出行）。
 async function migratePlanPromptVersion() {
   let v = '';
   try { v = localStorage.getItem('plan_prompt_ver') || ''; } catch (e) {}
   if (v === PLAN_PROMPT_VERSION) return;
-  const aiTasks = SCHED_TASKS.filter(t => t && t.mode === 'ai');
-  let changed = false;
-  aiTasks.forEach(t => { if (t.genPeriod) { t.genPeriod = ''; t.genTryTs = 0; changed = true; } });
-  if (changed) saveSchedTasks();
   try { localStorage.setItem('plan_prompt_ver', PLAN_PROMPT_VERSION); } catch (e) {}
-  // v3.5.141 部署后立即用最新 prompt 重新生成一次（不等 12h 窗口），
-  // 有内容则整段替换为最新；无内容（如未配密钥/网络失败）则保留旧内容不空白。
+  const aiTasks = SCHED_TASKS.filter(t => t && t.mode === 'ai');
+  // 立即用最新 prompt 重新生成（不等窗口）：替换为新分类内容
   for (const t of aiTasks) {
     if (!t.enabled) continue;
     try {
       const now = new Date();
       const { prev, next } = computeTriggers(t, now);
-      const trig = next || (t.freq === 'once' ? prev : null);
-      if (!trig) continue;
+      const trig = next || (t.freq === 'once' ? prev : null) || now;
       const before = t.content || '';
       await generatePlanForTask(t, trig);
-      if (!t.content || t.content === before) { t.content = before; t.genPeriod = ''; saveSchedTasks(); }
+      if (!t.content || t.content === before) {   // 生成失败 → 保留旧内容并清掉周期标记，之后窗口内还会重试
+        t.content = before; t.genPeriod = ''; saveSchedTasks();
+      }
     } catch (e) { console.warn('[计划] 发布后重新生成失败', e); }
   }
 }
@@ -5506,19 +5542,27 @@ function initScheduler() {
 }
 
 /* ---------- 今日计划（首页总览卡片） ---------- */
+// v3.5.142 重写：只要 AI 任务有已生成内容就展示，不再苛求「触发周期==今天」。
+// 优先展示「今日计划」（genDate==今天），否则展示最近生成的那份（如提前 12h 生成的次日计划），
+// 避免每天 00:00~触发时刻之间、以及已推送次日计划后总览空白。
 function getCurrentPlan() {
   const task = SCHED_TASKS.find(t => t.enabled && t.mode === 'ai');
   if (!task) return null;
-  const now = new Date();
-  const { prev, next } = computeTriggers(task, now);
   const todayStr = getTodayDateStr();
-  if (prev && periodKey(task, prev) === todayStr && task.pushPeriod === periodKey(task, prev) && task.content) {
-    return { text: task.content, editable: false, date: todayStr };
+  const editable = isPlanEditable(task);
+  const pushToday = task.pushPeriod === todayStr;
+  // ① 有内容：优先今日，否则取最近生成的计划（genDate 最接近今天）
+  if (task.content) {
+    const genToday = task.genDate === todayStr;
+    return { text: task.content, editable: editable, date: task.genDate || todayStr, today: genToday, pushed: pushToday, pending: false };
   }
-  if (next && periodKey(task, next) === todayStr) {
+  // ② 尚无内容：处于生成窗口内则显示占位；否则若有即将到来的触发点也给出占位提示
+  const now = new Date();
+  const { next } = computeTriggers(task, now);
+  if (next) {
     const winStart = new Date(next.getTime() - SCHED_GEN_LEAD);
-    if (now >= winStart && now < next) {
-      return { text: task.content || '', editable: true, date: todayStr, pending: !task.content };
+    if (now >= winStart) {
+      return { text: '', editable: true, date: periodKey(task, next), today: periodKey(task, next) === todayStr, pushed: false, pending: true };
     }
   }
   return null;
@@ -5754,7 +5798,16 @@ async function addKb() {
   const cat = aiClassifyKb(v);                 // 先关键词兜底，保证即时有分类
   el.value = '';
   KB.push({ text: v, cat });
-  saveKBLocal(); await saveKBCloud(); renderKb(); updateKbCntLine();
+  saveKBLocal(); await saveKBCloud();
+  // v3.5.142 添加后：清空搜索、确保该分类可见、展开新条目，并滚动定位到它
+  kbSearchQuery = '';
+  const searchEl = document.getElementById('kbSearch'); if (searchEl) searchEl.value = '';
+  kbSelectedCats = new Set(KB_FILTER_CATS);
+  renderCatDropdownPanel('kb');
+  kbExpanded.add(KB.length - 1);   // 展开刚添加的这条（索引为末尾）
+  scrollKbToNew = true;
+  renderKb(); updateKbCntLine();
+  showToast('已添加一条记录');
   const cfg = getAITagConfig();
   if (cfg) {                                   // 异步用大模型精分（不阻塞）
     classifyKbLLM(v, cfg).then(c => {
@@ -5850,6 +5903,18 @@ function renderKb() {
       + `<span class="rec-edit" onclick="event.stopPropagation();editKb(${realIdx})" title="编辑">${MEMO_EDIT_SVG}</span>`
       + `<span class="rec-delete" onclick="event.stopPropagation();delKb(${realIdx})" title="删除">${MEMO_DEL_SVG}</span></div>`;
   }).join('');
+  // v3.5.142 添加新记录后：把列表滚动到新条目并短暂高亮
+  if (scrollKbToNew) {
+    scrollKbToNew = false;
+    const newIdx = KB.length - 1;
+    const pos = arr.indexOf(KB[newIdx]);          // 新条目在渲染列表中的位置
+    const item = pos >= 0 ? list.children[pos] : list.lastElementChild;
+    if (item) {
+      try { item.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { item.scrollIntoView(); }
+      item.classList.add('kb-just-added');
+      setTimeout(() => { try { item.classList.remove('kb-just-added'); } catch (e) {} }, 2000);
+    }
+  }
 }
 function updateKbCntLine() { const el = document.getElementById('kbCntLine'); if (el) el.textContent = '知识库 ' + KB.length + ' 条'; }
 async function loadKBCloud() {
@@ -6378,6 +6443,7 @@ function openAnalysis() {
   html += makeLactaseDualChart(poopGapPts, lactaseGap, {
     title: '💩 大便与喝奶时间差变化（截止昨日）',
     leftLabel: '时间差', leftUnit: '分钟', leftFmt: v => String(Math.round(v)),
+    leftFold: { base: 100, step: 20 },          // v3.5.142 0~100 等间隔 20，>100 折叠到顶部，便于看 100 内变化
     rightLabel: '乳糖酶量', rightUnit: '滴', rightFmt: v => String(v),
     xTickMode: 'keyDates',
     leftTipText: d => (d.count > 1 ? `${d.value}分钟 · ${d.count}次平均` : `${d.value}分钟`),
