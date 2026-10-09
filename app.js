@@ -1378,7 +1378,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.150'; // v3.5.150: AI育儿对话输入框为空时显示话筒(按住说话)，非空时同位置换为发送按钮(蓝底白色向上箭头)，可回车或点该按钮发送
+const APP_VERSION = 'v3.5.151'; // v3.5.151: 日报胶囊与AI育儿胶囊水平居中对齐，并上移使胶囊中线压在总览下边框上(一半进框一半出框)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
