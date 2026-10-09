@@ -1349,7 +1349,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.146'; // v3.5.146:①总览日报胶囊上移,去掉与卡片的6px间隙,胶囊上边框与总览下边框重合(贴紧)
+const APP_VERSION = 'v3.5.147'; // v3.5.147:①AI育儿胶囊与日报胶囊同字号(均12px)且均加粗(font-weight 800),两胶囊视觉一致
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
