@@ -1378,7 +1378,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.151'; // v3.5.151: 日报胶囊与AI育儿胶囊水平居中对齐，并上移使胶囊中线压在总览下边框上(一半进框一半出框)
+const APP_VERSION = 'v3.5.152'; // v3.5.152: 日报胶囊与AI育儿胶囊尺寸统一(padding/border-radius一致,高度对齐)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
