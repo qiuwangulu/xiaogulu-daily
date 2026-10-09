@@ -1359,7 +1359,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.138'; // v3.5.138:天气地理编码精度优化——内置「区县」坐标优先于Open-Meteo市级结果(避免落在市中心且不精确),显示名统一为「城市·区县」(如「上海·闵行区」)并去掉「上海·上海市」冗余;同时补全全国主要城市核心区县坐标库(原仅上海16区)
+const APP_VERSION = 'v3.5.139'; // v3.5.139:天气地理编码新增「镇/街道」级坐标库(按需补点),七宝镇等可定位到「城市·区·镇」(如「上海·闵行区·七宝镇」);优先级 镇>区>市>Open-Meteo,保证最细一级命中
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5228,6 +5228,10 @@ const CN_DISTRICT_FALLBACK = {
   '锦江': {lat:30.6490, lon:104.1010, c:'成都', n:'锦江区'}, '武侯': {lat:30.6420, lon:104.0430, c:'成都', n:'武侯区'},
   '武昌': {lat:30.5450, lon:114.3050, c:'武汉', n:'武昌区'}, '江汉': {lat:30.6160, lon:114.2700, c:'武汉', n:'江汉区'}
 };
+// 镇 / 街道级坐标（比区更贴近，按需补充；显示名带「区·镇」，全国重名少的镇才放这里）
+const CN_TOWN_FALLBACK = {
+  '七宝镇': {lat:31.1550, lon:121.3328, c:'上海', n:'闵行区·七宝镇'}
+};
 // 由详细地址逐级生成搜索候选（去重、保持精度优先）
 function geoCandidates(addr) {
   const out = [];
@@ -5245,9 +5249,10 @@ function geoCandidates(addr) {
   if (dm) dm.slice().reverse().forEach(x => { push(x); push(x.replace(/(区|县|旗)$/, '')); });
   return out;
 }
-// 兜底：按地址中的「区」→「市」关键字取内置坐标，显示名统一为「城市·区县」
+// 兜底：按地址中的「镇」→「区」→「市」关键字取内置坐标，显示名统一为「城市·区·镇」
 function geoFallback(addr) {
   const a = String(addr || '');
+  for (const k in CN_TOWN_FALLBACK) if (a.indexOf(k) >= 0) { const v = CN_TOWN_FALLBACK[k]; return { lat: v.lat, lon: v.lon, name: (v.c ? v.c + '·' : '') + v.n }; }
   for (const k in CN_DISTRICT_FALLBACK) if (a.indexOf(k) >= 0) { const v = CN_DISTRICT_FALLBACK[k]; return { lat: v.lat, lon: v.lon, name: (v.c ? v.c + '·' : '') + v.n }; }
   for (const k in CN_CITY_FALLBACK) if (a.indexOf(k) >= 0) return { lat: CN_CITY_FALLBACK[k][0], lon: CN_CITY_FALLBACK[k][1], name: k };
   return null;
