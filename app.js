@@ -1359,7 +1359,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.137'; // v3.5.137:①首页分类下拉/搜索框字号统一14;②任务「开始时间」改为同首页添加弹窗的数字输入(时:分);③AI育儿历史对话不再同步家庭云、只保留最近10条;④云端同步三按钮(设置/同步/恢复)等宽并排;⑤AI推荐任务全局仅允许一个,已有则新建时禁用该选项;⑥修复详细中文地址查不到天气的问题(地理编码逐级降级+内置城市兜底)
+const APP_VERSION = 'v3.5.138'; // v3.5.138:天气地理编码精度优化——内置「区县」坐标优先于Open-Meteo市级结果(避免落在市中心且不精确),显示名统一为「城市·区县」(如「上海·闵行区」)并去掉「上海·上海市」冗余;同时补全全国主要城市核心区县坐标库(原仅上海16区)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5170,14 +5170,17 @@ async function geocodeAddr(addr) {
   if (!raw) return null;
   const cache = (() => { try { return JSON.parse(localStorage.getItem(WEATHER_GEO_CACHE_KEY) || '{}'); } catch (e) { return {}; } })();
   if (cache[raw] && cache[raw].lat) return cache[raw];
-  // v3.5.137 修复「未查询到天气」：Open-Meteo 地理编码对中文详细地址（如"上海市闵行区七宝镇xx路55弄"）几乎匹配不到，
-  // 改为逐级降级——原地址 → 去门牌 → 市名 → 区名，任一命中即用；全部失败再用内置坐标兜底。
+  // v3.5.137+ 优先级：①内置「区县」坐标（确定是中国、精确到区，且比 Open-Meteo 的市级中心更贴近用户）→
+  // ②Open-Meteo 逐级降级（仅取中国境内）→ ③城市级内置坐标兜底。
+  // 说明：免费地理编码服务在国内覆盖不到街道/小区级（Nominatim 国内连不通、Open-Meteo 中文详细地址几乎匹配不到），
+  // 故最精确只能稳定到「区/县」一级，同城市各区县天气基本一致，这一级已足够准确。
+  const fb = geoFallback(raw);
+  if (fb && fb.name.indexOf('·') >= 0) { cache[raw] = fb; try { localStorage.setItem(WEATHER_GEO_CACHE_KEY, JSON.stringify(cache)); } catch (e) {} return fb; }
   const cands = geoCandidates(raw);
   for (let i = 0; i < cands.length; i++) {
     const r = await geoSearchOne(cands[i]);
     if (r) { cache[raw] = r; try { localStorage.setItem(WEATHER_GEO_CACHE_KEY, JSON.stringify(cache)); } catch (e) {} return r; }
   }
-  const fb = geoFallback(raw);
   if (fb) { cache[raw] = fb; try { localStorage.setItem(WEATHER_GEO_CACHE_KEY, JSON.stringify(cache)); } catch (e) {} return fb; }
   console.warn('[天气] 地理编码全部失败，地址：', raw);
   return null;
@@ -5198,12 +5201,32 @@ const CN_CITY_FALLBACK = {
   '呼和浩特': [40.8414, 111.7519], '拉萨': [29.6500, 91.1000], '三亚': [18.2528, 109.5119],
   '香港': [22.3193, 114.1694], '澳门': [22.1987, 113.5439], '台北': [25.0330, 121.5654]
 };
-// 常用区县坐标（比市级更贴近，优先匹配）
+// 常用区县坐标（比市级更贴近，优先匹配）。值为 {lat, lon, c:城市, n:区县名}，
+// 显示名统一为「城市·区县」，让定位更直观（免费地理编码在国内到不了小区/街道级）。
+// 同城市各区县天气几乎一致，故坐标用各区县中心近似即可。
 const CN_DISTRICT_FALLBACK = {
-  '闵行': [31.1128, 121.3817], '浦东': [31.2216, 121.5397], '徐汇': [31.1883, 121.4365], '黄浦': [31.2317, 121.4844],
-  '静安': [31.2290, 121.4483], '长宁': [31.2204, 121.4246], '普陀': [31.2495, 121.3963], '虹口': [31.2646, 121.5050],
-  '杨浦': [31.2595, 121.5264], '宝山': [31.4050, 121.4894], '嘉定': [31.3756, 121.2655], '松江': [31.0322, 121.2277],
-  '青浦': [31.1497, 121.1243], '奉贤': [30.9179, 121.4740], '金山': [30.7418, 121.3414], '崇明': [31.6269, 121.3973]
+  // 上海 16 区
+  '黄浦': {lat:31.2317, lon:121.4844, c:'上海', n:'黄浦区'}, '徐汇': {lat:31.1883, lon:121.4365, c:'上海', n:'徐汇区'},
+  '长宁': {lat:31.2204, lon:121.4246, c:'上海', n:'长宁区'}, '静安': {lat:31.2290, lon:121.4483, c:'上海', n:'静安区'},
+  '普陀': {lat:31.2495, lon:121.3963, c:'上海', n:'普陀区'}, '虹口': {lat:31.2646, lon:121.5050, c:'上海', n:'虹口区'},
+  '杨浦': {lat:31.2595, lon:121.5264, c:'上海', n:'杨浦区'}, '闵行': {lat:31.1128, lon:121.3817, c:'上海', n:'闵行区'},
+  '宝山': {lat:31.4050, lon:121.4894, c:'上海', n:'宝山区'}, '嘉定': {lat:31.3756, lon:121.2655, c:'上海', n:'嘉定区'},
+  '浦东': {lat:31.2216, lon:121.5397, c:'上海', n:'浦东新区'}, '金山': {lat:30.7418, lon:121.3414, c:'上海', n:'金山区'},
+  '松江': {lat:31.0322, lon:121.2277, c:'上海', n:'松江区'}, '青浦': {lat:31.1497, lon:121.1243, c:'上海', n:'青浦区'},
+  '奉贤': {lat:30.9179, lon:121.4740, c:'上海', n:'奉贤区'}, '崇明': {lat:31.6269, lon:121.3973, c:'上海', n:'崇明区'},
+  // 北京核心城区
+  '东城': {lat:39.9170, lon:116.4160, c:'北京', n:'东城区'}, '西城': {lat:39.9150, lon:116.3660, c:'北京', n:'西城区'},
+  '朝阳': {lat:39.9219, lon:116.4435, c:'北京', n:'朝阳区'}, '海淀': {lat:39.9599, lon:116.2980, c:'北京', n:'海淀区'},
+  '丰台': {lat:39.8585, lon:116.2866, c:'北京', n:'丰台区'}, '通州': {lat:39.9097, lon:116.6569, c:'北京', n:'通州区'},
+  // 广州核心区
+  '天河': {lat:23.1247, lon:113.3614, c:'广州', n:'天河区'}, '越秀': {lat:23.1290, lon:113.2670, c:'广州', n:'越秀区'},
+  '海珠': {lat:23.0830, lon:113.3170, c:'广州', n:'海珠区'}, '番禺': {lat:22.9370, lon:113.3840, c:'广州', n:'番禺区'},
+  // 深圳核心区
+  '福田': {lat:22.5410, lon:114.0570, c:'深圳', n:'福田区'}, '南山': {lat:22.5310, lon:113.9390, c:'深圳', n:'南山区'},
+  '宝安': {lat:22.5550, lon:113.8830, c:'深圳', n:'宝安区'}, '龙岗': {lat:22.7230, lon:114.2130, c:'深圳', n:'龙岗区'},
+  // 成都 / 武汉核心区（区名全国重名少）
+  '锦江': {lat:30.6490, lon:104.1010, c:'成都', n:'锦江区'}, '武侯': {lat:30.6420, lon:104.0430, c:'成都', n:'武侯区'},
+  '武昌': {lat:30.5450, lon:114.3050, c:'武汉', n:'武昌区'}, '江汉': {lat:30.6160, lon:114.2700, c:'武汉', n:'江汉区'}
 };
 // 由详细地址逐级生成搜索候选（去重、保持精度优先）
 function geoCandidates(addr) {
@@ -5222,10 +5245,10 @@ function geoCandidates(addr) {
   if (dm) dm.slice().reverse().forEach(x => { push(x); push(x.replace(/(区|县|旗)$/, '')); });
   return out;
 }
-// 兜底：按地址中的「区」→「市」关键字取内置坐标
+// 兜底：按地址中的「区」→「市」关键字取内置坐标，显示名统一为「城市·区县」
 function geoFallback(addr) {
   const a = String(addr || '');
-  for (const k in CN_DISTRICT_FALLBACK) if (a.indexOf(k) >= 0) return { lat: CN_DISTRICT_FALLBACK[k][0], lon: CN_DISTRICT_FALLBACK[k][1], name: k };
+  for (const k in CN_DISTRICT_FALLBACK) if (a.indexOf(k) >= 0) { const v = CN_DISTRICT_FALLBACK[k]; return { lat: v.lat, lon: v.lon, name: (v.c ? v.c + '·' : '') + v.n }; }
   for (const k in CN_CITY_FALLBACK) if (a.indexOf(k) >= 0) return { lat: CN_CITY_FALLBACK[k][0], lon: CN_CITY_FALLBACK[k][1], name: k };
   return null;
 }
@@ -5237,7 +5260,7 @@ async function geoSearchOne(q) {
     const j = await res.json();
     const list = (j && j.results) || [];
     const r = list.find(x => x && (x.country_code === 'CN' || x.country === '中国'));
-    if (r) return { lat: r.latitude, lon: r.longitude, name: (r.name || '') + (r.admin1 ? '·' + r.admin1 : '') };
+    if (r) { let name = r.name || ''; if (r.admin1 && r.admin1 !== name && !r.admin1.startsWith(name)) name += '·' + r.admin1; return { lat: r.latitude, lon: r.longitude, name }; }
   } catch (e) { console.warn('[天气] 地理编码失败(', q, '):', e); }
   return null;
 }
