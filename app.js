@@ -951,11 +951,11 @@ function updateOverview(skipPush) {
     html += `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> 无</span></div>`;
   }
 
-  // v3.5.106 总览内「日报」小组件：点击弹窗看完整日报（图标同修改前，不显示条数）
-  // v3.5.109 日报胶囊右移并改添加按钮底色（右对齐包裹）
-  html += `<div class="ov-report-row"><div class="ov-report-pill" onclick="openReport()">&#128200; 日报 <span class="pill-chev">&#8250;</span></div></div>`;
-  // v3.5.132 首页总览「今日计划」卡片（默认收起，点击展开；无 AI 任务则不显示）
-  html += renderTodayPlanCardHTML();
+  // v3.5.140 总览底部行：今日计划（左，可展开）+ 日报（右）并排
+  const planHtml = renderTodayPlanCardHTML();
+  html += '<div class="ov-bottom-row">' + planHtml
+        + '<div class="ov-report-pill" onclick="openReport()">&#128200; 日报 <span class="pill-chev">&#8250;</span></div>'
+        + '</div>';
 
   bar.innerHTML = html;
   // 推送检查改为脏位标记，由统一调度器延迟合并执行
@@ -1359,7 +1359,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.139'; // v3.5.139:天气地理编码新增「镇/街道」级坐标库(按需补点),七宝镇等可定位到「城市·区·镇」(如「上海·闵行区·七宝镇」);优先级 镇>区>市>Open-Meteo,保证最细一级命中
+const APP_VERSION = 'v3.5.140'; // v3.5.140:①首页总览底部「今日计划」与「日报」并排(可展开);②任务卡片默认收起、点击标题展开;③任务编辑弹窗label/hint文字适配深浅主题(深色白/浅色黑);④AI今日计划prompt简化+分类重分(【喂养】【起居护理】【健康·出行】),部署后用新分类重新生成(保留旧内容不空白)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5347,16 +5347,16 @@ function buildPlanSystemPrompt(dateStr, wText) {
   const w = localStorage.getItem('babyWeight') || '';
   const kbPart = KB.slice(0, 50).map(x => '- [' + x.cat + '] ' + x.text).join('\n');
   return '你是一位专业、贴心的婴幼儿育儿规划助手，服务对象是长辈（外婆）带小宝宝，目标是提前生成「今日计划」以减少带娃决策压力。\n'
-    + '请用简体中文，具体、可操作；不要使用 markdown 标记（不用 * 和 #），分点请用「·」或「1. 2. 3.」。\n\n'
+    + '请用简体中文、具体可操作；不要使用 markdown 标记；分点请用「·」。内容精炼：每个分类 3 条以内、每条不超过 20 字。\n\n'
     + '【宝宝档案】\n- 姓名：' + BABY_NAME + '；出生：' + birthStr + '；当前 ' + ad.months + ' 月龄 ' + ad.days + ' 天\n'
     + ((h || w) ? '- 身高 ' + (h || '—') + 'cm，体重 ' + (w || '—') + 'kg\n' : '')
     + '\n【家庭知识库（优先参考，含权威育儿资料）】\n' + (kbPart || '（暂无）') + '\n'
     + '\n【目标日期天气】' + dateStr + ' ' + wText + '\n'
     + '\n【规划规则——请严格按以下三部分输出】\n'
-    + '【衣+行+健康】根据天气，结合知识库与宝宝情况，推荐户外活动时间与时长、穿衣、防病注意事项（如大风不出门、起雾少开窗、降温添衣、雾霾减少外出等）。\n'
-    + '【食】单次奶量、喝奶次数、乳糖酶用量、辅食建议尝试的食物及具体量、注意事项（过敏/防呛等）。\n'
-    + '【住】是否洗澡（结合天气与知识库，提醒开暖风等）、是否剪指甲、营养补剂、排便关注（据此前情况与知识库提醒，如近期易腹泻需肚子保暖）。\n'
-    + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 30 字的关键提示；之后换行写「计划：」，再按【衣+行+健康】【食】【住】分块给出内容。';
+    + '【喂养】单次奶量、喝奶次数、辅食（尝试食物及量）、喝水、营养补剂、过敏/防呛提醒。\n'
+    + '【起居护理】穿衣（结合天气）、洗澡、剪指甲、睡眠、排便关注。\n'
+    + '【健康·出行】户外活动时间与时长、天气应对（大风/雾霾/降温）、防病注意。\n'
+    + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【喂养】【起居护理】【健康·出行】分块给出内容。';
 }
 function splitPlan(full) {
   if (!full) return { summary: '', detail: '' };
@@ -5471,8 +5471,21 @@ async function runScheduler(forceGen) {
   if (currentManageTab === 'tasks') renderSchedTasks();
   renderTodayPlanCard();
 }
+// v3.5.140 AI 计划 prompt 升级：检测到 prompt 版本变化则清空 AI 任务的生成周期标记，
+// 使其在进入「提前 12h 生成窗口」时自动用新分类重新生成（旧内容先保留，不空白）
+const PLAN_PROMPT_VERSION = '2';
+function migratePlanPromptVersion() {
+  let v = '';
+  try { v = localStorage.getItem('plan_prompt_ver') || ''; } catch (e) {}
+  if (v === PLAN_PROMPT_VERSION) return;
+  let changed = false;
+  SCHED_TASKS.forEach(t => { if (t && t.mode === 'ai' && t.genPeriod) { t.genPeriod = ''; t.genTryTs = 0; changed = true; } });
+  if (changed) saveSchedTasks();
+  try { localStorage.setItem('plan_prompt_ver', PLAN_PROMPT_VERSION); } catch (e) {}
+}
 function initScheduler() {
   loadSchedTasks();
+  migratePlanPromptVersion();
   loadWeatherAddrCloud().catch(() => {});
   runScheduler();
   setInterval(runScheduler, 60000);
@@ -5552,31 +5565,36 @@ function setAIModeDisabled(dis, showTip) {
   if (dis && r.checked) { setRadio('taskMode', 'custom'); onModeChange(); }
   if (dis && showTip) showToast('已有 AI 推荐任务，最多只能添加一个');
 }
+// v3.5.140 任务卡片默认收起，点击标题展开查看/编辑计划内容
+let taskExpanded = {};
+function toggleTaskExpand(id) { taskExpanded[id] = !taskExpanded[id]; renderSchedTasks(); }
 function renderSchedTasks() {
   const box = document.getElementById('tasksList'); if (!box) return;
   if (!SCHED_TASKS.length) { box.innerHTML = ''; return; }
   let h = '';
   SCHED_TASKS.forEach(t => {
     const editable = isPlanEditable(t);
-    // v3.5.136 任务名称（用户可自定，未填则给默认名）
     const nm = (t.name && String(t.name).trim()) ? String(t.name).trim() : (t.mode === 'ai' ? '今日计划' : '定时提醒');
     const icon = t.mode === 'ai' ? '🤖' : '✏️';
+    const expanded = !!taskExpanded[t.id];
+    const chev = expanded ? '▾' : '▸';
     h += '<div class="task-card">'
       + '<div class="task-row">'
-      + '<div class="task-info">'
-      + '<div class="task-name">' + icon + ' ' + escapeHtml(nm) + '</div>'
+      + '<div class="task-info" onclick="toggleTaskExpand(\'' + t.id + '\')">'
+      + '<div class="task-name"><span class="task-chev">' + chev + '</span>' + icon + ' ' + escapeHtml(nm) + '</div>'
       + '<div class="task-sub">' + SCHED_FREQ_LABEL[t.freq] + ' ' + t.startDate + ' ' + t.startTime + ' · ' + (t.mode === 'ai' ? 'AI 推荐计划' : '自定义内容') + (t.enabled ? '' : ' · 已停止') + '</div>'
       + '</div>'
       + '<div class="task-actions">'
       + '<span class="rec-edit" onclick="openTaskEditor(\'' + t.id + '\')" title="编辑"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>'
       + '<div class="toggle-switch ' + (t.enabled ? 'on' : '') + '" data-tid="' + t.id + '" onclick="toggleTask(\'' + t.id + '\')" title="开启/关闭该任务"></div>'
-      + '</div></div>'
-      // v3.5.136 开关含义提示（开启后会通过微信推送）
-      + '<div class="task-push-hint">' + (t.enabled ? '已开启，到点将推送微信消息' : '开启将会推送微信消息') + '</div>';
-    if (t.mode === 'ai') {
-      h += '<textarea class="task-plan" id="plan_' + t.id + '" placeholder="AI 推荐计划会在触发前 12 小时自动生成为此，可直接编辑"' + (editable ? '' : ' readonly') + ' onfocus="onPlanFocus(\'' + t.id + '\')" onclick="onPlanFocus(\'' + t.id + '\')" oninput="onPlanInput(\'' + t.id + '\',this.value)">' + escapeHtml(t.content || '') + '</textarea>';
-    } else {
-      h += '<textarea class="task-plan" id="plan_' + t.id + '" placeholder="输入到点要推送的消息内容" oninput="onPlanInput(\'' + t.id + '\',this.value)">' + escapeHtml(t.content || '') + '</textarea>';
+      + '</div></div>';
+    if (expanded) {
+      h += '<div class="task-push-hint">' + (t.enabled ? '已开启，到点将推送微信消息' : '开启将会推送微信消息') + '</div>';
+      if (t.mode === 'ai') {
+        h += '<textarea class="task-plan" id="plan_' + t.id + '" placeholder="AI 推荐计划会在触发前 12 小时自动生成为此，可直接编辑"' + (editable ? '' : ' readonly') + ' onfocus="onPlanFocus(\'' + t.id + '\')" onclick="onPlanFocus(\'' + t.id + '\')" oninput="onPlanInput(\'' + t.id + '\',this.value)">' + escapeHtml(t.content || '') + '</textarea>';
+      } else {
+        h += '<textarea class="task-plan" id="plan_' + t.id + '" placeholder="输入到点要推送的消息内容" oninput="onPlanInput(\'' + t.id + '\',this.value)">' + escapeHtml(t.content || '') + '</textarea>';
+      }
     }
     h += '</div>';
   });
