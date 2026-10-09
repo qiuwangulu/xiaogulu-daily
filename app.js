@@ -1359,7 +1359,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.140'; // v3.5.140:①首页总览底部「今日计划」与「日报」并排(可展开);②任务卡片默认收起、点击标题展开;③任务编辑弹窗label/hint文字适配深浅主题(深色白/浅色黑);④AI今日计划prompt简化+分类重分(【喂养】【起居护理】【健康·出行】),部署后用新分类重新生成(保留旧内容不空白)
+const APP_VERSION = 'v3.5.141'; // v3.5.141:①任务展开箭头改用备忘录「已办事项」同款(▶字符+旋转90°);②AI计划文本框默认高度加倍(90→180px);③部署后立即用最新prompt重新生成一次今日计划(不等12h窗口,失败保留旧内容);④首页总览今日计划改为「仅显摘要+详情按钮」,点详情弹窗看全文,日报保持最右
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5119,7 +5119,6 @@ const SCHED_GEN_LEAD = 12 * 3600000;     // 提前 12 小时生成计划
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内才推送（避免补推历史）
 const SCHED_GEN_COOLDOWN = 30 * 60000;   // AI 生成失败重试冷却 30 分钟
 let SCHED_TASKS = [];
-let todayPlanExpanded = false;
 const _pad2 = n => String(n).padStart(2, '0');
 
 function loadSchedTasks() {
@@ -5474,20 +5473,34 @@ async function runScheduler(forceGen) {
 // v3.5.140 AI 计划 prompt 升级：检测到 prompt 版本变化则清空 AI 任务的生成周期标记，
 // 使其在进入「提前 12h 生成窗口」时自动用新分类重新生成（旧内容先保留，不空白）
 const PLAN_PROMPT_VERSION = '2';
-function migratePlanPromptVersion() {
+async function migratePlanPromptVersion() {
   let v = '';
   try { v = localStorage.getItem('plan_prompt_ver') || ''; } catch (e) {}
   if (v === PLAN_PROMPT_VERSION) return;
+  const aiTasks = SCHED_TASKS.filter(t => t && t.mode === 'ai');
   let changed = false;
-  SCHED_TASKS.forEach(t => { if (t && t.mode === 'ai' && t.genPeriod) { t.genPeriod = ''; t.genTryTs = 0; changed = true; } });
+  aiTasks.forEach(t => { if (t.genPeriod) { t.genPeriod = ''; t.genTryTs = 0; changed = true; } });
   if (changed) saveSchedTasks();
   try { localStorage.setItem('plan_prompt_ver', PLAN_PROMPT_VERSION); } catch (e) {}
+  // v3.5.141 部署后立即用最新 prompt 重新生成一次（不等 12h 窗口），
+  // 有内容则整段替换为最新；无内容（如未配密钥/网络失败）则保留旧内容不空白。
+  for (const t of aiTasks) {
+    if (!t.enabled) continue;
+    try {
+      const now = new Date();
+      const { prev, next } = computeTriggers(t, now);
+      const trig = next || (t.freq === 'once' ? prev : null);
+      if (!trig) continue;
+      const before = t.content || '';
+      await generatePlanForTask(t, trig);
+      if (!t.content || t.content === before) { t.content = before; t.genPeriod = ''; saveSchedTasks(); }
+    } catch (e) { console.warn('[计划] 发布后重新生成失败', e); }
+  }
 }
 function initScheduler() {
   loadSchedTasks();
-  migratePlanPromptVersion();
+  Promise.resolve(migratePlanPromptVersion()).then(() => runScheduler()).catch(() => runScheduler());
   loadWeatherAddrCloud().catch(() => {});
-  runScheduler();
   setInterval(runScheduler, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) runScheduler(); });
 }
@@ -5510,24 +5523,29 @@ function getCurrentPlan() {
   }
   return null;
 }
+// v3.5.141 总览卡片只显示摘要；点击「详情」弹窗看全部内容
 function renderTodayPlanCardHTML() {
   const p = getCurrentPlan();
   if (!p) return '';
   const sp = splitPlan(p.text);
   const disp = sp.summary || (p.text ? p.text.split('\n')[0].slice(0, 40) : '（尚未生成）');
-  const full = sp.detail || p.text || '（尚未生成）';
-  const detailStyle = todayPlanExpanded ? 'display:block;' : 'display:none;';
-  const chev = todayPlanExpanded ? '▾' : '▸';
-  const note = p.editable ? '' : ' <span class="ov-plan-lock">已推送·只读</span>';
-  return '<div class="ov-plan-card" onclick="toggleTodayPlan()">'
-    + '<div class="ov-plan-head"><span class="ov-plan-title">📅 今日计划</span>'
+  return '<div class="ov-plan-card">'
+    + '<span class="ov-plan-title">📅 今日计划</span>'
     + '<span class="ov-plan-summary">' + escapeHtml(disp) + '</span>'
-    + '<span class="ov-plan-chev">' + chev + '</span></div>'
-    + '<div class="ov-plan-detail" style="' + detailStyle + '">' + escapeHtml(full) + note + '</div>'
+    + '<span class="ov-plan-detail-btn" onclick="openPlanDetail()">详情</span>'
     + '</div>';
 }
 function renderTodayPlanCard() { try { updateOverview(true); } catch (e) {} }
-function toggleTodayPlan() { todayPlanExpanded = !todayPlanExpanded; renderTodayPlanCard(); }
+function openPlanDetail() {
+  const p = getCurrentPlan();
+  const c = (p && p.text) || '';
+  const sp = splitPlan(c);
+  const sumEl = document.getElementById('planDetailSum');
+  const bodyEl = document.getElementById('planDetailBody');
+  if (sumEl) sumEl.innerHTML = sp.summary ? '📌 ' + escapeHtml(sp.summary) : '';
+  if (bodyEl) bodyEl.textContent = (sp.detail || c || '（尚未生成）');
+  showModal('planDetailModal');
+}
 
 /* ---------- 定时任务 UI ---------- */
 const SCHED_FREQ_LABEL = { once: '仅一次', daily: '每天', weekly: '每周', monthly: '每月' };
@@ -5577,11 +5595,10 @@ function renderSchedTasks() {
     const nm = (t.name && String(t.name).trim()) ? String(t.name).trim() : (t.mode === 'ai' ? '今日计划' : '定时提醒');
     const icon = t.mode === 'ai' ? '🤖' : '✏️';
     const expanded = !!taskExpanded[t.id];
-    const chev = expanded ? '▾' : '▸';
     h += '<div class="task-card">'
       + '<div class="task-row">'
       + '<div class="task-info" onclick="toggleTaskExpand(\'' + t.id + '\')">'
-      + '<div class="task-name"><span class="task-chev">' + chev + '</span>' + icon + ' ' + escapeHtml(nm) + '</div>'
+      + '<div class="task-name' + (expanded ? ' open' : '') + '"><span class="task-chev">▶</span>' + icon + ' ' + escapeHtml(nm) + '</div>'
       + '<div class="task-sub">' + SCHED_FREQ_LABEL[t.freq] + ' ' + t.startDate + ' ' + t.startTime + ' · ' + (t.mode === 'ai' ? 'AI 推荐计划' : '自定义内容') + (t.enabled ? '' : ' · 已停止') + '</div>'
       + '</div>'
       + '<div class="task-actions">'

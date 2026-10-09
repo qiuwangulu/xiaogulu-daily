@@ -1790,15 +1790,16 @@
   body.theme-day .task-card { background: rgba(9,132,227,0.05); border-color: rgba(9,132,227,0.15); }
   .task-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .task-info { min-width: 0; cursor: pointer; }
-  .task-chev { display: inline-block; width: 13px; color: #74b9ff; font-size: 11px; }
-  body.theme-day .task-chev { color: #0984e3; }
+  /* v3.5.141 展开箭头与备忘录「已办事项」一致：▶ 字符，展开时旋转 90°，尺寸随字号 */
+  .task-chev { display: inline-block; transition: transform .2s; margin-right: 2px; }
+  .task-name.open .task-chev { transform: rotate(90deg); }
   .task-name { font-size: 14px; color: #dfe6e9; font-weight: 600; }
   body.theme-day .task-name { color: #2d3436; }
   .task-sub { font-size: 12px; color: #b2bec3; margin-top: 2px; }
   .task-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .icon-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #dfe6e9; border-radius: 8px; width: 30px; height: 30px; font-size: 14px; cursor: pointer; }
   body.theme-day .icon-btn { background: rgba(9,132,227,0.08); border-color: rgba(9,132,227,0.2); color: #2d3436; }
-  .task-plan { width: 100%; box-sizing: border-box; margin-top: 10px; min-height: 90px; resize: vertical; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.2); color: #dfe6e9; padding: 8px; font-size: 13px; line-height: 1.5; font-family: inherit; }
+  .task-plan { width: 100%; box-sizing: border-box; margin-top: 10px; min-height: 180px; resize: vertical; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.2); color: #dfe6e9; padding: 8px; font-size: 13px; line-height: 1.5; font-family: inherit; }
   .task-plan[readonly] { background: rgba(0,0,0,0.32); color: #95a5a6; }
   body.theme-day .task-plan { background: #fff; border-color: rgba(9,132,227,0.2); color: #2d3436; }
   body.theme-day .task-plan[readonly] { background: #f1f3f5; color: #b2bec3; }
@@ -1840,19 +1841,23 @@
   #historyDatePickerModal { z-index: 600; }
   .te-textarea { width: 100%; box-sizing: border-box; min-height: 110px; resize: vertical; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.2); color: #dfe6e9; padding: 10px; font-size: 14px; line-height: 1.6; font-family: inherit; }
   body.theme-day .te-textarea { background: #fff; border-color: rgba(9,132,227,0.2); color: #2d3436; }
-  /* 首页总览底部行：今日计划（左，可展开）+ 日报（右）并排 */
-  .ov-bottom-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-top: 8px; }
-  /* 首页总览今日计划卡片 */
-  .ov-plan-card { flex: 1; min-width: 0; background: rgba(116,185,255,0.1); border: 1px solid rgba(116,185,255,0.25); border-radius: 12px; padding: 8px 10px; cursor: pointer; }
+  /* 首页总览底部行：今日计划（左）+ 日报（右，保持最右）；窄屏时日报换行仍右对齐 */
+  .ov-bottom-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+  /* 首页总览今日计划卡片：仅显示摘要 + 详情按钮 */
+  .ov-plan-card { flex: 1 1 60%; min-width: 0; display: flex; align-items: center; gap: 8px; background: rgba(116,185,255,0.1); border: 1px solid rgba(116,185,255,0.25); border-radius: 12px; padding: 8px 10px; }
   body.theme-day .ov-plan-card { background: rgba(9,132,227,0.07); border-color: rgba(9,132,227,0.2); }
-  .ov-plan-head { display: flex; align-items: center; gap: 8px; }
-  .ov-plan-title { font-size: 15px; color: #dfe6e9; font-weight: 600; flex-shrink: 0; }
+  .ov-plan-title { font-size: 14px; color: #dfe6e9; font-weight: 600; flex-shrink: 0; }
   body.theme-day .ov-plan-title { color: #2d3436; }
-  .ov-plan-summary { flex: 1; font-size: 13px; color: #ffeaa7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ov-plan-chev { color: #b2bec3; font-size: 13px; flex-shrink: 0; }
-  .ov-plan-detail { margin-top: 8px; font-size: 13px; color: #dfe6e9; white-space: pre-wrap; line-height: 1.6; word-break: break-word; }
-  body.theme-day .ov-plan-detail { color: #3d4852; }
-  .ov-plan-lock { color: #95a5a6; font-size: 12px; }
+  .ov-plan-summary { flex: 1; min-width: 0; font-size: 13px; color: #ffeaa7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body.theme-day .ov-plan-summary { color: #d68910; }
+  .ov-plan-detail-btn { flex-shrink: 0; font-size: 12px; color: #74b9ff; cursor: pointer; padding: 2px 6px; border: 1px solid rgba(116,185,255,0.4); border-radius: 8px; }
+  .ov-plan-detail-btn:active { opacity: .7; }
+  body.theme-day .ov-plan-detail-btn { color: #0984e3; border-color: rgba(9,132,227,0.35); }
+  /* 今日计划详情弹窗 */
+  .plan-detail-sum { font-size: 14px; color: #ffeaa7; margin: 4px 0 10px; }
+  body.theme-day .plan-detail-sum { color: #d68910; }
+  .plan-detail-body { font-size: 14px; color: #dfe6e9; white-space: pre-wrap; line-height: 1.7; word-break: break-word; max-height: 60vh; overflow-y: auto; }
+  body.theme-day .plan-detail-body { color: #3d4852; }
 </style>
 </head>
 <body>
@@ -2284,6 +2289,15 @@
     </div>
   </div>
 </div>
+<!-- v3.5.141 今日计划详情弹窗 -->
+<div class="modal-overlay" id="planDetailModal" onclick="closeModal(event,'planDetailModal')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="hideModal('planDetailModal')">&times;</button>
+    <div class="modal-title">📅 今日计划</div>
+    <div class="plan-detail-sum" id="planDetailSum"></div>
+    <div class="plan-detail-body" id="planDetailBody"></div>
+  </div>
+</div>
 <!-- 分析 -->
 <div class="modal-overlay" id="analysisModal" onclick="closeModal(event,'analysisModal')">
   <div class="modal-box" onclick="event.stopPropagation()">
@@ -2418,6 +2432,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.140"></script>
+<script src="app.js?v=v3.5.141"></script>
 </body>
 </html>
