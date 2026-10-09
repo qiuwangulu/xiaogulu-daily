@@ -69,7 +69,7 @@ const ACTIVITIES = [
   { id: 'readBook', name: '读书', icon: '📖', type: 'simple', category: 'learn' },
   { id: 'listenMusic', name: '听歌', icon: '🎵', type: 'simple', category: 'learn' },
   { id: 'learnLanguage', name: '学语言', icon: '🗣️', type: 'note', category: 'learn' },
-  { id: 'learnLogic', name: '学逻辑', icon: '🧩', type: 'note', category: 'learn' },
+  { id: 'learnLogic', name: '学算术', icon: '🧩', type: 'note', category: 'learn' },
   // 运动
   { id: 'outdoor', name: '户外活动', icon: '☀️', type: 'duration', unit: '分钟', category: 'sport' },
   { id: 'grossMotor', name: '大运动', icon: '🤸', type: 'grossMotor', category: 'sport' },
@@ -1082,7 +1082,7 @@ function onActSearch() {
   renderCards();
 }
 
-/* ==================== 渲染卡片（v3.5.115：按分类分组，分类标题置于对应活动上方） ==================== */
+/* ==================== 渲染卡片（v3.5.143：扁平列出全部活动，不再按分类分组） ==================== */
 function renderCards(newestIds) {
   newestIds = newestIds || [];
   const grid = document.getElementById('cardsGrid');
@@ -1090,19 +1090,11 @@ function renderCards(newestIds) {
   const records = getTodayRecords();
   const q = actSearchQuery;
 
-  CATEGORIES.forEach(cat => {
-    if (!selectedCategories.has(cat.id)) return;
-    let acts = ACTIVITIES.filter(act => act.category === cat.id && !hiddenActivities.includes(act.id));
-    if (q) acts = acts.filter(act => act.name.toLowerCase().includes(q));
-    if (!acts.length) return;
+  // v3.5.143 首页不再按分类分组，直接扁平列出全部活动（去掉"吃睡"等分类标题）
+  let acts = ACTIVITIES.filter(act => !hiddenActivities.includes(act.id));
+  if (q) acts = acts.filter(act => act.name.toLowerCase().includes(q));
 
-    // 分类分组标题（图标在左、文字在右），置于该分类活动上方
-    const title = document.createElement('div');
-    title.className = 'cat-section-title';
-    title.innerHTML = `<span class="cat-sec-icon">${cat.icon}</span><span class="cat-sec-name">${cat.name}</span>`;
-    grid.appendChild(title);
-
-    acts.forEach(act => {
+  acts.forEach(act => {
       const card = document.createElement('div');
       card.className = 'card';
       card.dataset.id = act.id;
@@ -1131,11 +1123,10 @@ function renderCards(newestIds) {
 
       card.innerHTML = `<div class="card-header"><div class="card-name"><span class="icon">${act.icon}</span>${act.name}</div>${count>0?`<div class="card-count">${count}次</div>`:''}</div>${bodyHtml}`;
       grid.appendChild(card);
-    });
   });
 
   if (!grid.children.length) {
-    grid.innerHTML = '<div class="memo-empty">没有匹配的活动，换个关键词或分类试试～</div>';
+    grid.innerHTML = '<div class="memo-empty">没有匹配的活动，换个关键词试试～</div>';
   }
 }
 
@@ -1359,7 +1350,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.142'; // v3.5.142:①修复首页总览不显示今日计划(getCurrentPlan不再苛求触发周期=今天,有内容即展示);②修复仅日报时未贴最右(margin-left:auto);③部署强制用新prompt重新生成计划内容;④任务/备忘录箭头缩70%+浅色蓝深色白;⑤知识库添加后跳转定位新记录并提示;⑥大便时间差y轴0-100等间隔20,>100折叠
+const APP_VERSION = 'v3.5.143'; // v3.5.143:①首页去掉"吃睡"等分类(移除分类下拉+活动不再按分类分组,保留搜索);②总览今日计划卡去外框底色左对齐,黄色文字/数字字号统一,日报胶囊换下一行仍最右;③今日计划prompt要求给出具体温度;④学逻辑改学算术
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -1993,7 +1984,7 @@ const VOICE_RULES = [
       return { params: { fineMotorItems: items }, warn: items.length === 0 };
     } },
   { id: 'learnLanguage', re: /学语言|学说话/, parse: (zone) => ({ params: { note: zone } }) },
-  { id: 'learnLogic', re: /学逻辑/, parse: (zone) => ({ params: { note: zone } }) },
+  { id: 'learnLogic', re: /学算术/, parse: (zone) => ({ params: { note: zone } }) },
 ];
 
 function parseVoiceText(text) {
@@ -5152,7 +5143,7 @@ const SCHED_GEN_LEAD = 12 * 3600000;     // 提前 12 小时生成计划
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内才推送（避免补推历史）
 const SCHED_GEN_COOLDOWN = 30 * 60000;   // AI 生成失败重试冷却 30 分钟
 // AI 计划 prompt 版本：内容与分类结构变化时递增，可强制所有 AI 任务用最新 prompt 重新生成
-const PLAN_PROMPT_VERSION = '3';
+const PLAN_PROMPT_VERSION = '4'; // v3.5.143 计划prompt新增"给出当日具体温度"要求,强制重新生成
 let SCHED_TASKS = [];
 const _pad2 = n => String(n).padStart(2, '0');
 
@@ -5388,8 +5379,9 @@ function buildPlanSystemPrompt(dateStr, wText) {
     + '\n【目标日期天气】' + dateStr + ' ' + wText + '\n'
     + '\n【规划规则——请严格按以下三部分输出】\n'
     + '【喂养】单次奶量、喝奶次数、辅食（尝试食物及量）、喝水、营养补剂、过敏/防呛提醒。\n'
-    + '【起居护理】穿衣（结合天气）、洗澡、剪指甲、睡眠、排便关注。\n'
-    + '【健康·出行】户外活动时间与时长、天气应对（大风/雾霾/降温）、防病注意。\n'
+    + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度，据此建议穿什么）、洗澡、剪指甲、睡眠、排便关注。\n'
+    + '【健康·出行】户外活动时间与时长、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物。\n'
+    + '【温度要求】上方天气已给出当日最高温和最低温，请在「起居护理·穿衣」与「健康·出行」中明确写出具体温度数值（如"今日 28℃/19℃，短袖即可"），不要只写"根据天气"。\n'
     + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【喂养】【起居护理】【健康·出行】分块给出内容。';
 }
 function splitPlan(full) {

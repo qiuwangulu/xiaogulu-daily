@@ -140,12 +140,12 @@
   .overview-item { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
   .overview-item .ov-icon { font-size: 15px; }
   .overview-item .ov-label { color: #fff; }
-  .overview-item .ov-value { color: #ffeaa7; font-weight: 600; }
-  .overview-item .ov-time { color: #ffeaa7; font-weight: 600; }
+  .overview-item .ov-value { color: #ffeaa7; font-weight: 600; font-size: 14px; }
+  .overview-item .ov-time { color: #ffeaa7; font-weight: 600; font-size: 14px; }
   .overview-item .ov-countdown { color: #55efc4; }
   .overview-achievement { color: #fff; font-size: 15px; text-align: justify; text-align-last: left; margin-top: 6px; display: flex; align-items: flex-start; gap: 5px; }
   .overview-achievement .ov-icon { font-size: 15px; flex-shrink: 0; }
-  .overview-achievement .ov-text { flex: 1; color: #ffeaa7; }
+  .overview-achievement .ov-text { flex: 1; color: #ffeaa7; font-size: 14px; }
   .overview-achievement .ov-text .ov-label { color: #fff; }
   /* v3.5.106 总览内「日报」小组件（点击弹窗看完整日报） */
   /* v3.5.107 日报色号统一为「选中的分类标签字体色」(.cat-tag.active)：深色 #fff / 浅色 #0984e3 */
@@ -1849,16 +1849,16 @@
   #historyDatePickerModal { z-index: 600; }
   .te-textarea { width: 100%; box-sizing: border-box; min-height: 110px; resize: vertical; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.2); color: #dfe6e9; padding: 10px; font-size: 14px; line-height: 1.6; font-family: inherit; }
   body.theme-day .te-textarea { background: #fff; border-color: rgba(9,132,227,0.2); color: #2d3436; }
-  /* 首页总览底部行：今日计划（左）+ 日报（右，保持最右）；窄屏时日报换行仍右对齐 */
-  .ov-bottom-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
-  /* 日报始终贴最右：即使今日计划缺席（space-between 对单元素不生效）也靠右 */
-  .ov-bottom-row .ov-report-pill { margin-left: auto; }
-  /* 首页总览今日计划卡片：仅显示摘要 + 详情按钮 */
-  .ov-plan-card { flex: 1 1 60%; min-width: 0; display: flex; align-items: center; gap: 8px; background: rgba(116,185,255,0.1); border: 1px solid rgba(116,185,255,0.25); border-radius: 12px; padding: 8px 10px; }
-  body.theme-day .ov-plan-card { background: rgba(9,132,227,0.07); border-color: rgba(9,132,227,0.2); }
+  /* 首页总览底部行：今日计划（第一行，左对齐满宽）+ 日报（下一行，仍贴最右） */
+  .ov-bottom-row { display: flex; flex-direction: column; align-items: stretch; gap: 6px; margin-top: 8px; }
+  /* 日报始终贴最右：即使今日计划缺席也靠右（align-self 保证换行后仍最右） */
+  .ov-bottom-row .ov-report-pill { margin-left: auto; align-self: flex-end; }
+  /* 首页总览今日计划卡片：去掉外框与底色，左对齐，仅显摘要 + 详情按钮 */
+  .ov-plan-card { width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 8px; background: none; border: none; border-radius: 0; padding: 0; }
+  body.theme-day .ov-plan-card { background: none; border: none; }
   .ov-plan-title { font-size: 14px; color: #dfe6e9; font-weight: 600; flex-shrink: 0; }
   body.theme-day .ov-plan-title { color: #2d3436; }
-  .ov-plan-summary { flex: 1; min-width: 0; font-size: 13px; color: #ffeaa7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ov-plan-summary { flex: 1; min-width: 0; font-size: 14px; color: #ffeaa7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   body.theme-day .ov-plan-summary { color: #d68910; }
   .ov-plan-detail-btn { flex-shrink: 0; font-size: 12px; color: #74b9ff; cursor: pointer; padding: 2px 6px; border: 1px solid rgba(116,185,255,0.4); border-radius: 8px; }
   .ov-plan-detail-btn:active { opacity: .7; }
@@ -1922,10 +1922,6 @@
   <div class="overview" id="overviewBar"></div>
 
   <div class="home-filter" id="homeFilter">
-    <div class="cat-dropdown" id="catDropdown">
-      <button class="cat-dropdown-btn" id="catDropdownBtn" type="button" onclick="toggleCatDropdown()">📂 全部分类 ▾</button>
-      <div class="cat-dropdown-panel" id="catDropdownPanel"></div>
-    </div>
     <input class="act-search" id="actSearch" type="text" placeholder="🔍 搜索活动名称…" oninput="onActSearch()">
   </div>
 
@@ -2442,6 +2438,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.142"></script>
+<script src="app.js?v=v3.5.143"></script>
 </body>
 </html>
