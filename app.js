@@ -1378,7 +1378,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.153'; // v3.5.153: AI任务推送标题改为任务名称(不含日期)；AI育儿/日报胶囊锁死相同高度25px
+const APP_VERSION = 'v3.5.154'; // v3.5.154: 定时任务加密同步家庭云(_sched_cloud) + 服务端 GitHub Actions 定时推送（无需打开网页也准时推送）
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5185,6 +5185,7 @@ function saveKBLocal() { try { localStorage.setItem(KB_KEY, JSON.stringify(KB));
 
 /* ==================== v3.5.132 定时任务 + 今日计划 ==================== */
 const SCHED_TASKS_KEY = 'sched_tasks';
+const SCHED_CLOUD_KEY = '_sched_cloud';   // v3.5.154 定时任务加密同步到家庭云（供服务端 GitHub Actions 定时推送）
 const WEATHER_ADDR_KEY = 'weather_addr';
 const WEATHER_ADDR_CLOUD_KEY = 'weather_addr_v1';   // 加密家庭云（地址不写死、可配置）
 const WEATHER_GEO_CACHE_KEY = 'weather_geo_cache';
@@ -5201,7 +5202,47 @@ function loadSchedTasks() {
   try { SCHED_TASKS = JSON.parse(localStorage.getItem(SCHED_TASKS_KEY) || '[]'); } catch (e) { SCHED_TASKS = []; }
   if (!Array.isArray(SCHED_TASKS)) SCHED_TASKS = [];
 }
-function saveSchedTasks() { try { localStorage.setItem(SCHED_TASKS_KEY, JSON.stringify(SCHED_TASKS)); } catch (e) {} }
+function saveSchedTasks() {
+  try { localStorage.setItem(SCHED_TASKS_KEY, JSON.stringify(SCHED_TASKS)); } catch (e) {}
+  scheduleSchedCloudSave();   // v3.5.154 任务变化时同步到家庭云
+}
+/* v3.5.154 定时任务加密同步到家庭云（config_key=_sched_cloud）。
+ * 内容 = 任务数组 + 生成计划所需上下文（AI密钥/推送token+topic/天气地址/身高体重/宝宝档案/知识库）。
+ * 服务端（GitHub Actions）用家庭码派生密钥解密后，即可在「无需打开网页」时准时推送。 */
+let _schedCloudTimer = null;
+let _schedCloudLast = '';
+function scheduleSchedCloudSave(delay) {
+  if (typeof isSyncReady === 'function' && !isSyncReady()) return;
+  if (_schedCloudTimer) clearTimeout(_schedCloudTimer);
+  _schedCloudTimer = setTimeout(() => { _schedCloudTimer = null; saveSchedCloud().catch(() => {}); }, delay == null ? 5000 : delay);
+}
+async function saveSchedCloud() {
+  if (typeof isSyncReady !== 'function' || !isSyncReady()) return;
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const ai = getAITagConfig();
+    const bd = BIRTH_DATE;
+    const ctx = {
+      ai: ai ? { base: ai.base, model: ai.model, apiKey: ai.apiKey } : null,
+      pushToken: localStorage.getItem('pushplus_token') || _DEFAULT_PUSHTOKEN,
+      pushTopic: localStorage.getItem('pushplus_topic') || _DEFAULT_PUSHTOPIC,
+      weatherAddr: getWeatherAddr(),
+      height: localStorage.getItem('babyHeight') || '',
+      weight: localStorage.getItem('babyWeight') || '',
+      babyName: BABY_NAME,
+      birthDate: bd.getFullYear() + '-' + _pad2(bd.getMonth() + 1) + '-' + _pad2(bd.getDate()),
+      kb: KB.slice(0, 50).map(x => ({ cat: x.cat, text: x.text })),
+      promptVer: PLAN_PROMPT_VERSION,
+      genLead: SCHED_GEN_LEAD
+    };
+    const body = JSON.stringify({ tasks: SCHED_TASKS, ctx: ctx });
+    if (body === _schedCloudLast) return;   // 无变化则跳过，避免频繁写云端
+    const { data, iv } = await encrypt(key, JSON.stringify({ tasks: SCHED_TASKS, ctx: ctx, ts: Date.now() }));
+    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: SCHED_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
+    _schedCloudLast = body;
+    console.log('[Sched] 定时任务已同步家庭云');
+  } catch (e) { console.warn('[Sched] 定时任务云端同步失败:', e); }
+}
 
 /* ---------- 天气地址（可配置 + 加密家庭云） ---------- */
 function getWeatherAddr() { return localStorage.getItem(WEATHER_ADDR_KEY) || SCHED_DEFAULT_ADDR; }
@@ -5573,6 +5614,7 @@ async function runScheduler(forceGen) {
   }
   if (currentManageTab === 'tasks') renderSchedTasks();
   renderTodayPlanCard();
+  scheduleSchedCloudSave();   // v3.5.154 页面运行期间定期同步上下文（token/天气地址/知识库等变更）
   } finally { _schedRunning = false; }
 }
 // AI 计划 prompt 升级：检测到 prompt 版本变化则立即用最新 prompt 重新生成一次（不再等 12h 窗口），
@@ -5603,6 +5645,11 @@ function initScheduler() {
   loadSchedTasks();
   Promise.resolve(migratePlanPromptVersion()).then(() => runScheduler()).catch(() => runScheduler());
   loadWeatherAddrCloud().catch(() => {});
+  // v3.5.154 云端 AI 密钥加载完成后再首次同步定时任务到家庭云（确保 ctx.ai 有值）
+  Promise.resolve()
+    .then(() => (typeof loadCloudAITagKey === 'function' ? loadCloudAITagKey() : null))
+    .catch(() => {})
+    .then(() => scheduleSchedCloudSave(1500));
   setInterval(runScheduler, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) runScheduler(); });
 }
