@@ -1,0 +1,29 @@
+name: sched-push
+
+# 服务端定时推送：无需打开网页，每约 5 分钟检查一次是否有定时任务到点。
+# 到点则生成 AI 今日计划（如需要）并推送 PushPlus。
+on:
+  schedule:
+    # 每 5 分钟运行一次（GitHub 的 cron 为 UTC；触发时间判断在脚本内按 TZ=Asia/Shanghai 进行）
+    - cron: '*/5 * * * *'
+  workflow_dispatch:   # 支持手动触发（便于测试）
+
+# 同一时刻只跑一个实例，避免并发重复推送
+concurrency:
+  group: sched-push
+  cancel-in-progress: false
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run scheduler
+        run: node scripts/sched-push.mjs
+        env:
+          FAMILY_CODE: ${{ secrets.FAMILY_CODE }}
