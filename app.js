@@ -1378,7 +1378,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.154'; // v3.5.154: 定时任务加密同步家庭云(_sched_cloud) + 服务端 GitHub Actions 定时推送（无需打开网页也准时推送）
+const APP_VERSION = 'v3.5.155'; // v3.5.155: AI育儿多轮对话不再截断(上限提至60条)+历史默认展开；任务卡新增删除；新增任务后提示并自动定位
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4690,7 +4690,7 @@ const KB_CLOUD_KEY = '_ai_kb';
 const AI_HIST_CLOUD_KEY = '_ai_hist';   // v3.5.137 已停用（历史对话不再上家庭云；常量保留仅为兼容旧版本残留数据）
 const MEMO_CLOUD_KEY = '_memo';         // v3.5.115 备忘录同样加密同步家庭云（此前只存本机，清缓存后丢失）
 const AI_CHAT_KEY = 'ai_chat_v1';
-const AI_CHAT_CAP = 10;            // 单次对话本地仅留最近 10 条
+const AI_CHAT_CAP = 60;            // v3.5.155 单次对话本地保留上限提高到 60 条（≈30 轮），避免多轮对话被静默截断只显示最新几轮
 const AI_HIST_KEY = 'ai_chat_history_v1';
 const AI_HIST_CAP = 10;            // v3.5.137 历史对话仅保留最近 10 段（此前 30）
 let KB = [];
@@ -4831,7 +4831,7 @@ function renderAIHistory() {
   const box = document.getElementById('aiHistList'); if (!box) return;
   if (!AI_HIST.length) { box.innerHTML = '<div class="ai-hist-empty">还没有历史对话。<br>关闭 AI 育儿页面时，当前对话会自动存到这里，<br>仅保存在本机（最多保留最近 10 条，不上传、不共享）。</div>'; return; }
   box.innerHTML = AI_HIST.map((h, i) => (
-    `<div class="ai-hist-item" data-i="${i}">`
+    `<div class="ai-hist-item open" data-i="${i}">`
     + `<div class="ai-hist-head"><div class="ai-hist-time">${escapeHtml(h.time)}</div>`
     + `<span class="ai-hist-copy" onclick="event.stopPropagation();copyAIHist(${i})">复制</span></div>`
     + `<div class="ai-hist-prev">${escapeHtml(mdToText(h.preview))}</div>`
@@ -5752,7 +5752,7 @@ function renderSchedTasks() {
     const nm = (t.name && String(t.name).trim()) ? String(t.name).trim() : (t.mode === 'ai' ? '今日计划' : '定时提醒');
     const icon = t.mode === 'ai' ? '🤖' : '✏️';
     const expanded = !!taskExpanded[t.id];
-    h += '<div class="task-card">'
+    h += '<div class="task-card" id="taskcard_' + t.id + '">'
       + '<div class="task-row">'
       + '<div class="task-info" onclick="toggleTaskExpand(\'' + t.id + '\')">'
       + '<div class="task-name' + (expanded ? ' open' : '') + '"><span class="task-chev">▶</span>' + icon + ' ' + escapeHtml(nm) + '</div>'
@@ -5760,6 +5760,7 @@ function renderSchedTasks() {
       + '</div>'
       + '<div class="task-actions">'
       + '<span class="rec-edit" onclick="openTaskEditor(\'' + t.id + '\')" title="编辑"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>'
+      + '<span class="rec-del" onclick="deleteTask(\'' + t.id + '\')" title="删除"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></span>'
       + '<div class="toggle-switch ' + (t.enabled ? 'on' : '') + '" data-tid="' + t.id + '" onclick="toggleTask(\'' + t.id + '\')" title="开启/关闭该任务"></div>'
       + '</div></div>';
     if (expanded) {
@@ -5827,13 +5828,31 @@ function saveTask() {
       content: mode === 'custom' ? document.getElementById('taskCustom').value : '', enabled: true,
       genPeriod: '', pushPeriod: '', genTryTs: 0 });
   }
+  const isNew = !id;
+  const newId = isNew ? SCHED_TASKS[SCHED_TASKS.length - 1].id : id;
+  if (isNew) taskExpanded[newId] = true;   // v3.5.155 新增后展开，便于一眼看到
   saveSchedTasks(); hideModal('taskEditorModal'); renderSchedTasks(); runScheduler(true);
+  if (isNew) {
+    const el = document.getElementById('taskcard_' + newId);
+    if (el) { try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); } }
+    showToast('已添加一条任务');
+  }
 }
 function toggleTask(id) {
   const t = SCHED_TASKS.find(x => x.id === id); if (!t) return;
   t.enabled = !t.enabled; saveSchedTasks(); renderSchedTasks();
   showToast(t.enabled ? '已开启，到点将推送微信消息' : '已关闭，不再推送');
   if (t.enabled) runScheduler(true);
+}
+// v3.5.155 删除任务：从列表移除后不再推送、不再出现在任务页；同步家庭云并触发调度更新
+function deleteTask(id) {
+  const t = SCHED_TASKS.find(x => x.id === id); if (!t) return;
+  const nm = (t.name && String(t.name).trim()) ? String(t.name).trim() : (t.mode === 'ai' ? '今日计划' : '定时提醒');
+  if (!confirm('确定删除任务「' + nm + '」？\n删除后不再推送消息，且从任务页移除（不可恢复）。')) return;
+  SCHED_TASKS = SCHED_TASKS.filter(x => x.id !== id);
+  delete taskExpanded[id];
+  saveSchedTasks(); renderSchedTasks(); runScheduler(true);
+  showToast('已删除任务：' + nm);
 }
 function syncSeg(radio) {
   const seg = radio.closest('.te-seg'); if (!seg) return;
