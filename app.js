@@ -1378,7 +1378,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.155'; // v3.5.155: AI育儿多轮对话不再截断(上限提至60条)+历史默认展开；任务卡新增删除；新增任务后提示并自动定位
+const APP_VERSION = 'v3.5.156'; // v3.5.156: 任务删除按钮改为灰色(与编辑一致) + 删除走自定义二次确认弹窗(替代原生confirm)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5848,11 +5848,12 @@ function toggleTask(id) {
 function deleteTask(id) {
   const t = SCHED_TASKS.find(x => x.id === id); if (!t) return;
   const nm = (t.name && String(t.name).trim()) ? String(t.name).trim() : (t.mode === 'ai' ? '今日计划' : '定时提醒');
-  if (!confirm('确定删除任务「' + nm + '」？\n删除后不再推送消息，且从任务页移除（不可恢复）。')) return;
-  SCHED_TASKS = SCHED_TASKS.filter(x => x.id !== id);
-  delete taskExpanded[id];
-  saveSchedTasks(); renderSchedTasks(); runScheduler(true);
-  showToast('已删除任务：' + nm);
+  showConfirm('删除任务', '确定删除任务「' + nm + '」？\n删除后不再推送消息，且从任务页移除（不可恢复）。', function () {
+    SCHED_TASKS = SCHED_TASKS.filter(x => x.id !== id);
+    delete taskExpanded[id];
+    saveSchedTasks(); renderSchedTasks(); runScheduler(true);
+    showToast('已删除任务：' + nm);
+  }, '删除');
 }
 function syncSeg(radio) {
   const seg = radio.closest('.te-seg'); if (!seg) return;
@@ -6686,6 +6687,18 @@ function showModal(id) {
 function hideModal(id) { const el = document.getElementById(id); if (!el) return; resetModalFullscreen(el); el.classList.remove('show'); document.body.style.overflow = ''; }
 function closeModal(e, id) { if (e.target.id === id) hideModal(id); }
 function showToast(msg, ms) { const toast = document.getElementById('toast'); toast.textContent = msg; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), ms || 1800); }
+// v3.5.155 通用二次确认弹窗（替代原生 confirm，风格统一且不会被 webview 拦截）
+let _confirmCb = null;
+function showConfirm(title, msg, onConfirm, okText) {
+  document.getElementById('confirmTitle').textContent = title || '确定操作？';
+  document.getElementById('confirmMsg').textContent = msg || '';
+  const okBtn = document.getElementById('confirmOkBtn');
+  okBtn.textContent = okText || '删除';
+  _confirmCb = (typeof onConfirm === 'function') ? onConfirm : null;
+  showModal('confirmModal');
+}
+function hideConfirm() { _confirmCb = null; hideModal('confirmModal'); }
+function runConfirm() { const cb = _confirmCb; _confirmCb = null; hideModal('confirmModal'); if (cb) cb(); }
 
 /* ==================== 云端同步模块 ==================== */
 

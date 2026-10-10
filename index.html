@@ -854,6 +854,11 @@
     display: inline-flex; align-items: center; gap: 4px;
   }
   .btn:active { transform: scale(0.95); opacity: 0.85; }
+  /* v3.5.155 二次确认弹窗 */
+  .confirm-box { padding: 20px 18px 18px; }
+  .confirm-msg { font-size: 14px; line-height: 1.6; color: rgba(223,230,233,0.9); text-align: center; }
+  .confirm-actions { border-top: none; padding-top: 14px; }
+  body.theme-day .confirm-msg { color: #5a6573; }
   /* 日报/管理/添加/编辑等弹窗按钮统一为深蓝底灰字灰框 */
   .btn-primary { background: #25375f; border-color: #b2bec3; color: #b2bec3; }
   .btn-primary:active { opacity: 0.85; }
@@ -1842,9 +1847,9 @@
   .task-card .rec-edit:active svg { stroke: #74b9ff; }
   body.theme-day .task-card .rec-edit svg { stroke: #3d4852; }
   .task-card .rec-del { width: 24px; height: 24px; cursor: pointer; padding: 2px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; opacity: 0.75; transition: opacity 0.2s; background: transparent; border: none; }
-  .task-card .rec-del svg { width: 100%; height: 100%; display: block; stroke: #ff7675; stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .task-card .rec-del svg { width: 100%; height: 100%; display: block; stroke: #fff; stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
   .task-card .rec-del:active { opacity: 1; }
-  body.theme-day .task-card .rec-del svg { stroke: #d63031; }
+  body.theme-day .task-card .rec-del svg { stroke: #3d4852; }
   /* 编辑弹窗字段 */
   .te-field { margin: 12px 0; }
   .te-label { font-size: 14px; color: #dfe6e9; margin-bottom: 6px; }
@@ -2328,6 +2333,17 @@
     </div>
   </div>
 </div>
+<!-- v3.5.155 通用二次确认弹窗（删除任务等危险操作使用，替代原生 confirm） -->
+<div class="modal-overlay" id="confirmModal" onclick="if(event.target===this)hideConfirm()">
+  <div class="modal-box confirm-box" onclick="event.stopPropagation()" style="max-width:360px;">
+    <div class="modal-title" id="confirmTitle" style="margin-bottom:10px;">确定操作？</div>
+    <div class="confirm-msg" id="confirmMsg"></div>
+    <div class="modal-actions confirm-actions" style="justify-content:flex-end;">
+      <button class="btn btn-primary" onclick="hideConfirm()">取消</button>
+      <button class="btn btn-danger" id="confirmOkBtn" onclick="runConfirm()">删除</button>
+    </div>
+  </div>
+</div>
 <!-- v3.5.141 今日计划详情弹窗 -->
 <div class="modal-overlay" id="planDetailModal" onclick="closeModal(event,'planDetailModal')">
   <div class="modal-box" onclick="event.stopPropagation()">
@@ -2471,6 +2487,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.155"></script>
+<script src="app.js?v=v3.5.156"></script>
 </body>
 </html>
