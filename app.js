@@ -1380,7 +1380,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.157'; // v3.5.157: 早教音频——管理弹窗新增「早教」标签页(本地上传到Supabase/免版权故事)；首页随机播放/停止(进度+锁屏控制)；删除按钮与任务页一致
+const APP_VERSION = 'v3.5.158'; // v3.5.158: 早教——标题改「早教」；首页按钮改为「切换」「播放」两枚(样式同首页添加按钮)；播放改为随机连播 n 首(n=管理「播放音频数」默认5)；修复 play/pause 竞态报错；锁屏支持下一首
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5267,6 +5267,14 @@ let eeFilterType = 'all';
 let eeCurrentId = null, eeLastId = null;
 let eeAudio = null;
 let _eeSaveTimer = null, _eeLast = '';
+/* v3.5.158 随机连播：播放队列 + 下标 + 播放令牌（令牌用于屏蔽 play/pause 竞态产生的过期回调） */
+let eeQueue = [], eeQueueIdx = 0, eePlayToken = 0;
+const EE_ICO_PLAY = '<svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg>';
+const EE_ICO_STOP = '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></svg>';
+/* 播放音频数（管理 → 早教里可改，默认 5） */
+const EE_PLAY_COUNT_KEY = 'ee_play_count';
+const EE_PLAY_COUNT_CLOUD_KEY = '_ee_play_count';
+const EE_PLAY_COUNT_DEFAULT = 5;
 
 function eeStorageBase() { return (SYNC_CONFIG.supabaseUrl || '').replace(/\/+$/, '') + '/storage/v1'; }
 
@@ -5282,7 +5290,42 @@ async function loadEarlyEdu() {
         if (Array.isArray(cloud) && cloud.length) EARLY_EDU = eeMergeEarlyEdu(EARLY_EDU, cloud);
       }
     } catch (e) { console.warn('[早教] 云端读取失败', e); }
+    await loadEePlayCountCloud().catch(() => {});
   }
+}
+/* ---------- 播放音频数（默认 5，可改，随家庭云同步） ---------- */
+function getEePlayCount() {
+  const v = parseInt(localStorage.getItem(EE_PLAY_COUNT_KEY) || '', 10);
+  return (v > 0) ? Math.min(v, 99) : EE_PLAY_COUNT_DEFAULT;
+}
+function eeSavePlayCount(v) {
+  v = parseInt(v, 10);
+  if (!v || v < 1) v = EE_PLAY_COUNT_DEFAULT;
+  if (v > 99) v = 99;
+  localStorage.setItem(EE_PLAY_COUNT_KEY, String(v));
+  const el = document.getElementById('eePlayCount'); if (el) el.value = v;
+  showToast('播放音频数：' + v + ' 首');
+  eeSavePlayCountCloud(v);
+}
+async function eeSavePlayCountCloud(v) {
+  if (!isSyncReady()) return;
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const { data, iv } = await encrypt(key, JSON.stringify({ n: v }));
+    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: EE_PLAY_COUNT_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
+  } catch (e) { console.warn('[早教] 播放数保存失败', e); }
+}
+async function loadEePlayCountCloud() {
+  if (!isSyncReady()) return;
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${EE_PLAY_COUNT_CLOUD_KEY}&select=encrypted_data,iv`);
+    if (rows.length && rows[0].encrypted_data && rows[0].iv) {
+      const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
+      const o = JSON.parse(json || '{}');
+      if (o && o.n) localStorage.setItem(EE_PLAY_COUNT_KEY, String(o.n));
+    }
+  } catch (e) { console.warn('[早教] 播放数读取失败', e); }
 }
 function eeMergeEarlyEdu(local, cloud) {
   const map = {};
@@ -5305,7 +5348,7 @@ async function saveEarlyEdu() {
 function scheduleEarlyEduSave() { if (_eeSaveTimer) clearTimeout(_eeSaveTimer); _eeSaveTimer = setTimeout(() => { _eeSaveTimer = null; saveEarlyEdu().catch(() => {}); }, 800); }
 
 /* ---------- 管理：渲染 / 筛选 / 上传 / 添加 / 删除 ---------- */
-function renderEarlyEduTab() { renderEarlyEduList(); eeUpdateAddButtons(); }
+function renderEarlyEduTab() { renderEarlyEduList(); eeUpdateAddButtons(); const pc = document.getElementById('eePlayCount'); if (pc) pc.value = getEePlayCount(); }
 function eeUpdateAddButtons() {
   const up = document.getElementById('eeUploadBtnWrap');
   const wiki = document.getElementById('eeWikiBtn');
@@ -5416,9 +5459,9 @@ async function eeDeleteFile(path) {
   try { await fetch(eeStorageBase() + '/object/' + EARLY_EDU_BUCKET + '/' + encodeURIComponent(path), { method: 'DELETE', headers: { 'apikey': SYNC_CONFIG.supabaseKey, 'Authorization': 'Bearer ' + SYNC_CONFIG.supabaseKey } }); }
   catch (e) { console.warn('[早教] 删除文件失败', e); }
 }
-function eePreview(id) { const it = EARLY_EDU.find(x => x.id === id); if (it) eePlayItem(it); }
+function eePreview(id) { const it = EARLY_EDU.find(x => x.id === id); if (it) { eeQueue = [it.id]; eeQueueIdx = 0; eePlayItem(it); } }
 
-/* ---------- 首页：随机播放 / 停止 / 进度 / 锁屏 ---------- */
+/* ---------- 首页：随机连播 n 首 / 停止 / 切换 / 进度 / 锁屏 ---------- */
 function eeEnsureAudio() {
   if (eeAudio) return eeAudio;
   eeAudio = new Audio();
@@ -5427,37 +5470,76 @@ function eeEnsureAudio() {
     const fill = document.getElementById('eeProgressFill'); if (fill) fill.style.width = (eeAudio.currentTime / eeAudio.duration * 100) + '%';
     const t = document.getElementById('eeTime'); if (t) t.textContent = eeFmtTime(eeAudio.currentTime) + ' / ' + eeFmtTime(eeAudio.duration);
   });
-  eeAudio.addEventListener('ended', () => { eeStop(); });
+  eeAudio.addEventListener('ended', () => { eeAdvanceQueue(); }); // 播完自动接下一首，队列播完则停止
   eeAudio.addEventListener('pause', () => { if ('mediaSession' in navigator) { try { navigator.mediaSession.playbackState = 'paused'; } catch (e) {} } });
   eeAudio.addEventListener('play', () => { if ('mediaSession' in navigator) { try { navigator.mediaSession.playbackState = 'playing'; } catch (e) {} } });
   return eeAudio;
 }
 function eeFmtTime(s) { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
-function eeToggle() { if (eeAudio && !eeAudio.paused && !eeAudio.ended) eeStop(); else eePlayRandom(); }
-function eePlayRandom() {
+function eeToggle() { if (eeAudio && !eeAudio.paused && !eeAudio.ended) eeStop(); else eePlayN(); }
+/* 随机挑 n 首（n = 管理里「播放音频数」，默认 5），依次播放；不足则全放 */
+function eeShufflePick(n) {
+  const pool = EARLY_EDU.slice();
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
+  return pool.slice(0, Math.max(1, Math.min(n, pool.length)));
+}
+function eePlayN() {
+  if (!EARLY_EDU.length) { showToast('请先在「管理 → 早教」添加音频'); return; }
+  eeQueue = eeShufflePick(getEePlayCount()).map(x => x.id);
+  eeQueueIdx = 0;
+  eePlayQueueItem();
+}
+function eePlayQueueItem() {
+  const it = EARLY_EDU.find(x => x.id === eeQueue[eeQueueIdx]);
+  if (!it) { eeAdvanceQueue(); return; }
+  eePlayItem(it);
+}
+function eeAdvanceQueue() {
+  eeQueueIdx++;
+  if (eeQueueIdx < eeQueue.length) eePlayQueueItem();
+  else eeStop();
+}
+/* 切换：随机换一首（替换当前队列位，剩余连播数不变） */
+function eeSwitch() {
   if (!EARLY_EDU.length) { showToast('请先在「管理 → 早教」添加音频'); return; }
   let pool = EARLY_EDU.slice();
-  if (eeLastId && pool.length > 1) pool = pool.filter(x => x.id !== eeLastId);
+  if (eeCurrentId && pool.length > 1) pool = pool.filter(x => x.id !== eeCurrentId);
   const it = pool[Math.floor(Math.random() * pool.length)];
-  eeLastId = it.id;
+  if (!eeQueue.length) { eeQueue = [it.id]; eeQueueIdx = 0; }
+  else eeQueue[eeQueueIdx] = it.id;
   eePlayItem(it);
 }
 function eePlayItem(it) {
   const a = eeEnsureAudio();
+  const token = ++eePlayToken;
+  try { a.pause(); } catch (e) {}          // 先停掉上一首，避免 play() 被隐式 pause 打断
   a.src = it.url;
-  a.play().then(() => {
-    eeCurrentId = it.id;
+  try { a.currentTime = 0; } catch (e) {}
+  const p = a.play();
+  if (!p || !p.then) return;
+  p.then(() => {
+    if (token !== eePlayToken) return;     // 已被更新的播放/停止动作取代，忽略过期回调
+    eeCurrentId = it.id; eeLastId = it.id;
     const now = document.getElementById('eeNowText'); if (now) { now.textContent = '正在播放：' + it.type + ' · ' + it.name; now.classList.add('playing'); }
     const lbl = document.getElementById('eePlayLabel'); if (lbl) lbl.textContent = '停止';
-    const ico = document.getElementById('eeIco'); if (ico) ico.textContent = '■';
+    const ico = document.getElementById('eeIco'); if (ico) ico.innerHTML = EE_ICO_STOP;
     if ('mediaSession' in navigator) { try { navigator.mediaSession.metadata = new MediaMetadata({ title: it.name, artist: '小咕噜早教 · ' + it.type, album: '早教音频' }); } catch (e) {} }
-  }).catch(err => { showToast('播放失败：' + (err && err.message ? err.message : '格式可能不支持')); });
+  }).catch(err => {
+    if (token !== eePlayToken) return;                    // 过期请求（典型：快速停止/切换）
+    if (err && err.name === 'AbortError') return;         // play/pause 竞态：静默忽略，不弹错
+    console.warn('[早教] 播放失败', err);
+    if (eeQueueIdx < eeQueue.length - 1) { eeAdvanceQueue(); return; } // 单曲失败自动跳下一首
+    showToast('播放失败：' + (err && err.message ? String(err.message).replace(/\s*https?:\/\/\S+$/, '') : '格式可能不支持'));
+    eeStop();
+  });
 }
 function eeStop() {
-  if (eeAudio) { eeAudio.pause(); eeAudio.currentTime = 0; }
+  eePlayToken++;                             // 令牌自增，使未完成的 play() 回调全部失效
+  eeQueue = []; eeQueueIdx = 0;
+  if (eeAudio) { try { eeAudio.pause(); } catch (e) {} try { eeAudio.currentTime = 0; } catch (e) {} }
   eeCurrentId = null;
   const lbl = document.getElementById('eePlayLabel'); if (lbl) lbl.textContent = '播放';
-  const ico = document.getElementById('eeIco'); if (ico) ico.textContent = '▶';
+  const ico = document.getElementById('eeIco'); if (ico) ico.innerHTML = EE_ICO_PLAY;
   const fill = document.getElementById('eeProgressFill'); if (fill) fill.style.width = '0%';
   const t = document.getElementById('eeTime'); if (t) t.textContent = '00:00 / 00:00';
   renderEarlyEduCard();
@@ -5465,15 +5547,16 @@ function eeStop() {
 function eeSetupMediaSession() {
   if (!('mediaSession' in navigator)) return;
   try {
-    navigator.mediaSession.setActionHandler('play', () => { if (eeCurrentId) { eeAudio && eeAudio.play().catch(() => {}); } else eePlayRandom(); });
+    navigator.mediaSession.setActionHandler('play', () => { if (eeCurrentId) { eeAudio && eeAudio.play().catch(() => {}); } else eePlayN(); });
     navigator.mediaSession.setActionHandler('pause', () => eeStop());
     navigator.mediaSession.setActionHandler('stop', () => eeStop());
+    navigator.mediaSession.setActionHandler('nexttrack', () => eeSwitch());
   } catch (e) {}
 }
 function renderEarlyEduCard() {
   const now = document.getElementById('eeNowText'); if (!now) return;
   if (eeCurrentId) return;
-  now.textContent = EARLY_EDU.length ? '点「播放」随机听一首' : '暂未添加音频，去「管理 → 早教」添加';
+  now.textContent = EARLY_EDU.length ? '' : '暂未添加音频，去「管理 → 早教」添加';
   now.classList.remove('playing');
 }
 

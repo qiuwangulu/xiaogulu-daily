@@ -1866,9 +1866,16 @@
   .ee-progress-fill { height: 100%; width: 0; background: linear-gradient(90deg,#38a89d,#2c7a7b); transition: width 0.2s linear; }
   .ee-time { font-size: 12px; color: #b2bec3; font-variant-numeric: tabular-nums; white-space: nowrap; }
   body.theme-day .ee-time { color: #7b8a94; }
-  .ee-play-btn { display: inline-flex; align-items: center; gap: 6px; background: #0984e3; color: #fff; border: none; border-radius: 10px; padding: 9px 18px; font-size: 15px; cursor: pointer; }
-  .ee-play-btn:active { opacity: 0.85; }
-  .ee-play-btn .ee-ico { font-size: 12px; }
+  /* v3.5.158 首页早教按钮：左「切换」+ 右「播放」，样式复用首页添加按钮(.fab-btn)，左右与底部「添加/语音」对齐 */
+  .ee-card .ee-actions { display: flex; justify-content: center; gap: 40px; margin-top: 2px; }
+  /* v3.5.158 管理 → 早教「播放音频数」 */
+  .ee-count-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 2px 0 10px; }
+  .ee-count-row .ee-count-label { font-size: 14px; color: #dfe6e9; }
+  body.theme-day .ee-count-row .ee-count-label { color: #2d3436; }
+  .ee-count-row input { width: 64px; padding: 5px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.06); color: #fff; font-size: 14px; text-align: center; }
+  body.theme-day .ee-count-row input { border-color: rgba(9,132,227,0.3); background: #fff; color: #23303a; }
+  .ee-count-row .ee-count-unit { font-size: 13px; color: #b2bec3; }
+  body.theme-day .ee-count-row .ee-count-unit { color: #7b8a94; }
   .ee-tip { font-size: 12px; color: #b2bec3; margin: 4px 0 10px; line-height: 1.55; }
   body.theme-day .ee-tip { color: #7b8a94; }
   .ee-filter-pills { display: flex; gap: 8px; margin: 6px 0 10px; flex-wrap: wrap; }
@@ -2002,16 +2009,17 @@
     <div class="ov-report-pill" id="ovReportPill" onclick="openReport()">&#128200; 日报 <span class="pill-chev">&#8250;</span></div>
   </div>
 
-  <!-- v3.5.157 早教音频：首页随机播放/停止（进度 + 锁屏控制） -->
+  <!-- v3.5.158 早教：首页随机连播 n 首 / 停止 / 切换（进度 + 锁屏控制） -->
   <div class="ee-card" id="earlyEduCard">
-    <div class="ee-head"><span class="ee-title">🎵 早教音频</span></div>
+    <div class="ee-head"><span class="ee-title">🎵 早教</span></div>
     <div class="ee-now" id="eeNowText">暂未添加音频，去「管理 → 早教」添加</div>
     <div class="ee-progress-row">
       <div class="ee-progress" id="eeProgress"><div class="ee-progress-fill" id="eeProgressFill"></div></div>
       <div class="ee-time" id="eeTime">00:00 / 00:00</div>
     </div>
     <div class="ee-actions">
-      <button class="ee-play-btn" id="eePlayBtn" onclick="eeToggle()"><span class="ee-ico" id="eeIco">&#9654;</span><span id="eePlayLabel">播放</span></button>
+      <button class="fab-btn" id="eeSwitchBtn" onclick="eeSwitch()"><span class="fab-icon"><svg viewBox="0 0 24 24"><path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg></span>切换</button>
+      <button class="fab-btn" id="eePlayBtn" onclick="eeToggle()"><span class="fab-icon" id="eeIco"><svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg></span><span id="eePlayLabel">播放</span></button>
     </div>
   </div>
 
@@ -2345,6 +2353,13 @@
     <!-- v3.5.157 早教音频管理：儿歌/古诗本地上传(Supabase)，故事免版权(Wikimedia) -->
     <div class="manage-tab-panel" data-mpanel="earlyedu" style="display:none;">
       <div class="ee-tip">儿歌、古诗请在对应分类下<b>本地上传</b>音频（存 Supabase，多设备同步）；「故事」可一键添加<b>免版权</b>公版音频（Wikimedia，CC 授权）。删除即同步移除。</div>
+      <div class="ee-count-row">
+        <span class="ee-count-label">🔢 播放音频数（首页点「播放」随机连播）</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;">
+          <input type="number" inputmode="numeric" min="1" max="99" step="1" id="eePlayCount" value="5" onchange="eeSavePlayCount(this.value)" onblur="eeSavePlayCount(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+          <span class="ee-count-unit">首</span>
+        </span>
+      </div>
       <div class="ee-filter-pills" id="eeFilterPills">
         <span class="ee-pill active" data-ee-type="all" onclick="eeSetFilter('all')">全部</span>
         <span class="ee-pill" data-ee-type="儿歌" onclick="eeSetFilter('儿歌')">儿歌</span>
@@ -2577,6 +2592,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.157"></script>
+<script src="app.js?v=v3.5.158"></script>
 </body>
 </html>
