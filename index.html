@@ -1850,6 +1850,54 @@
   .task-card .rec-del svg { width: 100%; height: 100%; display: block; stroke: #fff; stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
   .task-card .rec-del:active { opacity: 1; }
   body.theme-day .task-card .rec-del svg { stroke: #3d4852; }
+
+  /* ===== v3.5.157 早教音频（首页播放卡 + 管理列表） ===== */
+  .ee-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; }
+  body.theme-day .ee-card { background: rgba(9,132,227,0.05); border-color: rgba(9,132,227,0.15); }
+  .ee-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .ee-title { font-size: 15px; font-weight: 600; color: #fff; }
+  body.theme-day .ee-title { color: #1f5f60; }
+  .ee-now { font-size: 13px; color: #b2bec3; min-height: 18px; margin-bottom: 8px; line-height: 1.4; }
+  body.theme-day .ee-now { color: #7b8a94; }
+  .ee-now.playing { color: #55efc4; }
+  .ee-progress-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .ee-progress { flex: 1; height: 6px; background: rgba(255,255,255,0.12); border-radius: 3px; overflow: hidden; }
+  body.theme-day .ee-progress { background: rgba(9,132,227,0.12); }
+  .ee-progress-fill { height: 100%; width: 0; background: linear-gradient(90deg,#38a89d,#2c7a7b); transition: width 0.2s linear; }
+  .ee-time { font-size: 12px; color: #b2bec3; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  body.theme-day .ee-time { color: #7b8a94; }
+  .ee-play-btn { display: inline-flex; align-items: center; gap: 6px; background: #0984e3; color: #fff; border: none; border-radius: 10px; padding: 9px 18px; font-size: 15px; cursor: pointer; }
+  .ee-play-btn:active { opacity: 0.85; }
+  .ee-play-btn .ee-ico { font-size: 12px; }
+  .ee-tip { font-size: 12px; color: #b2bec3; margin: 4px 0 10px; line-height: 1.55; }
+  body.theme-day .ee-tip { color: #7b8a94; }
+  .ee-filter-pills { display: flex; gap: 8px; margin: 6px 0 10px; flex-wrap: wrap; }
+  .ee-pill { padding: 4px 12px; border-radius: 13px; background: rgba(255,255,255,0.08); color: #b2bec3; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
+  .ee-pill.active { background: rgba(9,132,227,0.25); color: #74b9ff; border-color: rgba(9,132,227,0.4); }
+  body.theme-day .ee-pill { background: rgba(9,132,227,0.08); color: #7b8a94; }
+  body.theme-day .ee-pill.active { background: #0984e3; color: #fff; }
+  .ee-add-row { display: flex; gap: 8px; margin: 4px 0 8px; flex-wrap: wrap; }
+  .ee-list { margin-top: 6px; }
+  .ee-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .ee-item:last-child { border-bottom: none; }
+  .ee-item .ee-info { flex: 1; min-width: 0; }
+  .ee-item .ee-name { font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.theme-day .ee-item .ee-name { color: #23303a; }
+  .ee-item .ee-meta { font-size: 12px; color: #b2bec3; margin-top: 2px; }
+  body.theme-day .ee-item .ee-meta { color: #7b8a94; }
+  .ee-item .ee-tag { display: inline-block; padding: 1px 7px; border-radius: 8px; background: rgba(56,168,157,0.2); color: #55efc4; font-size: 11px; margin-right: 6px; }
+  .ee-item .ee-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+  .ee-item .ee-play { width: 24px; height: 24px; cursor: pointer; padding: 2px; background: transparent; border: none; display: inline-flex; align-items: center; justify-content: center; opacity: 0.85; }
+  .ee-item .ee-play svg { width: 100%; height: 100%; stroke: #0984e3; fill: #0984e3; stroke-width: 0; }
+  .ee-item .rec-del { width: 24px; height: 24px; cursor: pointer; padding: 2px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; opacity: 0.75; transition: opacity 0.2s; background: transparent; border: none; }
+  .ee-item .rec-del svg { width: 100%; height: 100%; display: block; stroke: #fff; stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .ee-item .rec-del:active { opacity: 1; }
+  body.theme-day .ee-item .rec-del svg { stroke: #3d4852; }
+  .ee-empty { font-size: 13px; color: #b2bec3; padding: 12px 0; text-align: center; }
+  body.theme-day .ee-empty { color: #7b8a94; }
+  .ee-wiki-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 14px; color: #fff; }
+  body.theme-day .ee-wiki-item { color: #23303a; }
+  .ee-wiki-item button:disabled { opacity: 0.5; cursor: default; }
   /* 编辑弹窗字段 */
   .te-field { margin: 12px 0; }
   .te-label { font-size: 14px; color: #dfe6e9; margin-bottom: 6px; }
@@ -1952,6 +2000,19 @@
   <div class="ov-wrap">
     <div class="overview" id="overviewBar"></div>
     <div class="ov-report-pill" id="ovReportPill" onclick="openReport()">&#128200; 日报 <span class="pill-chev">&#8250;</span></div>
+  </div>
+
+  <!-- v3.5.157 早教音频：首页随机播放/停止（进度 + 锁屏控制） -->
+  <div class="ee-card" id="earlyEduCard">
+    <div class="ee-head"><span class="ee-title">🎵 早教音频</span></div>
+    <div class="ee-now" id="eeNowText">暂未添加音频，去「管理 → 早教」添加</div>
+    <div class="ee-progress-row">
+      <div class="ee-progress" id="eeProgress"><div class="ee-progress-fill" id="eeProgressFill"></div></div>
+      <div class="ee-time" id="eeTime">00:00 / 00:00</div>
+    </div>
+    <div class="ee-actions">
+      <button class="ee-play-btn" id="eePlayBtn" onclick="eeToggle()"><span class="ee-ico" id="eeIco">&#9654;</span><span id="eePlayLabel">播放</span></button>
+    </div>
   </div>
 
   <div class="home-filter" id="homeFilter">
@@ -2189,6 +2250,7 @@
       <div class="cat-tag active" data-mtab="settings" onclick="switchManageTab('settings')"><span class="cat-icon">⚙️</span><span class="cat-label">设置</span></div>
       <div class="cat-tag" data-mtab="acts" onclick="switchManageTab('acts')"><span class="cat-icon">🏃</span><span class="cat-label">活动</span></div>
       <div class="cat-tag" data-mtab="tasks" onclick="switchManageTab('tasks')"><span class="cat-icon">⏰</span><span class="cat-label">任务</span></div>
+      <div class="cat-tag" data-mtab="earlyedu" onclick="switchManageTab('earlyedu')"><span class="cat-icon">🎵</span><span class="cat-label">早教</span></div>
     </div>
     <div class="manage-tab-panel" data-mpanel="settings">
     <div class="sync-section">
@@ -2280,6 +2342,22 @@
     </div>
       <div class="tasks-list" id="tasksList"></div>
     </div>
+    <!-- v3.5.157 早教音频管理：儿歌/古诗本地上传(Supabase)，故事免版权(Wikimedia) -->
+    <div class="manage-tab-panel" data-mpanel="earlyedu" style="display:none;">
+      <div class="ee-tip">儿歌、古诗请在对应分类下<b>本地上传</b>音频（存 Supabase，多设备同步）；「故事」可一键添加<b>免版权</b>公版音频（Wikimedia，CC 授权）。删除即同步移除。</div>
+      <div class="ee-filter-pills" id="eeFilterPills">
+        <span class="ee-pill active" data-ee-type="all" onclick="eeSetFilter('all')">全部</span>
+        <span class="ee-pill" data-ee-type="儿歌" onclick="eeSetFilter('儿歌')">儿歌</span>
+        <span class="ee-pill" data-ee-type="故事" onclick="eeSetFilter('故事')">故事</span>
+        <span class="ee-pill" data-ee-type="古诗" onclick="eeSetFilter('古诗')">古诗</span>
+      </div>
+      <div class="ee-add-row" id="eeAddRow">
+        <span id="eeUploadBtnWrap"><button class="fab-btn" onclick="eeTriggerUpload()"><span class="fab-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg></span> 本地上传</button></span>
+        <button class="fab-btn" id="eeWikiBtn" onclick="eeShowWiki()"><span class="fab-icon fab-emoji">🌐</span> 免版权故事</button>
+      </div>
+      <input type="file" id="eeFileInput" accept="audio/*" multiple style="display:none;" onchange="eeOnFiles(this)">
+      <div class="ee-list" id="eeList"></div>
+    </div>
     <!-- v3.5.69 底部固定操作条：选项区很长，滚到最底下也能一键关闭（选项为即时保存，无需"保存"按钮） -->
     <div class="manage-footer">
       <button class="btn btn-success" onclick="hideModal('manageModal')">确定</button>
@@ -2341,6 +2419,18 @@
     <div class="modal-actions confirm-actions" style="justify-content:flex-end;">
       <button class="btn btn-primary" onclick="hideConfirm()">取消</button>
       <button class="btn btn-danger" id="confirmOkBtn" onclick="runConfirm()">删除</button>
+    </div>
+  </div>
+</div>
+<!-- v3.5.157 免版权故事选择弹窗 -->
+<div class="modal-overlay" id="eeWikiModal" onclick="if(event.target===this)hideModal('eeWikiModal')">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:420px;">
+    <button class="modal-close" onclick="hideModal('eeWikiModal')">&times;</button>
+    <div class="modal-title">🌐 免版权故事（Wikimedia · CC）</div>
+    <div class="ee-tip">以下为公版/CC 授权音频，点击「添加」即加入早教列表。iOS 设备可能不支持 OGG 格式，建议用安卓/电脑试听，或在「儿歌/古诗」分类本地上传 MP3。</div>
+    <div id="eeWikiList"></div>
+    <div class="modal-actions" style="justify-content:flex-end;">
+      <button class="btn btn-success" onclick="hideModal('eeWikiModal')">完成</button>
     </div>
   </div>
 </div>
@@ -2487,6 +2577,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.156"></script>
+<script src="app.js?v=v3.5.157"></script>
 </body>
 </html>

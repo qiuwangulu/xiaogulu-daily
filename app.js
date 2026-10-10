@@ -230,6 +230,8 @@ function init() {
   initSync();
   aiInit();
   loadMemoCloud().catch(() => {});   // v3.5.115 备忘录启动即从家庭云恢复（本地优先合并）
+  loadEarlyEdu().then(() => { renderEarlyEduCard(); }).catch(() => {}); // v3.5.157 早教音频
+  eeSetupMediaSession(); // v3.5.157 锁屏播放/停止
   bindVoiceTouch();
   bindVoiceButton('kbVoiceBtn', 'kb');     // v3.5.127 知识库添加区语音按钮
   bindVoiceButton('memoVoiceBtn', 'memo'); // v3.5.127 备忘录添加区语音按钮
@@ -1378,7 +1380,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.156'; // v3.5.156: 任务删除按钮改为灰色(与编辑一致) + 删除走自定义二次确认弹窗(替代原生confirm)
+const APP_VERSION = 'v3.5.157'; // v3.5.157: 早教音频——管理弹窗新增「早教」标签页(本地上传到Supabase/免版权故事)；首页随机播放/停止(进度+锁屏控制)；删除按钮与任务页一致
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3094,6 +3096,8 @@ function switchManageTab(tab) {
   if (box) box.scrollTop = 0;
   // v3.5.136 切到「任务」页时立即跑一次调度：进入生成窗口的任务可当场生成计划并显示（计划为空则无视冷却重试）
   if (tab === 'tasks') { try { runScheduler(true); } catch (e) {} }
+  // v3.5.157 切到「早教」页时渲染列表
+  if (tab === 'earlyedu') { try { renderEarlyEduTab(); } catch (e) {} }
 }
 // v3.5.94 活动列表：喝奶下方接奶量/乳糖酶默认值；大运动/精细动作/辅食开关的下一行接各自选项区插槽
 function buildManageListHTML() {
@@ -3131,6 +3135,7 @@ function openManage() {
   // v3.5.132 打开管理即载入天气地址与定时任务列表
   const wa = document.getElementById('weatherAddrInput'); if (wa) wa.value = getWeatherAddr();
   renderSchedTasks();
+  renderEarlyEduTab(); // v3.5.157 早教音频列表
   document.getElementById('readOnlyToggle').checked = isReadOnlyMode();
   loadPushTokenUI();
   loadPushTopicUI();
@@ -5242,6 +5247,234 @@ async function saveSchedCloud() {
     _schedCloudLast = body;
     console.log('[Sched] 定时任务已同步家庭云');
   } catch (e) { console.warn('[Sched] 定时任务云端同步失败:', e); }
+}
+
+/* ================= 早教音频（v3.5.157） =================
+ * 存储：本地上传 → Supabase Storage 公开桶 early-edu（多设备同步）；
+ *       故事 → Wikimedia 免版权音频（运行时通过 Commons API 解析直链）。
+ * 元数据（名称/类型/URL）加密存 family_config._early_edu，与家庭云同步。
+ * 首页：随机播放/停止（避开上一条）+ 进度条 + Media Session 锁屏控制。 */
+const EARLY_EDU_KEY = '_early_edu';
+const EARLY_EDU_BUCKET = 'early-edu';
+const WIKIMEDIA_STORIES = [
+  { name: '《弹琴》· 刘长卿（古诗朗读）', title: 'File:Chinese-LingLingQiXianShang.ogg' },
+  { name: '《梦游天姥吟留别》· 李白（古诗朗读）', title: 'File:梦游天姥吟留别.ogg' },
+  { name: '《琴歌》· 李颀（古诗朗读）', title: 'File:Chinese-ZhuRenYouJiuHuanJinXi.ogg' },
+  { name: '《浪淘沙令》· 李煜（无锡话朗读）', title: 'File:浪淘沙令-无锡闲话.flac' }
+];
+let EARLY_EDU = [];
+let eeFilterType = 'all';
+let eeCurrentId = null, eeLastId = null;
+let eeAudio = null;
+let _eeSaveTimer = null, _eeLast = '';
+
+function eeStorageBase() { return (SYNC_CONFIG.supabaseUrl || '').replace(/\/+$/, '') + '/storage/v1'; }
+
+async function loadEarlyEdu() {
+  try { const raw = localStorage.getItem('early_edu'); if (raw) EARLY_EDU = JSON.parse(raw) || []; } catch (e) {}
+  if (isSyncReady()) {
+    try {
+      const key = await getCryptoKey(); if (!key) return;
+      const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${EARLY_EDU_KEY}&select=encrypted_data,iv`);
+      if (rows.length && rows[0].encrypted_data && rows[0].iv) {
+        const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
+        const cloud = JSON.parse(json || '[]');
+        if (Array.isArray(cloud) && cloud.length) EARLY_EDU = eeMergeEarlyEdu(EARLY_EDU, cloud);
+      }
+    } catch (e) { console.warn('[早教] 云端读取失败', e); }
+  }
+}
+function eeMergeEarlyEdu(local, cloud) {
+  const map = {};
+  local.forEach(x => { if (x && x.id) map[x.id] = x; });
+  cloud.forEach(x => { if (x && x.id && !map[x.id]) map[x.id] = x; });
+  return Object.values(map);
+}
+async function saveEarlyEdu() {
+  localStorage.setItem('early_edu', JSON.stringify(EARLY_EDU));
+  if (!isSyncReady()) return;
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const body = JSON.stringify(EARLY_EDU);
+    if (body === _eeLast) return;
+    const { data, iv } = await encrypt(key, body);
+    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: EARLY_EDU_KEY, encrypted_data: data, iv, last_modified: Date.now() });
+    _eeLast = body;
+  } catch (e) { console.warn('[早教] 云端保存失败', e); }
+}
+function scheduleEarlyEduSave() { if (_eeSaveTimer) clearTimeout(_eeSaveTimer); _eeSaveTimer = setTimeout(() => { _eeSaveTimer = null; saveEarlyEdu().catch(() => {}); }, 800); }
+
+/* ---------- 管理：渲染 / 筛选 / 上传 / 添加 / 删除 ---------- */
+function renderEarlyEduTab() { renderEarlyEduList(); eeUpdateAddButtons(); }
+function eeUpdateAddButtons() {
+  const up = document.getElementById('eeUploadBtnWrap');
+  const wiki = document.getElementById('eeWikiBtn');
+  if (eeFilterType === '故事') { if (up) up.style.display = 'none'; if (wiki) wiki.style.display = ''; }
+  else if (eeFilterType === '儿歌' || eeFilterType === '古诗') { if (up) up.style.display = ''; if (wiki) wiki.style.display = 'none'; }
+  else { if (up) up.style.display = ''; if (wiki) wiki.style.display = ''; }
+}
+function eeSetFilter(type) {
+  eeFilterType = type;
+  document.querySelectorAll('#eeFilterPills .ee-pill').forEach(p => p.classList.toggle('active', p.dataset.eeType === type));
+  eeUpdateAddButtons(); renderEarlyEduList();
+}
+function renderEarlyEduList() {
+  const list = document.getElementById('eeList'); if (!list) return;
+  let items = EARLY_EDU.slice().sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+  if (eeFilterType !== 'all') items = items.filter(x => x.type === eeFilterType);
+  if (!items.length) { list.innerHTML = '<div class="ee-empty">暂无音频，点上方按钮添加</div>'; return; }
+  let h = '';
+  items.forEach(it => {
+    const tag = it.src === 'wikimedia' ? '免版权' : '本地';
+    h += '<div class="ee-item" data-id="' + it.id + '">'
+      + '<div class="ee-info"><div class="ee-name">' + escapeHtml(it.name) + '</div>'
+      + '<div class="ee-meta"><span class="ee-tag">' + it.type + '</span>' + tag + (it.src === 'wikimedia' ? ' · Wikimedia' : '') + '</div></div>'
+      + '<div class="ee-actions">'
+      + '<button class="ee-play" onclick="eePreview(\'' + it.id + '\')" title="试听"><svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg></button>'
+      + '<button class="rec-del" onclick="eeDelete(\'' + it.id + '\')" title="删除"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6"/><path d="M14 10v6"/></svg></button>'
+      + '</div></div>';
+  });
+  list.innerHTML = h;
+}
+function eeTriggerUpload() { const inp = document.getElementById('eeFileInput'); if (inp) inp.click(); }
+async function eeOnFiles(input) {
+  const files = Array.from(input.files || []);
+  input.value = '';
+  if (!files.length) return;
+  const type = (eeFilterType === '儿歌' || eeFilterType === '古诗') ? eeFilterType : '儿歌';
+  showToast('上传中…');
+  let ok = 0, fail = 0;
+  for (const f of files) {
+    try {
+      const ext = (f.name.split('.').pop() || 'mp3').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const fid = getFamilyId() || 'default';
+      const path = fid + '/ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '.' + ext;
+      const url = await eeUploadFile(f, path);
+      EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: f.name.replace(/\.[^.]+$/, ''), type, src: 'upload', url, path, addedAt: Date.now() });
+      ok++;
+    } catch (e) { fail++; console.warn('[早教] 上传失败', e); }
+  }
+  scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard();
+  showToast(ok ? ('已添加 ' + ok + ' 个音频' + (fail ? ('，' + fail + ' 个失败') : '')) : '上传失败，请检查网络或稍后重试');
+}
+async function eeUploadFile(file, path) {
+  if (!isSyncReady()) throw new Error('未配置家庭云（请先开启同步）');
+  const base = eeStorageBase();
+  const res = await fetch(base + '/object/' + EARLY_EDU_BUCKET + '/' + encodeURIComponent(path), {
+    method: 'POST',
+    headers: { 'apikey': SYNC_CONFIG.supabaseKey, 'Authorization': 'Bearer ' + SYNC_CONFIG.supabaseKey, 'x-upsert': 'true', 'Content-Type': (file.type || 'audio/mpeg') },
+    body: file
+  });
+  if (!res.ok) { const t = await res.text(); throw new Error('上传失败 ' + res.status + ' ' + t.slice(0, 80)); }
+  return base + '/object/public/' + EARLY_EDU_BUCKET + '/' + encodeURIComponent(path);
+}
+async function eeShowWiki() {
+  const list = document.getElementById('eeWikiList');
+  if (list) {
+    let h = '';
+    WIKIMEDIA_STORIES.forEach((s, i) => {
+      const exists = EARLY_EDU.some(x => x.wikiTitle === s.title);
+      h += '<div class="ee-wiki-item"><span>' + escapeHtml(s.name) + '</span><button class="btn ' + (exists ? '' : 'btn-primary') + '" ' + (exists ? 'disabled' : '') + ' onclick="eeAddWiki(' + i + ')">' + (exists ? '已添加' : '添加') + '</button></div>';
+    });
+    list.innerHTML = h;
+  }
+  showModal('eeWikiModal');
+}
+async function eeAddWiki(i) {
+  const s = WIKIMEDIA_STORIES[i]; if (!s) return;
+  if (EARLY_EDU.some(x => x.wikiTitle === s.title)) { showToast('已在列表中'); return; }
+  showToast('解析音频中…');
+  try {
+    const url = await eeResolveWiki(s.title);
+    EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: s.name, type: '故事', src: 'wikimedia', url, wikiTitle: s.title, addedAt: Date.now() });
+    scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard(); eeShowWiki();
+    showToast('已添加：' + s.name);
+  } catch (e) { console.warn(e); showToast('解析失败，请稍后重试或本地上传'); }
+}
+async function eeResolveWiki(title) {
+  const api = 'https://commons.wikimedia.org/w/api.php?action=query&prop=imageinfo&iiprop=url&format=json&origin=*&titles=' + encodeURIComponent(title);
+  const res = await fetch(api);
+  if (!res.ok) throw new Error('api ' + res.status);
+  const d = await res.json();
+  const pages = d.query && d.query.pages;
+  if (pages) for (const k in pages) { const ii = pages[k].imageinfo && pages[k].imageinfo[0]; if (ii && ii.url) return ii.url; }
+  throw new Error('no url');
+}
+function eeDelete(id) {
+  const it = EARLY_EDU.find(x => x.id === id); if (!it) return;
+  showConfirm('删除音频', '确定删除「' + (it.name || '该音频') + '」？删除后从早教列表移除' + (it.src === 'upload' ? '，云端文件也会一并删除' : '') + '。', () => {
+    const idx = EARLY_EDU.findIndex(x => x.id === id);
+    if (idx >= 0) EARLY_EDU.splice(idx, 1);
+    if (it.src === 'upload' && it.path) eeDeleteFile(it.path).catch(() => {});
+    if (eeCurrentId === id) eeStop();
+    scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard();
+    showToast('已删除');
+  });
+}
+async function eeDeleteFile(path) {
+  if (!isSyncReady()) return;
+  try { await fetch(eeStorageBase() + '/object/' + EARLY_EDU_BUCKET + '/' + encodeURIComponent(path), { method: 'DELETE', headers: { 'apikey': SYNC_CONFIG.supabaseKey, 'Authorization': 'Bearer ' + SYNC_CONFIG.supabaseKey } }); }
+  catch (e) { console.warn('[早教] 删除文件失败', e); }
+}
+function eePreview(id) { const it = EARLY_EDU.find(x => x.id === id); if (it) eePlayItem(it); }
+
+/* ---------- 首页：随机播放 / 停止 / 进度 / 锁屏 ---------- */
+function eeEnsureAudio() {
+  if (eeAudio) return eeAudio;
+  eeAudio = new Audio();
+  eeAudio.addEventListener('timeupdate', () => {
+    if (!eeAudio.duration || isNaN(eeAudio.duration)) return;
+    const fill = document.getElementById('eeProgressFill'); if (fill) fill.style.width = (eeAudio.currentTime / eeAudio.duration * 100) + '%';
+    const t = document.getElementById('eeTime'); if (t) t.textContent = eeFmtTime(eeAudio.currentTime) + ' / ' + eeFmtTime(eeAudio.duration);
+  });
+  eeAudio.addEventListener('ended', () => { eeStop(); });
+  eeAudio.addEventListener('pause', () => { if ('mediaSession' in navigator) { try { navigator.mediaSession.playbackState = 'paused'; } catch (e) {} } });
+  eeAudio.addEventListener('play', () => { if ('mediaSession' in navigator) { try { navigator.mediaSession.playbackState = 'playing'; } catch (e) {} } });
+  return eeAudio;
+}
+function eeFmtTime(s) { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function eeToggle() { if (eeAudio && !eeAudio.paused && !eeAudio.ended) eeStop(); else eePlayRandom(); }
+function eePlayRandom() {
+  if (!EARLY_EDU.length) { showToast('请先在「管理 → 早教」添加音频'); return; }
+  let pool = EARLY_EDU.slice();
+  if (eeLastId && pool.length > 1) pool = pool.filter(x => x.id !== eeLastId);
+  const it = pool[Math.floor(Math.random() * pool.length)];
+  eeLastId = it.id;
+  eePlayItem(it);
+}
+function eePlayItem(it) {
+  const a = eeEnsureAudio();
+  a.src = it.url;
+  a.play().then(() => {
+    eeCurrentId = it.id;
+    const now = document.getElementById('eeNowText'); if (now) { now.textContent = '正在播放：' + it.type + ' · ' + it.name; now.classList.add('playing'); }
+    const lbl = document.getElementById('eePlayLabel'); if (lbl) lbl.textContent = '停止';
+    const ico = document.getElementById('eeIco'); if (ico) ico.textContent = '■';
+    if ('mediaSession' in navigator) { try { navigator.mediaSession.metadata = new MediaMetadata({ title: it.name, artist: '小咕噜早教 · ' + it.type, album: '早教音频' }); } catch (e) {} }
+  }).catch(err => { showToast('播放失败：' + (err && err.message ? err.message : '格式可能不支持')); });
+}
+function eeStop() {
+  if (eeAudio) { eeAudio.pause(); eeAudio.currentTime = 0; }
+  eeCurrentId = null;
+  const lbl = document.getElementById('eePlayLabel'); if (lbl) lbl.textContent = '播放';
+  const ico = document.getElementById('eeIco'); if (ico) ico.textContent = '▶';
+  const fill = document.getElementById('eeProgressFill'); if (fill) fill.style.width = '0%';
+  const t = document.getElementById('eeTime'); if (t) t.textContent = '00:00 / 00:00';
+  renderEarlyEduCard();
+}
+function eeSetupMediaSession() {
+  if (!('mediaSession' in navigator)) return;
+  try {
+    navigator.mediaSession.setActionHandler('play', () => { if (eeCurrentId) { eeAudio && eeAudio.play().catch(() => {}); } else eePlayRandom(); });
+    navigator.mediaSession.setActionHandler('pause', () => eeStop());
+    navigator.mediaSession.setActionHandler('stop', () => eeStop());
+  } catch (e) {}
+}
+function renderEarlyEduCard() {
+  const now = document.getElementById('eeNowText'); if (!now) return;
+  if (eeCurrentId) return;
+  now.textContent = EARLY_EDU.length ? '点「播放」随机听一首' : '暂未添加音频，去「管理 → 早教」添加';
+  now.classList.remove('playing');
 }
 
 /* ---------- 天气地址（可配置 + 加密家庭云） ---------- */
