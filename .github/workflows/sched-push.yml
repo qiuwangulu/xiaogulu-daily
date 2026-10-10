@@ -2,6 +2,7 @@ name: sched-push
 
 # 服务端定时推送：无需打开网页，每约 5 分钟检查一次是否有定时任务到点。
 # 到点则生成 AI 今日计划（如需要）并推送 PushPlus。
+# 2026-10-10: GitHub 定时触发平台异常（新建 schedule 不注册、event=schedule 为 0），重推以强制重新注册。
 on:
   schedule:
     # 每 5 分钟运行一次（GitHub 的 cron 为 UTC；触发时间判断在脚本内按 TZ=Asia/Shanghai 进行）
