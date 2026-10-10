@@ -122,8 +122,9 @@
   .ai-chip {
     position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%);
     background: #24375c; border: 1px solid #b2bec3; color: #fff;
-    font-size: 12px; font-weight: 800;
-    padding: 3px 11px; border-radius: 13px; white-space: nowrap;
+    font-size: 12px; font-weight: 800; line-height: 1;
+    height: 25px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
+    padding: 0 11px; border-radius: 13px; white-space: nowrap;
   }
   body.theme-day .ai-chip { background: #d8e9fa; border-color: #0984e3; color: #0984e3; }
 
@@ -154,8 +155,9 @@
   /* v3.5.111 日报胶囊尺寸与字号各缩小一档并上移；深色模式加外框，外框色 = 首页「添加」按钮外框色 #b2bec3 */
   .ov-report-row { display: flex; justify-content: flex-end; margin-top: 5px; }
   .ov-report-pill {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 3px 11px; border-radius: 13px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    height: 25px; box-sizing: border-box; line-height: 1;
+    padding: 0 11px; border-radius: 13px; cursor: pointer;
     background: #24375c; border: 1px solid #b2bec3;
     color: #fff; font-size: 12px; font-weight: 800; transition: all .15s;
   }
@@ -2465,6 +2467,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.152"></script>
+<script src="app.js?v=v3.5.153"></script>
 </body>
 </html>

@@ -1378,7 +1378,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.152'; // v3.5.152: 日报胶囊与AI育儿胶囊尺寸统一(padding/border-radius一致,高度对齐)
+const APP_VERSION = 'v3.5.153'; // v3.5.153: AI任务推送标题改为任务名称(不含日期)；AI育儿/日报胶囊锁死相同高度25px
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5486,10 +5486,11 @@ async function pushTask(task, trig, pk) {
   let title, content;
   if (task.mode === 'ai') {
     const sp = splitPlan(task.content);
-    const ds = task.genDate || (trig.getFullYear() + '-' + _pad2(trig.getMonth() + 1) + '-' + _pad2(trig.getDate()));
-    title = '📅 ' + ds + ' 今日计划';
+    // v3.5.153 推送标题改为「任务名称」，不再拼接日期
+    const nm = (task.name && String(task.name).trim()) ? String(task.name).trim() : '今日计划';
+    title = '📅 ' + nm;
     const sum = sp.summary ? '<p style="font-size:16px;font-weight:600;">📌 ' + escapeHtml(sp.summary) + '</p>' : '';
-    content = '<h3>小咕噜 ' + ds + ' 今日计划</h3>' + sum + '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(sp.detail || task.content || '') + '</pre>';
+    content = '<h3>小咕噜 ' + escapeHtml(nm) + '</h3>' + sum + '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(sp.detail || task.content || '') + '</pre>';
   } else {
     // v3.5.148 通知内容改为任务名称（如「⏰ 育儿嫂午餐费」），不再统一显示"定时提醒"
     const nm = (task.name && String(task.name).trim()) ? String(task.name).trim() : '定时提醒';
