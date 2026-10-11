@@ -1878,6 +1878,20 @@
   body.theme-day .ee-count-row .ee-count-unit { color: #7b8a94; }
   .ee-tip { font-size: 12px; color: #b2bec3; margin: 4px 0 10px; line-height: 1.55; }
   body.theme-day .ee-tip { color: #7b8a94; }
+  /* v3.5.160 早教首页切换/播放图标缩至与「添加」按钮图标观感一致（添加图标视觉字形约 20px） */
+  .ee-card .fab-icon svg { width: 20px; height: 20px; }
+  /* v3.5.160 合并卡片子区块（听歌 / 听故事） */
+  .ee-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
+  body.theme-day .ee-section { border-top-color: rgba(9,132,227,0.15); }
+  .ee-sub-head { font-size: 14px; font-weight: 600; color: #dfe6e9; margin-bottom: 6px; }
+  body.theme-day .ee-sub-head { color: #1f5f60; }
+  .ee-sub-body .card-empty { font-size: 13px; color: #b2bec3; padding: 2px 0 4px; }
+  body.theme-day .ee-sub-body .card-empty { color: #7b8a94; }
+  .ee-sub-body .record-tag { padding: 7px 0; }
+  /* v3.5.160 选免版权分组 */
+  .ee-wiki-group { margin-bottom: 8px; }
+  .ee-wiki-group-title { font-size: 13px; color: #74b9ff; font-weight: 600; margin: 4px 0 2px; }
+  body.theme-day .ee-wiki-group-title { color: #0984e3; }
   .ee-filter-pills { display: flex; gap: 8px; margin: 6px 0 10px; flex-wrap: wrap; }
   .ee-pill { padding: 4px 12px; border-radius: 13px; background: rgba(255,255,255,0.08); color: #b2bec3; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
   .ee-pill.active { background: rgba(9,132,227,0.25); color: #74b9ff; border-color: rgba(9,132,227,0.4); }
@@ -2009,26 +2023,36 @@
     <div class="ov-report-pill" id="ovReportPill" onclick="openReport()">&#128200; 日报 <span class="pill-chev">&#8250;</span></div>
   </div>
 
-  <!-- v3.5.158 早教：首页随机连播 n 首 / 停止 / 切换（进度 + 锁屏控制） -->
-  <div class="ee-card" id="earlyEduCard">
-    <div class="ee-head"><span class="ee-title">🎵 早教</span></div>
-    <div class="ee-now" id="eeNowText">暂未添加音频，去「管理 → 早教」添加</div>
-    <div class="ee-progress-row">
-      <div class="ee-progress" id="eeProgress"><div class="ee-progress-fill" id="eeProgressFill"></div></div>
-      <div class="ee-time" id="eeTime">00:00 / 00:00</div>
-    </div>
-    <div class="ee-actions">
-      <button class="fab-btn" id="eeSwitchBtn" onclick="eeSwitch()"><span class="fab-icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>切换</button>
-      <button class="fab-btn" id="eePlayBtn" onclick="eeToggle()"><span class="fab-icon" id="eeIco"><svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg></span><span id="eePlayLabel">播放</span></button>
-    </div>
-  </div>
-
   <div class="home-filter" id="homeFilter">
     <div class="cat-dropdown" id="catDropdown">
       <button class="cat-dropdown-btn" id="catDropdownBtn" type="button" onclick="toggleCatDropdown()">📂 全部分类 ▾</button>
       <div class="cat-dropdown-panel" id="catDropdownPanel"></div>
     </div>
     <input class="act-search" id="actSearch" type="text" placeholder="🔍 搜索活动名称…" oninput="onActSearch()">
+  </div>
+
+  <!-- v3.5.160 合并卡片：放音频(固定) + 听歌 + 听故事（听歌/听故事随首页分类筛选显隐），置于分类筛选与活动列表之间 -->
+  <div class="ee-card" id="audioMixerCard">
+    <div class="ee-section ee-section-edu">
+      <div class="ee-head"><span class="ee-title">🎵 放音频</span></div>
+      <div class="ee-now" id="eeNowText">暂未添加音频，去「管理 → 早教」添加</div>
+      <div class="ee-progress-row">
+        <div class="ee-progress" id="eeProgress"><div class="ee-progress-fill" id="eeProgressFill"></div></div>
+        <div class="ee-time" id="eeTime">00:00 / 00:00</div>
+      </div>
+      <div class="ee-actions">
+        <button class="fab-btn" id="eeSwitchBtn" onclick="eeSwitch()"><span class="fab-icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>切换</button>
+        <button class="fab-btn" id="eePlayBtn" onclick="eeToggle()"><span class="fab-icon" id="eeIco"><svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg></span><span id="eePlayLabel">播放</span></button>
+      </div>
+    </div>
+    <div class="ee-section ee-section-music" id="mixerMusicSection">
+      <div class="ee-sub-head">🎵 听歌</div>
+      <div class="ee-sub-body" id="mixerMusicBody"></div>
+    </div>
+    <div class="ee-section ee-section-story" id="mixerStorySection">
+      <div class="ee-sub-head">🎧 听故事</div>
+      <div class="ee-sub-body" id="mixerStoryBody"></div>
+    </div>
   </div>
 
   <div class="cards-grid" id="cardsGrid"></div>
@@ -2352,7 +2376,7 @@
     </div>
     <!-- v3.5.157 早教音频管理：儿歌/古诗本地上传(Supabase)，故事免版权(Wikimedia) -->
     <div class="manage-tab-panel" data-mpanel="earlyedu" style="display:none;">
-      <div class="ee-tip">儿歌、古诗请在对应分类下<b>本地上传</b>音频（存 Supabase，多设备同步）；「故事」可一键添加<b>免版权</b>公版音频（Wikimedia，CC 授权）。删除即同步移除。</div>
+      <div class="ee-tip">儿歌、古诗请在对应分类下<b>本地上传</b>音频（存 Supabase，多设备同步）；故事区分<b>中文 / 英文</b>，可在对应分类下一键<b>选免版权</b>公版音频（Wikimedia，CC 授权）。删除即同步移除。</div>
       <div class="ee-count-row">
         <span class="ee-count-label">🔢 播放音频数（首页点「播放」随机连播）</span>
         <span style="display:inline-flex;align-items:center;gap:6px;">
@@ -2363,12 +2387,13 @@
       <div class="ee-filter-pills" id="eeFilterPills">
         <span class="ee-pill active" data-ee-type="all" onclick="eeSetFilter('all')">全部</span>
         <span class="ee-pill" data-ee-type="儿歌" onclick="eeSetFilter('儿歌')">儿歌</span>
-        <span class="ee-pill" data-ee-type="故事" onclick="eeSetFilter('故事')">故事</span>
         <span class="ee-pill" data-ee-type="古诗" onclick="eeSetFilter('古诗')">古诗</span>
+        <span class="ee-pill" data-ee-type="故事(中文)" onclick="eeSetFilter('故事(中文)')">故事(中文)</span>
+        <span class="ee-pill" data-ee-type="故事(英文)" onclick="eeSetFilter('故事(英文)')">故事(英文)</span>
       </div>
       <div class="ee-add-row" id="eeAddRow">
         <span id="eeUploadBtnWrap"><button class="fab-btn" onclick="eeTriggerUpload()"><span class="fab-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg></span> 本地上传</button></span>
-        <button class="fab-btn" id="eeWikiBtn" onclick="eeShowWiki()"><span class="fab-icon fab-emoji">🌐</span> 免版权故事</button>
+        <button class="fab-btn" id="eeWikiBtn" onclick="eeShowWiki()"><span class="fab-icon fab-emoji">🌐</span> 选免版权</button>
       </div>
       <input type="file" id="eeFileInput" accept="audio/*" multiple style="display:none;" onchange="eeOnFiles(this)">
       <div class="ee-list" id="eeList"></div>
@@ -2437,12 +2462,12 @@
     </div>
   </div>
 </div>
-<!-- v3.5.157 免版权故事选择弹窗 -->
+<!-- v3.5.160 选免版权音频弹窗 -->
 <div class="modal-overlay" id="eeWikiModal" onclick="if(event.target===this)hideModal('eeWikiModal')">
   <div class="modal-box" onclick="event.stopPropagation()" style="max-width:420px;">
     <button class="modal-close" onclick="hideModal('eeWikiModal')">&times;</button>
-    <div class="modal-title">🌐 免版权故事（Wikimedia · CC）</div>
-    <div class="ee-tip">以下为公版/CC 授权音频，点击「添加」即加入早教列表。iOS 设备可能不支持 OGG 格式，建议用安卓/电脑试听，或在「儿歌/古诗」分类本地上传 MP3。</div>
+    <div class="modal-title">🌐 选免版权音频（Wikimedia · CC）</div>
+    <div class="ee-tip">以下为公版/CC 授权音频（已按中文 / 英文分组，共 20+ 首），点击「添加」即加入早教列表，并按分类自动归入古诗 / 儿歌 / 故事(中文/英文)。iOS 设备可能不支持 OGG 格式，建议用安卓/电脑试听，或在对应分类本地上传 MP3。</div>
     <div id="eeWikiList"></div>
     <div class="modal-actions" style="justify-content:flex-end;">
       <button class="btn btn-success" onclick="hideModal('eeWikiModal')">完成</button>
@@ -2592,6 +2617,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.159"></script>
+<script src="app.js?v=v3.5.160"></script>
 </body>
 </html>

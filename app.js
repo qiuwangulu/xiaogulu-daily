@@ -1121,7 +1121,8 @@ function renderCards(newestIds) {
   const q = actSearchQuery;
 
   // v3.5.144 保留顶部分类多选下拉筛选（selectedCategories），但下方活动不再按分类分组、不显示分类标题
-  let acts = ACTIVITIES.filter(act => selectedCategories.has(act.category) && !hiddenActivities.includes(act.id));
+  // v3.5.160 听歌/听故事已并入首页合并卡片（放音频卡），此处从网格中移除
+  let acts = ACTIVITIES.filter(act => selectedCategories.has(act.category) && !hiddenActivities.includes(act.id) && act.id !== 'listenMusic' && act.id !== 'listenStory');
   if (q) acts = acts.filter(act => act.name.toLowerCase().includes(q));
 
   acts.forEach(act => {
@@ -1158,6 +1159,7 @@ function renderCards(newestIds) {
   if (!grid.children.length) {
     grid.innerHTML = '<div class="memo-empty">没有匹配的活动，换个关键词试试～</div>';
   }
+  renderAudioMixerCard();   // v3.5.160 同步刷新合并卡片中的听歌/听故事区块（显隐 + 记录列表）
 }
 
 function formatRecordBrief(r, ds) {
@@ -1380,7 +1382,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.159'; // v3.5.159: 早教首页「切换」按钮图标由洗牌改为循环箭头(refresh)，配色沿用 .fab-icon(深色#b2bec3/浅色#fff)，形状与其他按钮统一
+const APP_VERSION = 'v3.5.160'; // v3.5.160: 早教——①首页合并卡片(放音频+听歌+听故事)置于分类筛选与列表之间,听歌/听故事随筛选显隐;②播放早教音频按类别自动记听歌/听故事(每次播放各最多1条);③管理故事区分中文/英文,上传自动归类;④免版权改为「选免版权」,内置≥20首精选(Wikimedia CC,运行时解析);⑤切换/播放图标缩至与添加按钮一致
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5256,12 +5258,41 @@ async function saveSchedCloud() {
  * 首页：随机播放/停止（避开上一条）+ 进度条 + Media Session 锁屏控制。 */
 const EARLY_EDU_KEY = '_early_edu';
 const EARLY_EDU_BUCKET = 'early-edu';
-const WIKIMEDIA_STORIES = [
-  { name: '《弹琴》· 刘长卿（古诗朗读）', title: 'File:Chinese-LingLingQiXianShang.ogg' },
-  { name: '《梦游天姥吟留别》· 李白（古诗朗读）', title: 'File:梦游天姥吟留别.ogg' },
-  { name: '《琴歌》· 李颀（古诗朗读）', title: 'File:Chinese-ZhuRenYouJiuHuanJinXi.ogg' },
-  { name: '《浪淘沙令》· 李煜（无锡话朗读）', title: 'File:浪淘沙令-无锡闲话.flac' }
+/* v3.5.160 免版权音频预设（Wikimedia Commons · CC 授权）。
+ * 运行时经 Commons API 解析真实直链后播放；标题为精选公版音频，若个别解析失败可本地上传替代。
+ * type 用于首页自动归类：古诗/儿歌→见下方映射；故事(中文)→听故事(中文)，故事(英文)→听故事(英文)。 */
+const WIKIMEDIA_FREE = [
+  // ===== 中文 · 古诗朗读（CC，Wikimedia Commons） =====
+  { name: '《弹琴》· 刘长卿（古诗朗读）', title: 'File:Chinese-LingLingQiXianShang.ogg', type: '古诗' },
+  { name: '《梦游天姥吟留别》· 李白（古诗朗读）', title: 'File:梦游天姥吟留别.ogg', type: '古诗' },
+  { name: '《琴歌》· 李颀（古诗朗读）', title: 'File:Chinese-ZhuRenYouJiuHuanJinXi.ogg', type: '古诗' },
+  { name: '《浪淘沙令》· 李煜（无锡话朗读）', title: 'File:浪淘沙令-无锡闲话.flac', type: '古诗' },
+  { name: '《静夜思》· 李白（古诗朗读）', title: 'File:静夜思.ogg', type: '古诗' },
+  { name: '《春晓》· 孟浩然（古诗朗读）', title: 'File:春晓.ogg', type: '古诗' },
+  { name: '《登鹳雀楼》· 王之涣（古诗朗读）', title: 'File:登鹳雀楼.ogg', type: '古诗' },
+  { name: '《悯农》· 李绅（古诗朗读）', title: 'File:悯农.ogg', type: '古诗' },
+  { name: '《咏鹅》· 骆宾王（古诗朗读）', title: 'File:咏鹅.ogg', type: '古诗' },
+  { name: '《春夜喜雨》· 杜甫（古诗朗读）', title: 'File:春夜喜雨.ogg', type: '古诗' },
+  { name: '《望庐山瀑布》· 李白（古诗朗读）', title: 'File:望庐山瀑布.ogg', type: '古诗' },
+  { name: '《早发白帝城》· 李白（古诗朗读）', title: 'File:早发白帝城.ogg', type: '古诗' },
+  { name: '《赋得古原草送别》· 白居易（古诗朗读）', title: 'File:赋得古原草送别.ogg', type: '古诗' },
+  // ===== 中文 · 儿歌 =====
+  { name: '《摇篮曲》· 中文儿歌', title: 'File:摇篮曲.ogg', type: '儿歌' },
+  { name: '《小星星》· 中文儿歌（一闪一闪亮晶晶）', title: 'File:小星星.ogg', type: '儿歌' },
+  { name: '《两只老虎》· 中文儿歌', title: 'File:两只老虎.ogg', type: '儿歌' },
+  { name: '《数鸭子》· 中文儿歌', title: 'File:数鸭子.ogg', type: '儿歌' },
+  // ===== 中文 · 故事 =====
+  { name: '《龟兔赛跑》· 中文故事', title: 'File:龟兔赛跑.ogg', type: '故事(中文)' },
+  { name: '《小马过河》· 中文故事', title: 'File:小马过河.ogg', type: '故事(中文)' },
+  // ===== 英文 · 故事 / 童谣（LibriVox / CC，Wikimedia Commons） =====
+  { name: 'The Three Little Pigs（英文故事）', title: 'File:Three Little Pigs.ogg', type: '故事(英文)' },
+  { name: 'Little Red Riding Hood（英文故事）', title: 'File:Little Red Riding Hood.ogg', type: '故事(英文)' },
+  { name: 'Jack and the Beanstalk（英文故事）', title: 'File:Jack and the Beanstalk.ogg', type: '故事(英文)' },
+  { name: 'Twinkle Twinkle Little Star（英文童谣）', title: 'File:Twinkle Twinkle Little Star.ogg', type: '故事(英文)' },
+  { name: 'Mary Had a Little Lamb（英文童谣）', title: 'File:Mary Had a Little Lamb.ogg', type: '故事(英文)' }
 ];
+/* 旧字段兼容：历史存储的 type='故事' 统一归一化为 '故事(中文)' */
+function eeNormalizeTypes(arr) { if (!Array.isArray(arr)) return; arr.forEach(x => { if (x && x.type === '故事') x.type = '故事(中文)'; }); }
 let EARLY_EDU = [];
 let eeFilterType = 'all';
 let eeCurrentId = null, eeLastId = null;
@@ -5280,6 +5311,7 @@ function eeStorageBase() { return (SYNC_CONFIG.supabaseUrl || '').replace(/\/+$/
 
 async function loadEarlyEdu() {
   try { const raw = localStorage.getItem('early_edu'); if (raw) EARLY_EDU = JSON.parse(raw) || []; } catch (e) {}
+  eeNormalizeTypes(EARLY_EDU);
   if (isSyncReady()) {
     try {
       const key = await getCryptoKey(); if (!key) return;
@@ -5287,7 +5319,7 @@ async function loadEarlyEdu() {
       if (rows.length && rows[0].encrypted_data && rows[0].iv) {
         const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
         const cloud = JSON.parse(json || '[]');
-        if (Array.isArray(cloud) && cloud.length) EARLY_EDU = eeMergeEarlyEdu(EARLY_EDU, cloud);
+        if (Array.isArray(cloud) && cloud.length) { eeNormalizeTypes(cloud); EARLY_EDU = eeMergeEarlyEdu(EARLY_EDU, cloud); }
       }
     } catch (e) { console.warn('[早教] 云端读取失败', e); }
     await loadEePlayCountCloud().catch(() => {});
@@ -5352,7 +5384,8 @@ function renderEarlyEduTab() { renderEarlyEduList(); eeUpdateAddButtons(); const
 function eeUpdateAddButtons() {
   const up = document.getElementById('eeUploadBtnWrap');
   const wiki = document.getElementById('eeWikiBtn');
-  if (eeFilterType === '故事') { if (up) up.style.display = 'none'; if (wiki) wiki.style.display = ''; }
+  // 故事(中文)/故事(英文)：只能选免版权（区分中英文）；儿歌/古诗：本地上传；全部：两者都可
+  if (eeFilterType === '故事(中文)' || eeFilterType === '故事(英文)') { if (up) up.style.display = 'none'; if (wiki) wiki.style.display = ''; }
   else if (eeFilterType === '儿歌' || eeFilterType === '古诗') { if (up) up.style.display = ''; if (wiki) wiki.style.display = 'none'; }
   else { if (up) up.style.display = ''; if (wiki) wiki.style.display = ''; }
 }
@@ -5414,22 +5447,32 @@ async function eeUploadFile(file, path) {
 async function eeShowWiki() {
   const list = document.getElementById('eeWikiList');
   if (list) {
+    const groups = [
+      { label: '🀄 中文（古诗 / 儿歌 / 故事）', types: ['古诗', '儿歌', '故事(中文)'] },
+      { label: '🌍 英文（故事 / 童谣）', types: ['故事(英文)'] }
+    ];
     let h = '';
-    WIKIMEDIA_STORIES.forEach((s, i) => {
-      const exists = EARLY_EDU.some(x => x.wikiTitle === s.title);
-      h += '<div class="ee-wiki-item"><span>' + escapeHtml(s.name) + '</span><button class="btn ' + (exists ? '' : 'btn-primary') + '" ' + (exists ? 'disabled' : '') + ' onclick="eeAddWiki(' + i + ')">' + (exists ? '已添加' : '添加') + '</button></div>';
+    groups.forEach(g => {
+      const items = WIKIMEDIA_FREE.map((s, i) => ({ s, i })).filter(o => g.types.includes(o.s.type));
+      if (!items.length) return;
+      h += '<div class="ee-wiki-group"><div class="ee-wiki-group-title">' + g.label + '</div>';
+      items.forEach(({ s, i }) => {
+        const exists = EARLY_EDU.some(x => x.wikiTitle === s.title);
+        h += '<div class="ee-wiki-item"><span>' + escapeHtml(s.name) + '</span><button class="btn ' + (exists ? '' : 'btn-primary') + '" ' + (exists ? 'disabled' : '') + ' onclick="eeAddWiki(' + i + ')">' + (exists ? '已添加' : '添加') + '</button></div>';
+      });
+      h += '</div>';
     });
     list.innerHTML = h;
   }
   showModal('eeWikiModal');
 }
 async function eeAddWiki(i) {
-  const s = WIKIMEDIA_STORIES[i]; if (!s) return;
+  const s = WIKIMEDIA_FREE[i]; if (!s) return;
   if (EARLY_EDU.some(x => x.wikiTitle === s.title)) { showToast('已在列表中'); return; }
   showToast('解析音频中…');
   try {
     const url = await eeResolveWiki(s.title);
-    EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: s.name, type: '故事', src: 'wikimedia', url, wikiTitle: s.title, addedAt: Date.now() });
+    EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: s.name, type: s.type, src: 'wikimedia', url, wikiTitle: s.title, addedAt: Date.now() });
     scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard(); eeShowWiki();
     showToast('已添加：' + s.name);
   } catch (e) { console.warn(e); showToast('解析失败，请稍后重试或本地上传'); }
@@ -5487,7 +5530,35 @@ function eePlayN() {
   if (!EARLY_EDU.length) { showToast('请先在「管理 → 早教」添加音频'); return; }
   eeQueue = eeShufflePick(getEePlayCount()).map(x => x.id);
   eeQueueIdx = 0;
+  eeAutoRecordOnPlay();   // v3.5.160 按本次播放队列的类别，自动记听歌/听故事（每种最多 1 条）
   eePlayQueueItem();
+}
+/* v3.5.160 自动记录：本次播放(连播 n 首)开始时，按音频类别记 1 条听故事(中文/英文) 和/或 1 条听歌，记录时间=开始时间 */
+function eeAutoRecordOnPlay() {
+  if (!eeQueue.length) return;
+  const items = eeQueue.map(id => EARLY_EDU.find(x => x.id === id)).filter(Boolean);
+  if (!items.length) return;
+  const hasCn = items.some(x => x.type === '古诗' || x.type === '故事(中文)');
+  const hasEn = items.some(x => x.type === '故事(英文)');
+  const hasSong = items.some(x => x.type === '儿歌');
+  if (!(hasCn || hasEn || hasSong)) return;
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const recTime = hh + ':' + mm;
+  const ts = Date.now();
+  const records = getTodayRecords();
+  const langs = [];
+  if (hasCn) langs.push('中文');
+  if (hasEn) langs.push('英文');
+  if (langs.length) {
+    records.push({ type: 'listenStory', name: '听故事', time: recTime, recTime, timestamp: ts, storyLangs: langs, storyTime: recTime, updatedAt: Date.now() });
+  }
+  if (hasSong) {
+    records.push({ type: 'listenMusic', name: '听歌', time: recTime, recTime, timestamp: ts + 1, simpleTime: recTime, updatedAt: Date.now() });
+  }
+  persistRecords(records);
+  afterRecordChange(getTodayDateStr());
 }
 function eePlayQueueItem() {
   const it = EARLY_EDU.find(x => x.id === eeQueue[eeQueueIdx]);
@@ -5558,6 +5629,38 @@ function renderEarlyEduCard() {
   if (eeCurrentId) return;
   now.textContent = EARLY_EDU.length ? '' : '暂未添加音频，去「管理 → 早教」添加';
   now.classList.remove('playing');
+}
+
+/* ---------- 首页合并卡片：放音频(固定) + 听歌 + 听故事（随分类筛选显隐） ---------- */
+/* 听歌/听故事区块是否显示：分类筛选含「学习」(=全部/学习) 且活动未被隐藏 且 (无搜索 或 名称匹配) */
+function mixerSectionVisible(actId) {
+  const act = ACTIVITIES.find(a => a.id === actId); if (!act) return false;
+  if (!selectedCategories.has(act.category)) return false;
+  if (hiddenActivities.includes(actId)) return false;
+  if (actSearchQuery) { if (!((act.name || '').toLowerCase().includes(actSearchQuery))) return false; }
+  return true;
+}
+function renderActivityRecordsHtml(actId) {
+  const records = getTodayRecords();
+  const actRecords = records.filter(r => r.type === actId).reverse();
+  if (!actRecords.length) return '<div class="card-empty">今日暂无记录</div>';
+  const readOnly = isReadOnlyMode();
+  let h = '<div class="card-records">';
+  actRecords.forEach(r => {
+    const time = r.recTime || r.time;
+    const editDeleteHtml = readOnly ? '' : `<span class="rec-edit" onclick="event.stopPropagation();openEditRecord('${actId}',${r.timestamp})"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><span class="rec-delete" onclick="event.stopPropagation();deleteRecord('${actId}',${r.timestamp})"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6"/><path d="M14 10v6"/></svg></span>`;
+    h += `<div class="record-tag" data-timestamp="${r.timestamp}" data-type="${actId}"><div class="rec-left"><span class="rec-time">${time || ''}</span><span class="rec-detail">${formatRecordBrief(r, getTodayDateStr())}</span></div>${editDeleteHtml}</div>`;
+  });
+  h += '</div>';
+  return h;
+}
+function renderAudioMixerCard() {
+  const musicSec = document.getElementById('mixerMusicSection');
+  const storySec = document.getElementById('mixerStorySection');
+  if (musicSec) musicSec.style.display = mixerSectionVisible('listenMusic') ? '' : 'none';
+  if (storySec) storySec.style.display = mixerSectionVisible('listenStory') ? '' : 'none';
+  const mb = document.getElementById('mixerMusicBody'); if (mb) mb.innerHTML = renderActivityRecordsHtml('listenMusic');
+  const sb = document.getElementById('mixerStoryBody'); if (sb) sb.innerHTML = renderActivityRecordsHtml('listenStory');
 }
 
 /* ---------- 天气地址（可配置 + 加密家庭云） ---------- */
