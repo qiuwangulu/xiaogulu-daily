@@ -1382,7 +1382,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.161'; // v3.5.161: ①放音频/听歌/听故事标题字号对齐活动卡片(16px)、放音频上移消除多余间距;②英文故事自动记录只为「英文」(按语言分条);③免版权解析改为「直链优先+搜索兜底」,预设26首(中文古诗已验证+搜索兜底,中文儿歌建议本地上传,英文童谣/故事资源丰富)
+const APP_VERSION = 'v3.5.162'; // v3.5.162: ①放音频卡重排为「切换/播放按钮→音频名→进度条」;②播放后自动记听歌/听故事并高亮子区块+提示已添加几条;③点击即时UI反馈+audio预加载+连播预取下一首(解点播放卡顿/没反应/下一首慢);④管理「早教」改名「音频」,播放音频数提示换行到下方,分类改下拉多选+搜索框,列表增「修改分类」编辑按钮,本地上传须指定分类,去掉顶部文字提示
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5298,12 +5298,18 @@ const WIKIMEDIA_FREE = [
 /* 旧字段兼容：历史存储的 type='故事' 统一归一化为 '故事(中文)' */
 function eeNormalizeTypes(arr) { if (!Array.isArray(arr)) return; arr.forEach(x => { if (x && x.type === '故事') x.type = '故事(中文)'; }); }
 let EARLY_EDU = [];
-let eeFilterType = 'all';
 let eeCurrentId = null, eeLastId = null;
 let eeAudio = null;
 let _eeSaveTimer = null, _eeLast = '';
 /* v3.5.158 随机连播：播放队列 + 下标 + 播放令牌（令牌用于屏蔽 play/pause 竞态产生的过期回调） */
 let eeQueue = [], eeQueueIdx = 0, eePlayToken = 0;
+/* v3.5.162 预取音频 / 管理分类筛选与搜索 / 上传待定分类 / 分类选择回调 */
+let eePrefetchAudio = null;
+const EE_TYPES = ['儿歌', '古诗', '故事(中文)', '故事(英文)'];
+let eeFilterSet = new Set(EE_TYPES);
+let eeSearchQuery = '';
+let eePendingUploadType = null;
+let eeCatPickCb = null;
 const EE_ICO_PLAY = '<svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg>';
 const EE_ICO_STOP = '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></svg>';
 /* 播放音频数（管理 → 早教里可改，默认 5） */
@@ -5384,24 +5390,46 @@ async function saveEarlyEdu() {
 function scheduleEarlyEduSave() { if (_eeSaveTimer) clearTimeout(_eeSaveTimer); _eeSaveTimer = setTimeout(() => { _eeSaveTimer = null; saveEarlyEdu().catch(() => {}); }, 800); }
 
 /* ---------- 管理：渲染 / 筛选 / 上传 / 添加 / 删除 ---------- */
-function renderEarlyEduTab() { renderEarlyEduList(); eeUpdateAddButtons(); const pc = document.getElementById('eePlayCount'); if (pc) pc.value = getEePlayCount(); }
+function renderEarlyEduTab() {
+  renderEeCatPanel(); eeUpdateAddButtons(); renderEarlyEduList();
+  const pc = document.getElementById('eePlayCount'); if (pc) pc.value = getEePlayCount();
+  const s = document.getElementById('eeSearch'); if (s) s.value = '';
+  eeSearchQuery = '';
+}
+// v3.5.162 管理分类下拉面板（多选 + 搜索框，交互同首页分类筛选）
+function renderEeCatPanel() {
+  const panel = document.getElementById('eeCatPanel');
+  const allOn = eeFilterSet.size === EE_TYPES.length;
+  let h = '<label class="cat-dp-item"><input type="checkbox" ' + (allOn ? 'checked' : '') + ' onchange="eeCatToggleAll(this)"> 📂 全部</label>';
+  EE_TYPES.forEach(t => {
+    const on = eeFilterSet.has(t);
+    h += '<label class="cat-dp-item"><input type="checkbox" data-cat="' + t + '" ' + (on ? 'checked' : '') + ' onchange="eeCatToggleOne(\'' + t + '\',this)"> ' + t + '</label>';
+  });
+  if (panel) panel.innerHTML = h;
+  const btn = document.getElementById('eeCatBtn');
+  if (btn) btn.innerHTML = (allOn ? '📂 全部分类' : '📂 已选 ' + eeFilterSet.size + ' 类') + ' <span class="cat-arrow">&#9662;</span>';
+}
+function toggleEeCat() { const p = document.getElementById('eeCatPanel'); if (p) p.classList.toggle('open'); }
+function eeCatToggleAll(cb) { eeFilterSet = cb.checked ? new Set(EE_TYPES) : new Set(); renderEeCatPanel(); eeUpdateAddButtons(); renderEarlyEduList(); }
+function eeCatToggleOne(t, cb) { if (cb.checked) eeFilterSet.add(t); else eeFilterSet.delete(t); renderEeCatPanel(); eeUpdateAddButtons(); renderEarlyEduList(); }
+function onEeSearch() { const el = document.getElementById('eeSearch'); eeSearchQuery = el ? el.value.trim().toLowerCase() : ''; renderEarlyEduList(); }
 function eeUpdateAddButtons() {
   const up = document.getElementById('eeUploadBtnWrap');
   const wiki = document.getElementById('eeWikiBtn');
-  // 故事(中文)/故事(英文)：只能选免版权（区分中英文）；儿歌/古诗：本地上传；全部：两者都可
-  if (eeFilterType === '故事(中文)' || eeFilterType === '故事(英文)') { if (up) up.style.display = 'none'; if (wiki) wiki.style.display = ''; }
-  else if (eeFilterType === '儿歌' || eeFilterType === '古诗') { if (up) up.style.display = ''; if (wiki) wiki.style.display = 'none'; }
-  else { if (up) up.style.display = ''; if (wiki) wiki.style.display = ''; }
-}
-function eeSetFilter(type) {
-  eeFilterType = type;
-  document.querySelectorAll('#eeFilterPills .ee-pill').forEach(p => p.classList.toggle('active', p.dataset.eeType === type));
-  eeUpdateAddButtons(); renderEarlyEduList();
+  if (!up || !wiki) return;
+  // 仅筛某一种时：故事(中文/英文)只显「选免版权」；儿歌/古詩只显「本地上传」；其它（含全选/多选）两者皆显
+  const onlyCn = eeFilterSet.size === 1 && eeFilterSet.has('故事(中文)');
+  const onlyEn = eeFilterSet.size === 1 && eeFilterSet.has('故事(英文)');
+  const onlyUpload = eeFilterSet.size === 1 && (eeFilterSet.has('儿歌') || eeFilterSet.has('古诗'));
+  if (onlyCn || onlyEn) { up.style.display = 'none'; wiki.style.display = ''; }
+  else if (onlyUpload) { up.style.display = ''; wiki.style.display = 'none'; }
+  else { up.style.display = ''; wiki.style.display = ''; }
 }
 function renderEarlyEduList() {
   const list = document.getElementById('eeList'); if (!list) return;
   let items = EARLY_EDU.slice().sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
-  if (eeFilterType !== 'all') items = items.filter(x => x.type === eeFilterType);
+  if (eeFilterSet.size !== EE_TYPES.length) items = items.filter(x => eeFilterSet.has(x.type));
+  if (eeSearchQuery) items = items.filter(x => (x.name || '').toLowerCase().includes(eeSearchQuery));
   if (!items.length) { list.innerHTML = '<div class="ee-empty">暂无音频，点上方按钮添加</div>'; return; }
   let h = '';
   items.forEach(it => {
@@ -5410,18 +5438,21 @@ function renderEarlyEduList() {
       + '<div class="ee-info"><div class="ee-name">' + escapeHtml(it.name) + '</div>'
       + '<div class="ee-meta"><span class="ee-tag">' + it.type + '</span>' + tag + (it.src === 'wikimedia' ? ' · Wikimedia' : '') + '</div></div>'
       + '<div class="ee-actions">'
+      + '<button class="ee-edit" onclick="eeEditType(\'' + it.id + '\')" title="修改分类"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>'
       + '<button class="ee-play" onclick="eePreview(\'' + it.id + '\')" title="试听"><svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg></button>'
       + '<button class="rec-del" onclick="eeDelete(\'' + it.id + '\')" title="删除"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6"/><path d="M14 10v6"/></svg></button>'
       + '</div></div>';
   });
   list.innerHTML = h;
 }
-function eeTriggerUpload() { const inp = document.getElementById('eeFileInput'); if (inp) inp.click(); }
+// v3.5.162 本地上传：先弹分类选择，确定后再选文件（本地上传需指定分类）
+function eeTriggerUpload() { eeOpenCatPick('选择上传音频的分类', (t) => { eePendingUploadType = t; const inp = document.getElementById('eeFileInput'); if (inp) inp.click(); }); }
 async function eeOnFiles(input) {
   const files = Array.from(input.files || []);
   input.value = '';
-  if (!files.length) return;
-  const type = (eeFilterType === '儿歌' || eeFilterType === '古诗') ? eeFilterType : '儿歌';
+  if (!files.length) { eePendingUploadType = null; return; }
+  const type = eePendingUploadType || '儿歌';
+  eePendingUploadType = null;
   showToast('上传中…');
   let ok = 0, fail = 0;
   for (const f of files) {
@@ -5432,10 +5463,21 @@ async function eeOnFiles(input) {
       const url = await eeUploadFile(f, path);
       EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: f.name.replace(/\.[^.]+$/, ''), type, src: 'upload', url, path, addedAt: Date.now() });
       ok++;
-    } catch (e) { fail++; console.warn('[早教] 上传失败', e); }
+    } catch (e) { fail++; console.warn('[音频] 上传失败', e); }
   }
   scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard();
   showToast(ok ? ('已添加 ' + ok + ' 个音频' + (fail ? ('，' + fail + ' 个失败') : '')) : '上传失败，请检查网络或稍后重试');
+}
+// v3.5.162 分类选择弹窗（上传 / 修改分类 共用）
+function eeOpenCatPick(title, cb) { eeCatPickCb = cb; const t = document.getElementById('eeCatPickTitle'); if (t) t.textContent = title || '选择分类'; showModal('eeCatPickModal'); }
+function eePickCat(t) { hideModal('eeCatPickModal'); const cb = eeCatPickCb; eeCatPickCb = null; if (cb) cb(t); }
+// 修改单个音频的分类
+function eeEditType(id) {
+  eeOpenCatPick('修改音频分类', (t) => {
+    const it = EARLY_EDU.find(x => x.id === id); if (!it) return;
+    it.type = t; scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard();
+    showToast('已修改分类：' + t);
+  });
 }
 async function eeUploadFile(file, path) {
   if (!isSyncReady()) throw new Error('未配置家庭云（请先开启同步）');
@@ -5533,6 +5575,7 @@ function eePreview(id) { const it = EARLY_EDU.find(x => x.id === id); if (it) { 
 function eeEnsureAudio() {
   if (eeAudio) return eeAudio;
   eeAudio = new Audio();
+  eeAudio.preload = 'auto';   // v3.5.162 预加载，缓解首屏点击播放的等待
   eeAudio.addEventListener('timeupdate', () => {
     if (!eeAudio.duration || isNaN(eeAudio.duration)) return;
     const fill = document.getElementById('eeProgressFill'); if (fill) fill.style.width = (eeAudio.currentTime / eeAudio.duration * 100) + '%';
@@ -5544,6 +5587,24 @@ function eeEnsureAudio() {
   return eeAudio;
 }
 function eeFmtTime(s) { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+/* v3.5.162 统一设置「正在播放/加载中」文本，并切换高亮色 */
+function eeSetNowText(text, playing) {
+  const now = document.getElementById('eeNowText'); if (!now) return;
+  now.textContent = text || '';
+  if (playing) now.classList.add('playing'); else now.classList.remove('playing');
+}
+/* v3.5.162 预取队列中下一首的直链，使自动连播切换更快（点播放没反应/下一首慢的主要优化点） */
+function eePrefetchNext() {
+  try {
+    const ni = eeQueueIdx + 1;
+    if (ni >= eeQueue.length) return;
+    const nx = EARLY_EDU.find(x => x.id === eeQueue[ni]);
+    if (!nx || !nx.url) return;
+    if (eePrefetchAudio && eePrefetchAudio.src && eePrefetchAudio.src.indexOf(encodeURIComponent(nx.url)) === -1) { try { eePrefetchAudio.src = ''; } catch (e) {} }
+    if (!eePrefetchAudio) { eePrefetchAudio = new Audio(); eePrefetchAudio.preload = 'auto'; }
+    eePrefetchAudio.src = nx.url;   // 浏览器开始在后台缓冲，下一首几乎可瞬时起播
+  } catch (e) {}
+}
 function eeToggle() { if (eeAudio && !eeAudio.paused && !eeAudio.ended) eeStop(); else eePlayN(); }
 /* 随机挑 n 首（n = 管理里「播放音频数」，默认 5），依次播放；不足则全放 */
 function eeShufflePick(n) {
@@ -5585,6 +5646,13 @@ function eeAutoRecordOnPlay() {
   }
   persistRecords(records);
   afterRecordChange(getTodayDateStr());
+  // v3.5.162 播放后自动记录：高亮对应子区块 + 提示已添加几条
+  const flashIds = [];
+  if (hasCn || hasEn) flashIds.push('listenStory');
+  if (hasSong) flashIds.push('listenMusic');
+  if (flashIds.length) eeFlashMixer(flashIds);
+  const n = (hasCn ? 1 : 0) + (hasEn ? 1 : 0) + (hasSong ? 1 : 0);
+  showToast('🎵 已自动添加 ' + n + ' 条记录（听故事 / 听歌）');
 }
 function eePlayQueueItem() {
   const it = EARLY_EDU.find(x => x.id === eeQueue[eeQueueIdx]);
@@ -5609,18 +5677,21 @@ function eeSwitch() {
 function eePlayItem(it) {
   const a = eeEnsureAudio();
   const token = ++eePlayToken;
+  // v3.5.162 立即 UI 反馈：点击即把按钮切到「停止」、文案切到「加载中」，消除「点按钮没反应」的错觉
+  eeSetNowText('加载中：' + it.type + ' · ' + it.name, true);
+  const lbl = document.getElementById('eePlayLabel'); if (lbl) lbl.textContent = '停止';
+  const ico = document.getElementById('eeIco'); if (ico) ico.innerHTML = EE_ICO_STOP;
   try { a.pause(); } catch (e) {}          // 先停掉上一首，避免 play() 被隐式 pause 打断
   a.src = it.url;
   try { a.currentTime = 0; } catch (e) {}
+  eePrefetchNext();                        // v3.5.162 提前缓冲下一首，加速自动连播切换
   const p = a.play();
   if (!p || !p.then) return;
   p.then(() => {
     if (token !== eePlayToken) return;     // 已被更新的播放/停止动作取代，忽略过期回调
     eeCurrentId = it.id; eeLastId = it.id;
-    const now = document.getElementById('eeNowText'); if (now) { now.textContent = '正在播放：' + it.type + ' · ' + it.name; now.classList.add('playing'); }
-    const lbl = document.getElementById('eePlayLabel'); if (lbl) lbl.textContent = '停止';
-    const ico = document.getElementById('eeIco'); if (ico) ico.innerHTML = EE_ICO_STOP;
-    if ('mediaSession' in navigator) { try { navigator.mediaSession.metadata = new MediaMetadata({ title: it.name, artist: '小咕噜早教 · ' + it.type, album: '早教音频' }); } catch (e) {} }
+    eeSetNowText('正在播放：' + it.type + ' · ' + it.name, true);
+    if ('mediaSession' in navigator) { try { navigator.mediaSession.metadata = new MediaMetadata({ title: it.name, artist: '小咕噜音频 · ' + it.type, album: '早教音频' }); } catch (e) {} }
   }).catch(err => {
     if (token !== eePlayToken) return;                    // 过期请求（典型：快速停止/切换）
     if (err && err.name === 'AbortError') return;         // play/pause 竞态：静默忽略，不弹错
@@ -5687,6 +5758,17 @@ function renderAudioMixerCard() {
   if (storySec) storySec.style.display = mixerSectionVisible('listenStory') ? '' : 'none';
   const mb = document.getElementById('mixerMusicBody'); if (mb) mb.innerHTML = renderActivityRecordsHtml('listenMusic');
   const sb = document.getElementById('mixerStoryBody'); if (sb) sb.innerHTML = renderActivityRecordsHtml('listenStory');
+}
+/* v3.5.162 播放后高亮「听歌 / 听故事」子区块（动画加在 section 上，不会被记录重建 innerHTML 覆盖） */
+function eeFlashMixer(ids) {
+  ids.forEach(id => {
+    const sec = id === 'listenMusic' ? document.getElementById('mixerMusicSection') : document.getElementById('mixerStorySection');
+    if (!sec) return;
+    sec.classList.remove('highlight');
+    void sec.offsetWidth;   // 强制重绘以重启动画
+    sec.classList.add('highlight');
+    setTimeout(() => sec.classList.remove('highlight'), 3000);
+  });
 }
 
 /* ---------- 天气地址（可配置 + 加密家庭云） ---------- */
