@@ -1380,7 +1380,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.158'; // v3.5.158: 早教——标题改「早教」；首页按钮改为「切换」「播放」两枚(样式同首页添加按钮)；播放改为随机连播 n 首(n=管理「播放音频数」默认5)；修复 play/pause 竞态报错；锁屏支持下一首
+const APP_VERSION = 'v3.5.159'; // v3.5.159: 早教首页「切换」按钮图标由洗牌改为循环箭头(refresh)，配色沿用 .fab-icon(深色#b2bec3/浅色#fff)，形状与其他按钮统一
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
