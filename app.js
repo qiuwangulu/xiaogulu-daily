@@ -1382,7 +1382,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.160'; // v3.5.160: 早教——①首页合并卡片(放音频+听歌+听故事)置于分类筛选与列表之间,听歌/听故事随筛选显隐;②播放早教音频按类别自动记听歌/听故事(每次播放各最多1条);③管理故事区分中文/英文,上传自动归类;④免版权改为「选免版权」,内置≥20首精选(Wikimedia CC,运行时解析);⑤切换/播放图标缩至与添加按钮一致
+const APP_VERSION = 'v3.5.161'; // v3.5.161: ①放音频/听歌/听故事标题字号对齐活动卡片(16px)、放音频上移消除多余间距;②英文故事自动记录只为「英文」(按语言分条);③免版权解析改为「直链优先+搜索兜底」,预设26首(中文古诗已验证+搜索兜底,中文儿歌建议本地上传,英文童谣/故事资源丰富)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5258,38 +5258,42 @@ async function saveSchedCloud() {
  * 首页：随机播放/停止（避开上一条）+ 进度条 + Media Session 锁屏控制。 */
 const EARLY_EDU_KEY = '_early_edu';
 const EARLY_EDU_BUCKET = 'early-edu';
-/* v3.5.160 免版权音频预设（Wikimedia Commons · CC 授权）。
- * 运行时经 Commons API 解析真实直链后播放；标题为精选公版音频，若个别解析失败可本地上传替代。
- * type 用于首页自动归类：古诗/儿歌→见下方映射；故事(中文)→听故事(中文)，故事(英文)→听故事(英文)。 */
+/* v3.5.161 免版权音频预设（Wikimedia Commons · CC 授权）。
+ * 解析策略（见 eeResolveWiki）：先试 title 直链；失败则用 query 在 Commons 实时搜索真实音频（filetype:audio）。
+ * 故即便部分精确文件名不存在，也能搜到真实存在的文件，避免「解析失败」。
+ * 说明：Commons 上的中文儿歌/古诗音频资源极少，中文项以搜索兜底为主，命中不佳时请在「儿歌/古诗」分类本地上传 MP3；
+ *       英文童谣/故事在 Commons 上资源丰富，命中率高。 */
 const WIKIMEDIA_FREE = [
-  // ===== 中文 · 古诗朗读（CC，Wikimedia Commons） =====
-  { name: '《弹琴》· 刘长卿（古诗朗读）', title: 'File:Chinese-LingLingQiXianShang.ogg', type: '古诗' },
-  { name: '《梦游天姥吟留别》· 李白（古诗朗读）', title: 'File:梦游天姥吟留别.ogg', type: '古诗' },
-  { name: '《琴歌》· 李颀（古诗朗读）', title: 'File:Chinese-ZhuRenYouJiuHuanJinXi.ogg', type: '古诗' },
-  { name: '《浪淘沙令》· 李煜（无锡话朗读）', title: 'File:浪淘沙令-无锡闲话.flac', type: '古诗' },
-  { name: '《静夜思》· 李白（古诗朗读）', title: 'File:静夜思.ogg', type: '古诗' },
-  { name: '《春晓》· 孟浩然（古诗朗读）', title: 'File:春晓.ogg', type: '古诗' },
-  { name: '《登鹳雀楼》· 王之涣（古诗朗读）', title: 'File:登鹳雀楼.ogg', type: '古诗' },
-  { name: '《悯农》· 李绅（古诗朗读）', title: 'File:悯农.ogg', type: '古诗' },
-  { name: '《咏鹅》· 骆宾王（古诗朗读）', title: 'File:咏鹅.ogg', type: '古诗' },
-  { name: '《春夜喜雨》· 杜甫（古诗朗读）', title: 'File:春夜喜雨.ogg', type: '古诗' },
-  { name: '《望庐山瀑布》· 李白（古诗朗读）', title: 'File:望庐山瀑布.ogg', type: '古诗' },
-  { name: '《早发白帝城》· 李白（古诗朗读）', title: 'File:早发白帝城.ogg', type: '古诗' },
-  { name: '《赋得古原草送别》· 白居易（古诗朗读）', title: 'File:赋得古原草送别.ogg', type: '古诗' },
-  // ===== 中文 · 儿歌 =====
-  { name: '《摇篮曲》· 中文儿歌', title: 'File:摇篮曲.ogg', type: '儿歌' },
-  { name: '《小星星》· 中文儿歌（一闪一闪亮晶晶）', title: 'File:小星星.ogg', type: '儿歌' },
-  { name: '《两只老虎》· 中文儿歌', title: 'File:两只老虎.ogg', type: '儿歌' },
-  { name: '《数鸭子》· 中文儿歌', title: 'File:数鸭子.ogg', type: '儿歌' },
-  // ===== 中文 · 故事 =====
-  { name: '《龟兔赛跑》· 中文故事', title: 'File:龟兔赛跑.ogg', type: '故事(中文)' },
-  { name: '《小马过河》· 中文故事', title: 'File:小马过河.ogg', type: '故事(中文)' },
-  // ===== 英文 · 故事 / 童谣（LibriVox / CC，Wikimedia Commons） =====
-  { name: 'The Three Little Pigs（英文故事）', title: 'File:Three Little Pigs.ogg', type: '故事(英文)' },
-  { name: 'Little Red Riding Hood（英文故事）', title: 'File:Little Red Riding Hood.ogg', type: '故事(英文)' },
-  { name: 'Jack and the Beanstalk（英文故事）', title: 'File:Jack and the Beanstalk.ogg', type: '故事(英文)' },
-  { name: 'Twinkle Twinkle Little Star（英文童谣）', title: 'File:Twinkle Twinkle Little Star.ogg', type: '故事(英文)' },
-  { name: 'Mary Had a Little Lamb（英文童谣）', title: 'File:Mary Had a Little Lamb.ogg', type: '故事(英文)' }
+  // ===== 中文 · 古诗朗读（Commons 仅少量；梦游天姥经核实存在，其余走搜索兜底） =====
+  { name: '《梦游天姥吟留别》· 李白', title: 'File:梦游天姥吟留别.ogg', query: '梦游天姥吟留别 朗读', type: '古诗' },
+  { name: '《静夜思》· 李白', query: '静夜思 古诗 朗读', type: '古诗' },
+  { name: '《春晓》· 孟浩然', query: '春晓 孟浩然 朗读', type: '古诗' },
+  { name: '《登鹳雀楼》· 王之涣', query: '登鹳雀楼 朗读', type: '古诗' },
+  { name: '《悯农》· 李绅', query: '悯农 李绅 朗读', type: '古诗' },
+  { name: '《咏鹅》· 骆宾王', query: '咏鹅 骆宾王 朗读', type: '古诗' },
+  // ===== 中文 · 儿歌（Commons 资源稀少，建议本地上传 MP3；此处提供搜索兜底） =====
+  { name: '《摇篮曲》· 中文儿歌', query: '摇篮曲 儿歌 音频', type: '儿歌' },
+  { name: '《小星星》· 中文儿歌', query: '小星星 儿歌 音频', type: '儿歌' },
+  { name: '《两只老虎》· 中文儿歌', query: '两只老虎 儿歌 音频', type: '儿歌' },
+  { name: '《数鸭子》· 中文儿歌', query: '数鸭子 儿歌 音频', type: '儿歌' },
+  // ===== 英文 · 童谣 / 故事（Commons 资源丰富，高命中） =====
+  { name: 'Twinkle Twinkle Little Star', title: 'File:Twinkle Twinkle Little Star.ogg', query: 'Twinkle Twinkle Little Star', type: '故事(英文)' },
+  { name: 'Twinkle Twinkle (vocal)', title: 'File:Twinkle twinkle little star (vocal).ogg', query: 'Twinkle twinkle little star vocal', type: '故事(英文)' },
+  { name: 'Twinkle Twinkle (plain)', title: 'File:Twinkle Twinkle Little Star plain.ogg', query: 'Twinkle Twinkle Little Star plain', type: '故事(英文)' },
+  { name: 'Mary Had a Little Lamb', query: 'Mary Had a Little Lamb', type: '故事(英文)' },
+  { name: 'Old MacDonald Had a Farm', query: 'Old MacDonald Had a Farm', type: '故事(英文)' },
+  { name: 'London Bridge Is Falling Down', query: 'London Bridge Is Falling Down', type: '故事(英文)' },
+  { name: 'Baa Baa Black Sheep', query: 'Baa Baa Black Sheep', type: '故事(英文)' },
+  { name: 'The Wheels on the Bus', query: 'The Wheels on the Bus', type: '故事(英文)' },
+  { name: 'Five Little Ducks', query: 'Five Little Ducks', type: '故事(英文)' },
+  { name: 'If You Are Happy and You Know It', query: 'If You Are Happy and You Know It', type: '故事(英文)' },
+  { name: 'Head Shoulders Knees and Toes', query: 'Head Shoulders Knees and Toes', type: '故事(英文)' },
+  { name: 'Row Row Row Your Boat', query: 'Row Row Row Your Boat', type: '故事(英文)' },
+  { name: 'Itsy Bitsy Spider', query: 'Itsy Bitsy Spider', type: '故事(英文)' },
+  { name: 'The Three Little Pigs', query: 'Three Little Pigs', type: '故事(英文)' },
+  { name: 'Little Red Riding Hood', query: 'Little Red Riding Hood', type: '故事(英文)' },
+  { name: 'Jack and the Beanstalk', query: 'Jack and the Beanstalk', type: '故事(英文)' },
+  { name: 'Goldilocks and the Three Bears', query: 'Goldilocks and the Three Bears', type: '故事(英文)' }
 ];
 /* 旧字段兼容：历史存储的 type='故事' 统一归一化为 '故事(中文)' */
 function eeNormalizeTypes(arr) { if (!Array.isArray(arr)) return; arr.forEach(x => { if (x && x.type === '故事') x.type = '故事(中文)'; }); }
@@ -5457,7 +5461,8 @@ async function eeShowWiki() {
       if (!items.length) return;
       h += '<div class="ee-wiki-group"><div class="ee-wiki-group-title">' + g.label + '</div>';
       items.forEach(({ s, i }) => {
-        const exists = EARLY_EDU.some(x => x.wikiTitle === s.title);
+        const key = s.title || s.query;
+        const exists = EARLY_EDU.some(x => x.wikiTitle === key);
         h += '<div class="ee-wiki-item"><span>' + escapeHtml(s.name) + '</span><button class="btn ' + (exists ? '' : 'btn-primary') + '" ' + (exists ? 'disabled' : '') + ' onclick="eeAddWiki(' + i + ')">' + (exists ? '已添加' : '添加') + '</button></div>';
       });
       h += '</div>';
@@ -5468,23 +5473,43 @@ async function eeShowWiki() {
 }
 async function eeAddWiki(i) {
   const s = WIKIMEDIA_FREE[i]; if (!s) return;
-  if (EARLY_EDU.some(x => x.wikiTitle === s.title)) { showToast('已在列表中'); return; }
+  const key = s.title || s.query;
+  if (EARLY_EDU.some(x => x.wikiTitle === key)) { showToast('已在列表中'); return; }
   showToast('解析音频中…');
   try {
-    const url = await eeResolveWiki(s.title);
-    EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: s.name, type: s.type, src: 'wikimedia', url, wikiTitle: s.title, addedAt: Date.now() });
+    const url = await eeResolveWiki(s);
+    EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: s.name, type: s.type, src: 'wikimedia', url, wikiTitle: key, addedAt: Date.now() });
     scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard(); eeShowWiki();
     showToast('已添加：' + s.name);
   } catch (e) { console.warn(e); showToast('解析失败，请稍后重试或本地上传'); }
 }
-async function eeResolveWiki(title) {
-  const api = 'https://commons.wikimedia.org/w/api.php?action=query&prop=imageinfo&iiprop=url&format=json&origin=*&titles=' + encodeURIComponent(title);
-  const res = await fetch(api);
+/* v3.5.161 解析策略：先试 title 精确直链；不存在则用 query 在 Commons 实时搜索真实音频（filetype:audio），避免硬编码文件名失效 */
+async function eeResolveWiki(item) {
+  const api = 'https://commons.wikimedia.org/w/api.php';
+  if (item.title) {
+    try {
+      const u = await eeApiFirstUrl(api + '?action=query&prop=imageinfo&iiprop=url&format=json&origin=*&titles=' + encodeURIComponent(item.title));
+      if (u) return u;
+    } catch (e) {}
+  }
+  const q = (item.query || item.name) + ' filetype:audio';
+  const u = await eeApiFirstUrl(api + '?action=query&generator=search&gsrsearch=' + encodeURIComponent(q) + '&gsrnamespace=6&gsrlimit=10&prop=imageinfo&iiprop=url%7Cmime&format=json&origin=*', true);
+  if (u) return u;
+  throw new Error('no url');
+}
+async function eeApiFirstUrl(url, onlyAudio) {
+  const res = await fetch(url);
   if (!res.ok) throw new Error('api ' + res.status);
   const d = await res.json();
   const pages = d.query && d.query.pages;
-  if (pages) for (const k in pages) { const ii = pages[k].imageinfo && pages[k].imageinfo[0]; if (ii && ii.url) return ii.url; }
-  throw new Error('no url');
+  if (!pages) return null;
+  for (const k in pages) {
+    const ii = pages[k].imageinfo && pages[k].imageinfo[0];
+    if (!ii || !ii.url) continue;
+    if (onlyAudio && ii.mime && !/audio|ogg|flac|mpeg|mp3|wav|webm/i.test(ii.mime)) continue;
+    return ii.url;
+  }
+  return null;
 }
 function eeDelete(id) {
   const it = EARLY_EDU.find(x => x.id === id); if (!it) return;
@@ -5548,14 +5573,15 @@ function eeAutoRecordOnPlay() {
   const recTime = hh + ':' + mm;
   const ts = Date.now();
   const records = getTodayRecords();
-  const langs = [];
-  if (hasCn) langs.push('中文');
-  if (hasEn) langs.push('英文');
-  if (langs.length) {
-    records.push({ type: 'listenStory', name: '听故事', time: recTime, recTime, timestamp: ts, storyLangs: langs, storyTime: recTime, updatedAt: Date.now() });
+  // v3.5.161 按语言分别生成独立记录：中文 / 英文 各一条（避免一条记录里中英都被勾选），歌曲记一条听歌
+  if (hasCn) {
+    records.push({ type: 'listenStory', name: '听故事', time: recTime, recTime, timestamp: ts, storyLangs: ['中文'], storyTime: recTime, updatedAt: Date.now() });
+  }
+  if (hasEn) {
+    records.push({ type: 'listenStory', name: '听故事', time: recTime, recTime, timestamp: ts + 1, storyLangs: ['英文'], storyTime: recTime, updatedAt: Date.now() });
   }
   if (hasSong) {
-    records.push({ type: 'listenMusic', name: '听歌', time: recTime, recTime, timestamp: ts + 1, simpleTime: recTime, updatedAt: Date.now() });
+    records.push({ type: 'listenMusic', name: '听歌', time: recTime, recTime, timestamp: ts + 2, simpleTime: recTime, updatedAt: Date.now() });
   }
   persistRecords(records);
   afterRecordChange(getTodayDateStr());

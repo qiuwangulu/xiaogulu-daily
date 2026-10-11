@@ -1855,7 +1855,7 @@
   .ee-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; }
   body.theme-day .ee-card { background: rgba(9,132,227,0.05); border-color: rgba(9,132,227,0.15); }
   .ee-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .ee-title { font-size: 15px; font-weight: 600; color: #fff; }
+  .ee-title { font-size: 16px; font-weight: 400; color: #fff; }
   body.theme-day .ee-title { color: #1f5f60; }
   .ee-now { font-size: 13px; color: #b2bec3; min-height: 18px; margin-bottom: 8px; line-height: 1.4; }
   body.theme-day .ee-now { color: #7b8a94; }
@@ -1883,7 +1883,9 @@
   /* v3.5.160 合并卡片子区块（听歌 / 听故事） */
   .ee-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
   body.theme-day .ee-section { border-top-color: rgba(9,132,227,0.15); }
-  .ee-sub-head { font-size: 14px; font-weight: 600; color: #dfe6e9; margin-bottom: 6px; }
+  /* v3.5.161 合并卡片第一区块（放音频）去掉上间距/分隔线，使其标题距上边框与喝奶等卡片一致 */
+  .ee-section-edu { margin-top: 0; padding-top: 0; border-top: none; }
+  .ee-sub-head { font-size: 16px; font-weight: 400; color: #dfe6e9; margin-bottom: 6px; }
   body.theme-day .ee-sub-head { color: #1f5f60; }
   .ee-sub-body .card-empty { font-size: 13px; color: #b2bec3; padding: 2px 0 4px; }
   body.theme-day .ee-sub-body .card-empty { color: #7b8a94; }
@@ -2467,7 +2469,7 @@
   <div class="modal-box" onclick="event.stopPropagation()" style="max-width:420px;">
     <button class="modal-close" onclick="hideModal('eeWikiModal')">&times;</button>
     <div class="modal-title">🌐 选免版权音频（Wikimedia · CC）</div>
-    <div class="ee-tip">以下为公版/CC 授权音频（已按中文 / 英文分组，共 20+ 首），点击「添加」即加入早教列表，并按分类自动归入古诗 / 儿歌 / 故事(中文/英文)。iOS 设备可能不支持 OGG 格式，建议用安卓/电脑试听，或在对应分类本地上传 MP3。</div>
+    <div class="ee-tip">以下为公版/CC 授权音频（共 20+ 首，已按中文 / 英文分组）。点击「添加」即实时解析真实直链并加入早教列表，按分类自动归入古诗 / 儿歌 / 故事(中文/英文)。说明：Commons 上<b>中文儿歌/古诗资源极少</b>，中文项以搜索兜底为主，命中不佳请到「儿歌/古诗」分类<b>本地上传 MP3</b>；英文童谣/故事资源丰富、命中率高。iOS 可能不支持 OGG，建议安卓/电脑试听。</div>
     <div id="eeWikiList"></div>
     <div class="modal-actions" style="justify-content:flex-end;">
       <button class="btn btn-success" onclick="hideModal('eeWikiModal')">完成</button>
@@ -2617,6 +2619,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.160"></script>
+<script src="app.js?v=v3.5.161"></script>
 </body>
 </html>
