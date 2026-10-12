@@ -1382,7 +1382,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.162'; // v3.5.162: ①放音频卡重排为「切换/播放按钮→音频名→进度条」;②播放后自动记听歌/听故事并高亮子区块+提示已添加几条;③点击即时UI反馈+audio预加载+连播预取下一首(解点播放卡顿/没反应/下一首慢);④管理「早教」改名「音频」,播放音频数提示换行到下方,分类改下拉多选+搜索框,列表增「修改分类」编辑按钮,本地上传须指定分类,去掉顶部文字提示
+const APP_VERSION = 'v3.5.163'; // v3.5.163: ①首页放音频/听歌/听故事合并卡底色、边框、圆角、内边距与喝奶等活动卡片(.card)完全一致;②历史弹窗体重保存保留2位小数(原1位会把6.85覆盖成6.9),体重相关图表标签统一fmtWeight(最多2位去尾0);③体重变化图横轴右界放宽到「今日」并含当天数据,标题改「截止今日」
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2897,7 +2897,7 @@ function saveHistoryBody(field) {
   if (raw !== '') {
     v = parseFloat(raw);
     if (isNaN(v) || v <= 0) { showToast(name + '需为大于 0 的数字'); loadHistoryBody(ds); return; }
-    v = Math.round(v * 10) / 10;   // 统一保留 1 位小数
+    v = Math.round(v * 100) / 100;   // v3.5.163 统一保留 2 位小数（原来 1 位会把 6.85 覆盖成 6.9）
   }
   // 与上次值相同则不重复写盘/同步（onchange 与 onblur 会各触发一次）
   const prev = getBodyHistory().find(x => x.d === ds);
@@ -4166,6 +4166,13 @@ function getLactaseByDate(ds) {
   if (has) return min;
   return getHistoricalLactase(ds);
 }
+// v3.5.163 体重数值统一显示格式：最多 2 位小数、去掉无意义尾随 0（6.85→6.85，6.7→6.7，7→7）
+//   与历史弹窗保存精度（2 位小数）保持一致，避免录入 6.85 而图上标签显示 6.9
+function fmtWeight(v) {
+  const n = Number(v);
+  if (!isFinite(n)) return '';
+  return String(Math.round(n * 100) / 100);
+}
 // 某日记录的体重（kg）：bodyHistory 里该日期有值才返回，否则 null（曲线在该日断开）
 function weightRecordedOn(ds) {
   const rec = getBodyHistory().find(x => x.d === ds);
@@ -4175,9 +4182,9 @@ function weightRecordedOn(ds) {
 //   背景：该图原先完全跟随「大便与喝奶时间差」的日期序列取点，导致「当天没有大便」的日子
 //         即使录了体重（例如 9/27 量得 6.7kg）也不会出现在图上。
 //   规则：以大便间隔序列为基准（保持与上图同横轴、便于上下对照），再把落在该时间范围内、
-//         录有体重的日期并进来。范围上界放宽到「昨日」（与图标题"截止昨日"口径一致），
-//         这样“最后一次大便之后才量的体重”也不会丢点；完全没有大便记录时退化为
-//         「全部体重点」，避免整图空白。
+//         录有体重的日期并进来。
+//   v3.5.163 范围上界放宽到「今日」（图标题同步改为"截止今日"）：当天量了体重就能立刻出现在图上，
+//         不再等到第二天；完全没有大便记录时退化为「全部体重点」，避免整图空白。
 function buildWeightDualAxis(base) {
   const list = Array.isArray(base) ? base : [];
   const mk = ds => { const p = String(ds).split('-'); return { ds: ds, label: `${parseInt(p[1], 10)}/${parseInt(p[2], 10)}`, t: Date.parse(ds) }; };
@@ -4186,9 +4193,9 @@ function buildWeightDualAxis(base) {
   const ts = list.map(p => p.t).filter(t => !isNaN(t));
   const lo = ts.length ? Math.min(...ts) : null;
   let hi = ts.length ? Math.max(...ts) : null;
-  if (hi != null) {                                        // 右界至少到昨日（与图标题口径一致）
+  if (hi != null) {                                        // 右界至少到今日（与图标题口径一致）
     const todayTs = Date.parse(getTodayDateStr());
-    if (!isNaN(todayTs)) hi = Math.max(hi, todayTs - 86400000);
+    if (!isNaN(todayTs)) hi = Math.max(hi, todayTs);
   }
   getBodyHistory().forEach(x => {
     if (!x || !x.d || x.w == null) return;                 // 只取真正录了体重的日期
@@ -4308,7 +4315,7 @@ function makeLactaseDualChart(leftData, rightData, opts) {
     const gy = yL(v).toFixed(1);
     const isFoldLine = foldAxis && Math.abs(v - foldAxis.base) < 1e-6;   // 100 分界处用虚线强调
     grid += `<line class="gridln" x1="${PL}" y1="${gy}" x2="${W - PR}" y2="${gy}" stroke="${isFoldLine ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)'}" stroke-width="1"${isFoldLine ? ' stroke-dasharray="3 3"' : ''}/>`;
-    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${leftAxisColor}" font-size="9" text-anchor="end">${leftFmt(Math.round(v * 10) / 10)}</text>`;
+    ylabels += `<text x="${PL - 5}" y="${(parseFloat(gy) + 4).toFixed(1)}" fill="${leftAxisColor}" font-size="9" text-anchor="end">${leftFmt(v)}</text>`;
   });
   // v3.5.142 折叠区提示：在压缩区内标「⌇ 折叠」示意 y 轴在此被压缩
   if (foldAxis) {
@@ -7112,12 +7119,13 @@ function openAnalysis() {
   // v3.5.87 体重变化（与上方大便图同横轴，便于上下对照）：左=体重kg(蓝实线带点，刻度同体重趋势)，右=乳糖酶量(橘虚线)
   //         最新日期若体重为空，左线自然断开（不画线）
   // v3.5.95 横轴改为「大便间隔日 ∪ 该范围内的体重记录日」：修掉"没大便那天量的体重在图上消失"的问题
+  // v3.5.163 横轴右界放宽到「今日」：当天量的体重当即上点，标题同步改「截止今日」
   const weightAxis = buildWeightDualAxis(poopGapPts);
   const weightDualLeft = weightAxis.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: weightRecordedOn(p.ds) }));
   const weightDualRight = weightAxis.map(p => ({ ds: p.ds, label: p.label, t: p.t, value: getLactaseByDate(p.ds) }));
   html += makeLactaseDualChart(weightDualLeft, weightDualRight, {
-    title: '⚖️ 体重变化（截止昨日）',
-    leftLabel: '体重', leftUnit: 'kg', leftFmt: v => v.toFixed(1),
+    title: '⚖️ 体重变化（截止今日）',
+    leftLabel: '体重', leftUnit: 'kg', leftFmt: fmtWeight,
     leftScaleFactor: { min: 0.9, max: 1.1 },   // v3.5.91 左轴刻度 = 本段最小体重*0.9 ~ 最大体重*1.1
     leftConnectNulls: true,                     // v3.5.90 体重按折线连接各测量点（仅测体重的几天有值，跨空档连线），保留数据点
     rightLabel: '乳糖酶量', rightUnit: '滴', rightFmt: v => String(v),
@@ -7128,7 +7136,7 @@ function openAnalysis() {
   html += `</div>`;
   // —— 成长：体重趋势 + 身高趋势 + 成长里程碑 ——
   html += `<div class="tab-panel" data-panel="grow" style="display:none">`;
-  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT }, zoomTiers: { min: 3, step: 1 } });
+  html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#6ec6ff', fmt: fmtWeight, yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT }, zoomTiers: { min: 3, step: 1 } });
   html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT }, zoomTiers: { min: 50, step: 5 } });
   const _msRefresh = shouldRefreshMilestones();
   html += makeMilestoneTimeline(!_msRefresh);   // 成长里程碑时间轴（非刷新窗口徽章用缓存；刷新窗口/首次用当前并稍后调 AI）
