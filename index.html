@@ -1914,6 +1914,9 @@
   /* v3.5.162 分类选择弹窗按钮网格 */
   .ee-cat-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 6px 2px 2px; }
   .ee-cat-pick .fab-btn { justify-content: center; }
+  /* v3.5.165 上传前提示：支持音频/视频，图片不可用 */
+  .ee-cat-pick-hint { margin-top: 10px; font-size: 12px; line-height: 1.6; color: #b2bec3; }
+  body.theme-day .ee-cat-pick-hint { color: #7b8a94; }
   /* v3.5.160 选免版权分组 */
   .ee-wiki-group { margin-bottom: 8px; }
   .ee-wiki-group-title { font-size: 13px; color: #74b9ff; font-weight: 600; margin: 4px 0 2px; }
@@ -1933,6 +1936,7 @@
   .ee-item .ee-meta { font-size: 12px; color: #b2bec3; margin-top: 2px; }
   body.theme-day .ee-item .ee-meta { color: #7b8a94; }
   .ee-item .ee-tag { display: inline-block; padding: 1px 7px; border-radius: 8px; background: rgba(56,168,157,0.2); color: #55efc4; font-size: 11px; margin-right: 6px; }
+  .ee-item .ee-warn { color: #f5a623; }
   .ee-item .ee-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
   .ee-item .ee-play { width: 24px; height: 24px; cursor: pointer; padding: 2px; background: transparent; border: none; display: inline-flex; align-items: center; justify-content: center; opacity: 0.85; }
   .ee-item .ee-play svg { width: 100%; height: 100%; stroke: #0984e3; fill: #0984e3; stroke-width: 0; }
@@ -2421,7 +2425,7 @@
         <span id="eeUploadBtnWrap"><button class="fab-btn" onclick="eeTriggerUpload()"><span class="fab-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg></span> 本地上传</button></span>
         <button class="fab-btn" id="eeWikiBtn" onclick="eeShowWiki()"><span class="fab-icon fab-emoji">🌐</span> 选免版权</button>
       </div>
-      <input type="file" id="eeFileInput" accept="audio/*" multiple style="display:none;" onchange="eeOnFiles(this)">
+      <input type="file" id="eeFileInput" accept="audio/*,video/*,.mp3,.m4a,.m4b,.aac,.wav,.ogg,.oga,.opus,.flac,.amr,.awb,.caf,.aif,.aiff,.wma,.mp4,.m4v,.mov,.3gp,.3gpp,.mkv,.webm" multiple style="display:none;" onchange="eeOnFiles(this)">
       <div class="ee-list" id="eeList"></div>
     </div>
     <!-- v3.5.69 底部固定操作条：选项区很长，滚到最底下也能一键关闭（选项为即时保存，无需"保存"按钮） -->
@@ -2511,6 +2515,7 @@
       <button class="fab-btn" onclick="eePickCat('故事(中文)')"><span class="fab-icon fab-emoji">📚</span> 故事(中文)</button>
       <button class="fab-btn" onclick="eePickCat('故事(英文)')"><span class="fab-icon fab-emoji">📖</span> 故事(英文)</button>
     </div>
+    <div class="ee-cat-pick-hint" id="eeCatPickHint" style="display:none;"></div>
   </div>
 </div>
 <!-- v3.5.141 今日计划详情弹窗 -->
@@ -2656,6 +2661,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.164"></script>
+<script src="app.js?v=v3.5.165"></script>
 </body>
 </html>

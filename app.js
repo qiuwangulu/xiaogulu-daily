@@ -1382,7 +1382,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.164'; // v3.5.164: 浅色模式下首页「放音频」「听歌」「听故事」标题字体颜色改为黑色(#000,原深青 #1f5f60);深色模式保持白色不变
+const APP_VERSION = 'v3.5.165'; // v3.5.165: ①本地上传 accept 放宽(音频+视频+常见扩展名),支持手机录屏mp4等视频(只播放声音);②图片/不支持类型/超50MB文件明确拦截并提示;③视频上传后探测音轨可解码性,无法播放的标⚠️并提示转MP3;④分类选择弹窗(上传时)加「支持音频与视频,不支持图片」提示;⑤播放失败提示引导到管理删除重传
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5443,7 +5443,11 @@ function renderEarlyEduList() {
     const tag = it.src === 'wikimedia' ? '免版权' : '本地';
     h += '<div class="ee-item" data-id="' + it.id + '">'
       + '<div class="ee-info"><div class="ee-name">' + escapeHtml(it.name) + '</div>'
-      + '<div class="ee-meta"><span class="ee-tag">' + it.type + '</span>' + tag + (it.src === 'wikimedia' ? ' · Wikimedia' : '') + '</div></div>'
+      + '<div class="ee-meta"><span class="ee-tag">' + it.type + '</span>' + tag
+      + (it.src === 'wikimedia' ? ' · Wikimedia' : '')
+      + (eeIsVideoItem(it) ? ' · 视频(仅声音)' : '')
+      + (it.playable === false ? ' · <span class="ee-warn">⚠️ 可能无法播放</span>' : '')
+      + '</div></div>'
       + '<div class="ee-actions">'
       + '<button class="ee-edit" onclick="eeEditType(\'' + it.id + '\')" title="修改分类"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>'
       + '<button class="ee-play" onclick="eePreview(\'' + it.id + '\')" title="试听"><svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg></button>'
@@ -5452,31 +5456,113 @@ function renderEarlyEduList() {
   });
   list.innerHTML = h;
 }
+// v3.5.165 上传文件类型判定：audio / video / image / other
+const EE_AUDIO_EXT = ['mp3', 'm4a', 'm4b', 'aac', 'wav', 'ogg', 'oga', 'opus', 'flac', 'amr', 'awb', 'caf', 'aif', 'aiff', 'wma', 'mp2', 'weba', 'mid'];
+const EE_VIDEO_EXT = ['mp4', 'm4v', 'mov', '3gp', '3gpp', 'mkv', 'webm', 'avi', 'flv', 'wmv', 'mpeg', 'mpg', 'ts'];
+const EE_IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tif', 'tiff', 'svg'];
+const EE_MAX_UPLOAD_MB = 50;                      // Supabase Storage 免费版单文件上限
+function eeFileExt(name) { const m = String(name || '').toLowerCase().match(/\.([a-z0-9]{1,5})(\?|$)/); return m ? m[1] : ''; }
+function eeFileKind(f) {
+  const ext = eeFileExt(f && f.name);
+  const mime = String((f && f.type) || '').toLowerCase();
+  if (EE_AUDIO_EXT.includes(ext) || mime.startsWith('audio/')) return 'audio';
+  if (EE_VIDEO_EXT.includes(ext) || mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('image/') || EE_IMAGE_EXT.includes(ext)) return 'image';
+  return 'other';
+}
+// 视频容器统一以 audio/* 声明，保证 <audio> 只解其中音轨时不被 MIME 拦下
+function eeContentTypeFor(f, kind) {
+  const t = String((f && f.type) || '').toLowerCase();
+  if (kind !== 'video') return t || 'audio/mpeg';
+  const ext = eeFileExt(f && f.name);
+  if (ext === '3gp' || ext === '3gpp' || t.includes('3gpp')) return 'audio/3gpp';
+  if (ext === 'webm' || t.includes('webm')) return 'audio/webm';
+  if (ext === 'ogg' || ext === 'oga' || t.includes('ogg')) return 'audio/ogg';
+  return 'audio/mp4';
+}
+// 探测某个 URL 的音轨能否被当前浏览器解码（用于视频/录屏文件，避免"传上去却播不出"）
+function eeProbePlayable(url, timeoutMs) {
+  return new Promise(resolve => {
+    let done = false;
+    const a = document.createElement('audio');
+    const fin = ok => { if (done) return; done = true; try { a.removeAttribute('src'); a.load && a.load(); } catch (e) {} resolve(ok); };
+    const timer = setTimeout(() => fin(false), timeoutMs || 8000);
+    a.addEventListener('loadedmetadata', () => { clearTimeout(timer); fin(true); });
+    a.addEventListener('error', () => { clearTimeout(timer); fin(false); });
+    a.preload = 'metadata';
+    a.muted = true;
+    a.src = url;
+    try { a.load(); } catch (e) { clearTimeout(timer); fin(false); }
+  });
+}
+function eeIsVideoItem(it) { if (!it) return false; if (it.kind) return it.kind === 'video'; return EE_VIDEO_EXT.includes(eeFileExt(it.path || it.url || '')); }
 // v3.5.162 本地上传：先弹分类选择，确定后再选文件（本地上传需指定分类）
-function eeTriggerUpload() { eeOpenCatPick('选择上传音频的分类', (t) => { eePendingUploadType = t; const inp = document.getElementById('eeFileInput'); if (inp) inp.click(); }); }
+// v3.5.165 支持音频与视频（视频只播放其中的声音），图片会被明确拦截
+function eeTriggerUpload() {
+  eeOpenCatPick('选择上传音频的分类', (t) => {
+    eePendingUploadType = t;
+    const inp = document.getElementById('eeFileInput'); if (inp) inp.click();
+  }, '✅ 支持：音频（mp3 / m4a / wav / amr…）与视频（mp4 等，只播放其中的声音，如手机录屏）<br>🚫 不支持：图片、文档等无法播放的文件');
+}
 async function eeOnFiles(input) {
   const files = Array.from(input.files || []);
   input.value = '';
   if (!files.length) { eePendingUploadType = null; return; }
   const type = eePendingUploadType || '儿歌';
   eePendingUploadType = null;
-  showToast('上传中…');
-  let ok = 0, fail = 0;
-  for (const f of files) {
+
+  // 先按类型/体积分桶，能上传的才进队列
+  const bucket = { audio: [], video: [], image: [], other: [], big: [] };
+  files.forEach(f => {
+    const k = eeFileKind(f);
+    if (k === 'image') bucket.image.push(f);
+    else if (k === 'other') bucket.other.push(f);
+    else if ((f.size || 0) > EE_MAX_UPLOAD_MB * 1024 * 1024) bucket.big.push(f);
+    else bucket[k].push(f);
+  });
+  const list = bucket.audio.concat(bucket.video);
+  if (!list.length) {
+    if (bucket.image.length) showToast('图片无法作为音频播放，已取消上传（请选择音频或视频文件）');
+    else if (bucket.other.length) showToast('不支持的文件类型，请选择音频或视频文件');
+    else showToast('文件超过 ' + EE_MAX_UPLOAD_MB + 'MB，请先裁剪或压缩后再上传');
+    return;
+  }
+
+  showToast('上传中（' + list.length + ' 个）…');
+  let ok = 0, fail = 0, badPlay = 0;
+  for (const f of list) {
     try {
-      const ext = (f.name.split('.').pop() || 'mp3').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const kind = eeFileKind(f);
+      const ext = eeFileExt(f.name) || (kind === 'video' ? 'mp4' : 'mp3');
       const fid = getFamilyId() || 'default';
       const path = fid + '/ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '.' + ext;
-      const url = await eeUploadFile(f, path);
-      EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: f.name.replace(/\.[^.]+$/, ''), type, src: 'upload', url, path, addedAt: Date.now() });
+      const url = await eeUploadFile(f, path, kind);
+      // 视频（如手机录屏）上传后探测音轨是否可解码，避免"上传成功却播不出"
+      let playable = true;
+      if (kind === 'video') { playable = await eeProbePlayable(url, 8000); if (!playable) badPlay++; }
+      EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: f.name.replace(/\.[^.]+$/, ''), type, src: 'upload', kind, playable, url, path, addedAt: Date.now() });
       ok++;
     } catch (e) { fail++; console.warn('[音频] 上传失败', e); }
   }
   scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard();
-  showToast(ok ? ('已添加 ' + ok + ' 个音频' + (fail ? ('，' + fail + ' 个失败') : '')) : '上传失败，请检查网络或稍后重试');
+  const parts = [];
+  if (ok) parts.push('已添加 ' + ok + ' 个');
+  if (fail) parts.push(fail + ' 个上传失败');
+  if (bucket.image.length) parts.push(bucket.image.length + ' 张图片已跳过（无法播放）');
+  if (bucket.other.length) parts.push(bucket.other.length + ' 个类型不支持已跳过');
+  if (bucket.big.length) parts.push(bucket.big.length + ' 个超过 ' + EE_MAX_UPLOAD_MB + 'MB 已跳过');
+  let msg = parts.length ? parts.join('，') : '上传失败，请检查网络或稍后重试';
+  if (badPlay) msg += '；其中 ' + badPlay + ' 个视频音轨无法播放，建议先转成 MP3';
+  showToast(msg);
 }
-// v3.5.162 分类选择弹窗（上传 / 修改分类 共用）
-function eeOpenCatPick(title, cb) { eeCatPickCb = cb; const t = document.getElementById('eeCatPickTitle'); if (t) t.textContent = title || '选择分类'; showModal('eeCatPickModal'); }
+// v3.5.162 分类选择弹窗（上传 / 修改分类 共用）；v3.5.165 支持可选提示行
+function eeOpenCatPick(title, cb, hint) {
+  eeCatPickCb = cb;
+  const t = document.getElementById('eeCatPickTitle'); if (t) t.textContent = title || '选择分类';
+  const h = document.getElementById('eeCatPickHint');
+  if (h) { if (hint) { h.innerHTML = hint; h.style.display = ''; } else { h.innerHTML = ''; h.style.display = 'none'; } }
+  showModal('eeCatPickModal');
+}
 function eePickCat(t) { hideModal('eeCatPickModal'); const cb = eeCatPickCb; eeCatPickCb = null; if (cb) cb(t); }
 // 修改单个音频的分类
 function eeEditType(id) {
@@ -5486,12 +5572,12 @@ function eeEditType(id) {
     showToast('已修改分类：' + t);
   });
 }
-async function eeUploadFile(file, path) {
+async function eeUploadFile(file, path, kind) {
   if (!isSyncReady()) throw new Error('未配置家庭云（请先开启同步）');
   const base = eeStorageBase();
   const res = await fetch(base + '/object/' + EARLY_EDU_BUCKET + '/' + encodeURIComponent(path), {
     method: 'POST',
-    headers: { 'apikey': SYNC_CONFIG.supabaseKey, 'Authorization': 'Bearer ' + SYNC_CONFIG.supabaseKey, 'x-upsert': 'true', 'Content-Type': (file.type || 'audio/mpeg') },
+    headers: { 'apikey': SYNC_CONFIG.supabaseKey, 'Authorization': 'Bearer ' + SYNC_CONFIG.supabaseKey, 'x-upsert': 'true', 'Content-Type': eeContentTypeFor(file, kind || eeFileKind(file)) },
     body: file
   });
   if (!res.ok) { const t = await res.text(); throw new Error('上传失败 ' + res.status + ' ' + t.slice(0, 80)); }
@@ -5704,7 +5790,7 @@ function eePlayItem(it) {
     if (err && err.name === 'AbortError') return;         // play/pause 竞态：静默忽略，不弹错
     console.warn('[早教] 播放失败', err);
     if (eeQueueIdx < eeQueue.length - 1) { eeAdvanceQueue(); return; } // 单曲失败自动跳下一首
-    showToast('播放失败：' + (err && err.message ? String(err.message).replace(/\s*https?:\/\/\S+$/, '') : '格式可能不支持'));
+    showToast('播放失败：' + (err && err.message ? String(err.message).replace(/\s*https?:\/\/\S+$/, '') : '格式可能不支持') + '，可在「管理 → 音频」删除后重新上传音频文件');
     eeStop();
   });
 }
