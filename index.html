@@ -1857,7 +1857,8 @@
   body.theme-day .ee-card { background: #ffffff; border-color: rgba(9,132,227,0.12); }
   .ee-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
   .ee-title { font-size: 16px; font-weight: 400; color: #fff; }
-  body.theme-day .ee-title { color: #1f5f60; }
+  /* v3.5.164 浅色模式：放音频标题改黑色（原深青 #1f5f60） */
+  body.theme-day .ee-title { color: #000000; }
   .ee-now { font-size: 13px; color: #b2bec3; min-height: 18px; margin-bottom: 10px; line-height: 1.4; }
   body.theme-day .ee-now { color: #7b8a94; }
   .ee-now.playing { color: #55efc4; }
@@ -1889,7 +1890,8 @@
   /* v3.5.161 合并卡片第一区块（放音频）去掉上间距/分隔线，使其标题距上边框与喝奶等卡片一致 */
   .ee-section-edu { margin-top: 0; padding-top: 0; border-top: none; }
   .ee-sub-head { font-size: 16px; font-weight: 400; color: #dfe6e9; margin-bottom: 6px; }
-  body.theme-day .ee-sub-head { color: #1f5f60; }
+  /* v3.5.164 浅色模式：听歌/听故事标题改黑色（原深青 #1f5f60） */
+  body.theme-day .ee-sub-head { color: #000000; }
   .ee-sub-body .card-empty { font-size: 13px; color: #b2bec3; padding: 2px 0 4px; }
   body.theme-day .ee-sub-body .card-empty { color: #7b8a94; }
   .ee-sub-body .record-tag { padding: 7px 0; }
@@ -2654,6 +2656,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.163"></script>
+<script src="app.js?v=v3.5.164"></script>
 </body>
 </html>
