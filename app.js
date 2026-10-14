@@ -1378,7 +1378,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.3'; // v3.6.3: ①音频管理「选免版权」图标改白色SVG地球, 新增网页内录音入口(绕开手机系统「照片/视频」选择器);②育儿嫂「本月已工作」改为本月1号至当天−≤今天的休假日, 备忘录待办事项增加展开/收起(默认展开), 待办/已办/育儿嫂三标题统一 chevron+图标+文案左对齐;③今日计划简化: 每天0点AI生成当天计划(天气/补剂按当天, 大便/早教按前一天), 任务中可编辑, 按触发时刻推送并更新首页, 推送后至次日0点只读;④成就推送标题与正文改为「本次新增」语义, 不再罗列全天全部内容
+const APP_VERSION = 'v3.6.4'; // v3.6.4: ①首页今日计划摘要完整显示并自动换行, 详情胶囊固定在今日计划最后一行右侧;②首页去掉「放音频」标题(其他不变);③分析弹窗「吃睡」分类中每日睡眠时长图移到辅食图上方
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -7616,12 +7616,12 @@ function openAnalysis() {
     `<div class="cat-tag" data-tab="health" onclick="switchAnalysisTab('health')"><span class="cat-icon">💚</span><span class="cat-label">健康</span></div>` +
     `<div class="cat-tag" data-tab="grow" onclick="switchAnalysisTab('grow')"><span class="cat-icon">🌟</span><span class="cat-label">成长</span></div>` +
     `</div>`;
-  // —— 吃睡：奶量趋势 + 奶量及次数(合并) + 辅食情况 + 睡眠时长 ——
+  // —— 吃睡：奶量趋势 + 奶量及次数(合并) + 睡眠时长 + 辅食情况（v3.6.4 睡眠时长移到辅食上方） ——
   html += `<div class="tab-panel" data-panel="feed">`;
   html += makeMilkTrendChart();   // 奶量趋势（全部记录，双轴：总奶量 + 单次平均）
   html += makeMilkCountComboChart(milkData, milkCountData, milkStdRows); // 奶量及次数（双轴柱状，合并）
+  html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] }); // 睡眠时长（v3.6.4 移到辅食情况上方）
   html += makeSolidFoodAnalysis();    // 辅食情况（环形统计 + 时间轴）
-  html += makeBarChart(sleepData, { title: '😴 每日睡眠时长（近15天）', unit: 'h', color: '#7da8e6', fmt: v => v.toFixed(1), tickStep: 2, stdLines: [{ values: sleepStdRows.map(r => r.min) }, { values: sleepStdRows.map(r => r.max) }] }); // 睡眠时长（v3.5.81 并入吃睡分类最下方）
   html += `</div>`;
   // —— 健康：大便次数 + 大便与喝奶时间差(双轴) + 体重变化(双轴) ——
   html += `<div class="tab-panel" data-panel="health" style="display:none">`;
