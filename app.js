@@ -312,6 +312,14 @@ function effectiveNow() {
   if (d.getHours() === 0) return new Date(d.getTime() - 3600000); // 0点档视为前一天 23:xx
   return d;
 }
+// v3.6.5 今日计划的"今天"用真实日历日（0 点整翻页），与业务日期 effectiveNow（1 点翻页）刻意区分：
+// 喂养等记录仍按业务日（0:00-0:59 归前一天，方便家长记完夜奶再睡），
+// 但 AI 今日计划按用户要求「每天 0 点生成当天计划、推送后只读」，必须 0 点就翻页，
+// 否则 0:00-0:59 之间会出现「新计划不生成、旧计划被当成今天已推送而锁死」的问题（服务端 sched-push.mjs 一直用真实日历日，前后端口径此前不一致）。
+function planTodayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 function getTodayKey() {
   const d = effectiveNow();
   return `records_${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -1378,7 +1386,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.4'; // v3.6.4: ①首页今日计划摘要完整显示并自动换行, 详情胶囊固定在今日计划最后一行右侧;②首页去掉「放音频」标题(其他不变);③分析弹窗「吃睡」分类中每日睡眠时长图移到辅食图上方
+const APP_VERSION = 'v3.6.5'; // v3.6.5: 修复今日计划 0 点档 bug——计划日改用真实日历日(0点翻页)而非业务日(1点翻页,effectiveNow)：0:00-0:59 之间不再出现「新计划不生成、旧计划被当成今天已推送而只读」；新增 planTodayStr() 并用于 _planToday/isPlanEditable/planLockMsg/runScheduler生成块/migratePlanPromptVersion/getCurrentPlan/planStatsDateStr；0 点生成后也刷新首页计划卡；任务卡 placeholder 文案更新为「每天 0 点自动生成」
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -6449,8 +6457,8 @@ async function getAITagConfigWait() {
 }
 // v3.6.1 取「目标日期的前一天」的早教/大便/辅食/户外统计（如 10-14 的计划按 10-13 的记录）
 function planStatsDateStr(targetDateStr) {
-  const d = new Date((targetDateStr || getTodayDateStr()) + 'T00:00:00');
-  if (isNaN(d.getTime())) return getTodayDateStr();
+  const d = new Date((targetDateStr || planTodayStr()) + 'T00:00:00');
+  if (isNaN(d.getTime())) return planTodayStr();
   d.setDate(d.getDate() - 1);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
@@ -6527,17 +6535,17 @@ async function pushTask(task, trig, pk) {
 /* ---------- v3.6.3 今日计划：每天 0 点生成「当天」计划 ----------
  * 简化规则：每天 0 点调用 AI 生成当天计划（天气/营养补剂按当天；大便/早教按前一天）；
  * 用户在任务中可编辑；到用户设定的触发时刻推送并更新首页；推送后至次日 0 点只读不可编辑。 */
-function _planToday() { return new Date(getTodayDateStr() + 'T00:00:00'); }
+function _planToday() { return new Date(planTodayStr() + 'T00:00:00'); }
 function planPushedToday(task) {
   try { return !!task && task.pushPeriod === periodKey(task, _planToday()); } catch (e) { return false; }
 }
 function isPlanEditable(task) {
   if (task.mode !== 'ai') return true;
-  if (task.genDate !== getTodayDateStr()) return false;   // 当天计划未生成 → 不可编辑
+  if (task.genDate !== planTodayStr()) return false;   // 当天计划未生成 → 不可编辑
   return !planPushedToday(task);                          // 已推送 → 只读
 }
 function planLockMsg(task) {
-  if (task.genDate !== getTodayDateStr()) return '今日计划尚未生成（每天 0 点自动生成），暂无法编辑';
+  if (task.genDate !== planTodayStr()) return '今日计划尚未生成（每天 0 点自动生成），暂无法编辑';
   if (planPushedToday(task)) return '今日计划已推送，在次日 0 点生成新计划前为只读，不可编辑';
   return '暂无法编辑';
 }
@@ -6552,6 +6560,7 @@ async function runScheduler(forceGen) {
   const now = new Date();
   const canPush = isPushSender();
   let pushedThisRun = false;   // v3.6.0 仅当本次实际推送了计划，才在结束后刷新首页
+  let planGenThisRun = false;  // v3.6.5 0 点生成了当天计划，也刷新首页计划卡
   for (const task of SCHED_TASKS) {
     if (!task.enabled) continue;
     const { prev, next } = computeTriggers(task, now);
@@ -6559,13 +6568,17 @@ async function runScheduler(forceGen) {
     // genDate !== 今天 或 prompt 版本过期 → 以今天 00:00 为触发日重新生成
     // （天气/营养补剂按当天判断，大便/早教/辅食/户外按前一天记录）。
     if (task.mode === 'ai') {
-      const todayStr = getTodayDateStr();
+      const todayStr = planTodayStr();   // v3.6.5 计划日用真实日历日（0 点翻页），不用业务日（1 点翻页）
       const cooling = (Date.now() - (task.genTryTs || 0)) <= SCHED_GEN_COOLDOWN;
       // 内容版本过期也重生成：已有内容但用的是旧 prompt 版本，用户主动查看(forceGen)时立即刷新
       const staleVer = (task.planVer || '') !== PLAN_PROMPT_VERSION;
       if ((task.genDate !== todayStr || staleVer) && (!cooling || (forceGen && (!task.content || staleVer)))) {
+        const _beforeGen = task.genDate;
         task.genTryTs = Date.now(); saveSchedTasks();
         await generatePlanForTask(task, new Date(todayStr + 'T00:00:00'));
+        // v3.6.5 0 点生成当天计划后立即刷新首页计划卡（此前只在实际推送时刷新，
+        // 会导致跨 0 点在线的用户首页卡片停留/消失，直到 06:30 推送才更新）
+        if (task.genDate !== _beforeGen && task.genDate === todayStr) planGenThisRun = true;
       }
     }
     // 触发推送：触发时刻起、宽限 3 小时内（仅"由本设备负责推送"的设备执行，避免多设备重复推送）
@@ -6583,7 +6596,8 @@ async function runScheduler(forceGen) {
   }
   if (currentManageTab === 'tasks') renderSchedTasks();
   // v3.6.0 首页只在「本次有推送」时才刷新：0 点生成当天计划不污染首页；触发时刻推送才更新首页
-  if (pushedThisRun) renderTodayPlanCard();
+  // v3.6.5 0 点生成当天计划同样刷新首页计划卡（跨 0 点在线的用户能立即看到新计划）
+  if (pushedThisRun || planGenThisRun) renderTodayPlanCard();
   scheduleSchedCloudSave();   // v3.5.154 页面运行期间定期同步上下文（token/天气地址/知识库等变更）
   } finally { _schedRunning = false; }
 }
@@ -6601,8 +6615,8 @@ async function migratePlanPromptVersion() {
     if (!t.enabled) continue;
     try {
       const before = t.content || '';
-      // v3.6.3 prompt 升级后重新生成「当天」计划（天气/补剂按当天、大便/早教按前一天）
-      await generatePlanForTask(t, new Date(getTodayDateStr() + 'T00:00:00'));
+      // v3.6.5 prompt 升级后重新生成「当天」计划（天气/补剂按当天、大便/早教按前一天）
+      await generatePlanForTask(t, new Date(planTodayStr() + 'T00:00:00'));
       if (!t.content || t.content === before) {   // 生成失败 → 保留旧内容并清掉周期标记，之后窗口内还会重试
         t.content = before; t.genPeriod = ''; saveSchedTasks();
       }
@@ -6628,7 +6642,7 @@ function initScheduler() {
 function getCurrentPlan() {
   const task = SCHED_TASKS.find(t => t.enabled && t.mode === 'ai');
   if (!task) return null;
-  const todayStr = getTodayDateStr();
+  const todayStr = planTodayStr();   // v3.6.5 计划日=真实日历日（0 点翻页）
   const pushed = planPushedToday(task);
   if (task.content && (task.genDate === todayStr || pushed)) {
     return { text: task.content, editable: isPlanEditable(task), date: task.genDate || todayStr, today: true, pushed: pushed, pending: false };
@@ -6722,7 +6736,7 @@ function renderSchedTasks() {
     if (expanded) {
       h += '<div class="task-push-hint">' + (t.enabled ? '已开启，到点将推送微信消息' : '开启将会推送微信消息') + '</div>';
       if (t.mode === 'ai') {
-        h += '<textarea class="task-plan" id="plan_' + t.id + '" placeholder="AI 推荐计划会在触发前 12 小时自动生成为此，可直接编辑"' + (editable ? '' : ' readonly') + ' onfocus="onPlanFocus(\'' + t.id + '\')" onclick="onPlanFocus(\'' + t.id + '\')" oninput="onPlanInput(\'' + t.id + '\',this.value)">' + escapeHtml(t.content || '') + '</textarea>';
+        h += '<textarea class="task-plan" id="plan_' + t.id + '" placeholder="AI 推荐计划每天 0 点自动生成为此，可直接编辑"' + (editable ? '' : ' readonly') + ' onfocus="onPlanFocus(\'' + t.id + '\')" onclick="onPlanFocus(\'' + t.id + '\')" oninput="onPlanInput(\'' + t.id + '\',this.value)">' + escapeHtml(t.content || '') + '</textarea>';
       } else {
         h += '<textarea class="task-plan" id="plan_' + t.id + '" placeholder="输入到点要推送的消息内容" oninput="onPlanInput(\'' + t.id + '\',this.value)">' + escapeHtml(t.content || '') + '</textarea>';
       }
