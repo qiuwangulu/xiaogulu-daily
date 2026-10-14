@@ -1089,16 +1089,29 @@
   }
   .nanny-vac-chip b { font-weight: 700; opacity: .8; }
   .nanny-vac-chip:active { transform: scale(.96); }
-  /* v3.6.1 育儿嫂休假：可展开收起（同已办事项），默认收起 */
-  .nanny-vac-head {
-    display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700;
-    color: #dfe6e9; padding: 10px 4px 8px; cursor: pointer; user-select: none; -webkit-user-select: none;
+  /* v3.6.3 备忘录三区块标题统一：chevron + 图标 + 文案 + 计数，左对齐 */
+  .memo-todo-head, .memo-done-head, .nanny-vac-head {
+    display: flex; align-items: center; gap: 6px; cursor: pointer;
+    font-size: 14px; font-weight: 700; color: #dfe6e9;
+    padding: 12px 2px 8px; user-select: none; -webkit-user-select: none;
   }
-  .nanny-vac-head .chev { transition: transform .2s; display: inline-block; font-size: 9.8px; color: #fff; }
-  .nanny-vac-head.open .chev { transform: rotate(90deg); }
-  body.theme-day .nanny-vac-head { color: #3d4852; }
-  body.theme-day .nanny-vac-head .chev { color: #0984e3; }
-  .nanny-vac-head .cnt { font-size: 12px; opacity: .7; font-weight: 600; }
+  .memo-todo-head .chev, .memo-done-head .chev, .nanny-vac-head .chev {
+    width: 14px; flex-shrink: 0; text-align: center; display: inline-block;
+    font-size: 9.8px; color: #fff; transition: transform .2s;
+  }
+  .memo-todo-head.open .chev, .memo-done-head.open .chev, .nanny-vac-head.open .chev { transform: rotate(90deg); }
+  .memo-todo-head .todo-q, .memo-done-head .done-ico, .nanny-vac-head .nanny-ico {
+    width: 1.3em; flex-shrink: 0; text-align: center; line-height: 1;
+  }
+  .memo-todo-head .todo-q { color: #ff7675; font-weight: 700; }
+  .memo-todo-head .cnt, .memo-done-head .cnt, .nanny-vac-head .cnt {
+    margin-left: auto; font-size: 12px; opacity: .7; font-weight: 600;
+  }
+  body.theme-day .memo-todo-head, body.theme-day .nanny-vac-head { color: #3d4852; }
+  body.theme-day .memo-done-head { color: #636e72; }
+  body.theme-day .memo-todo-head .chev, body.theme-day .memo-done-head .chev, body.theme-day .nanny-vac-head .chev { color: #0984e3; }
+  .memo-todo-body { display: none; }
+  .memo-todo-body.open { display: block; }
   .nanny-vac-body { display: none; padding: 0 2px 4px; }
   .nanny-vac-body.open { display: block; }
   .nanny-month-label { font-size: 13px; font-weight: 700; color: #74b9ff; margin-right: 8px; }
@@ -1147,16 +1160,8 @@
   .memo-item .rec-delete:active, .memo-done-item .rec-delete:active { opacity: 1; }
   .memo-item .rec-edit:active svg, .memo-done-item .rec-edit:active svg { stroke: #74b9ff; }
   .memo-item .rec-delete:active svg, .memo-done-item .rec-delete:active svg { stroke: #e74c3c; }
-  /* 已办：默认折叠，可点击展开 */
-  .memo-done-head {
-    display: flex; align-items: center; gap: 6px; cursor: pointer; color: #b2bec3;
-    font-size: 14px; font-weight: 700; padding: 12px 0 6px; margin-top: 10px;
-    border-top: 1px solid rgba(255,255,255,0.08);
-  }
-  /* v3.5.142 箭头缩至 70%；浅色模式蓝(同按钮底色 #0984e3)，深色模式白 */
-  .memo-done-head .chev { transition: transform .2s; display: inline-block; font-size: 9.8px; color: #fff; }
-  .memo-done-head.open .chev { transform: rotate(90deg); }
-  body.theme-day .memo-done-head .chev { color: #0984e3; }
+  /* 已办：默认折叠(无 .open)，与待办/育儿嫂共用上方统一标题样式 */
+  .memo-done-head { margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
   .memo-done-body { display: none; }
   .memo-done-body.open { display: block; }
   .memo-done-item { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
@@ -1248,6 +1253,9 @@
     margin: 4px 0 10px; letter-spacing: 1px;
   }
   .fab-btn .fab-icon.fab-emoji { font-size: 17px; line-height: 1; }
+  /* v3.6.3 免版权图标：白色描边地球（深色/浅色模式均白色，不随主题变化） */
+  .fab-btn .fab-icon.ee-globe-svg { display: inline-flex; }
+  .fab-btn .fab-icon.ee-globe-svg svg { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
   /* ===== 管理 ===== */
   .manage-list { max-height: 55vh; overflow-y: auto; }
@@ -1932,6 +1940,14 @@
   body.theme-day .ee-count-row .ee-count-unit { color: #7b8a94; }
   .ee-tip { font-size: 12px; color: #b2bec3; margin: 4px 0 10px; line-height: 1.55; }
   body.theme-day .ee-tip { color: #7b8a94; }
+  /* v3.6.3 本地音频录音弹窗（绕开手机系统「照片/视频」选择器） */
+  .ee-rec-timer { font-size: 42px; text-align: center; font-weight: 700; color: #74b9ff;
+    margin: 12px 0 4px; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+  body.theme-day .ee-rec-timer { color: #0984e3; }
+  .ee-rec-status { text-align: center; font-size: 13px; color: #b2bec3; margin-bottom: 14px; line-height: 1.5; }
+  body.theme-day .ee-rec-status { color: #7b8a94; }
+  .ee-rec-wave { text-align: center; margin: 6px 0 16px; }
+  .ee-rec-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
   /* v3.5.160 早教首页切换/播放图标缩至与「添加」按钮图标观感一致（添加图标视觉字形约 20px） */
   .ee-card .fab-icon svg { width: 20px; height: 20px; }
   /* v3.5.160 合并卡片子区块（听歌 / 听故事） */
@@ -2289,16 +2305,21 @@
         </button>
       </div>
     </div>
-    <div class="memo-section-title"><span class="todo-q">&#10067;</span>待办事项 <span class="cnt" id="memoTodoCnt">0</span></div>
-    <div id="memoTodoList"></div>
+    <!-- v3.6.3 待办事项：增加展开/收起(默认展开)，与已办/育儿嫂统一 chevron+图标+文案，左对齐 -->
+    <div class="memo-todo-head open" id="memoTodoHead" onclick="toggleMemoTodoExpand()">
+      <span class="chev">▶</span><span class="todo-q">&#10067;</span><span>待办事项</span><span class="cnt" id="memoTodoCnt">0</span>
+    </div>
+    <div class="memo-todo-body open" id="memoTodoBody">
+      <div id="memoTodoList"></div>
+    </div>
     <div class="memo-done-head" id="memoDoneHead" onclick="toggleMemoDoneExpand()">
-      <span class="chev">▶</span><span>✅ 已办事项</span><span class="cnt" id="memoDoneCnt">0</span>
+      <span class="chev">▶</span><span class="done-ico">✅</span><span>已办事项</span><span class="cnt" id="memoDoneCnt">0</span>
     </div>
     <div class="memo-done-body" id="memoDoneBody"></div>
     <!-- v3.6.0 育儿嫂休假：记录休假日期，自动算当月已工作天数，并供工资任务扣减 -->
     <!-- v3.6.1 改为可展开收起（同已办事项，默认收起）；月份显示当前年月如 2026-10；日期支持多选 -->
     <div class="nanny-vac-head" id="nannyVacHead" onclick="toggleNannyVacExpand()">
-      <span class="chev">▶</span><span>👩 育儿嫂休假</span><span class="cnt" id="nannyVacDays">0</span>
+      <span class="chev">▶</span><span class="nanny-ico">👩</span><span>育儿嫂休假</span><span class="cnt" id="nannyVacDays">0</span>
     </div>
     <div class="nanny-vac-body" id="nannyVacBody">
       <div class="nanny-month-row">
@@ -2507,7 +2528,7 @@
       </div>
       <div class="ee-add-row" id="eeAddRow">
         <span id="eeUploadBtnWrap"><button class="fab-btn" onclick="eeTriggerUpload()"><span class="fab-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg></span> 本地音频</button></span>
-        <button class="fab-btn" id="eeWikiBtn" onclick="eeShowWiki()"><span class="fab-icon fab-emoji">🌐</span> 选免版权</button>
+        <button class="fab-btn" id="eeWikiBtn" onclick="eeShowWiki()"><span class="fab-icon ee-globe-svg"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z"/><path d="M12 3c2.5 2.5 4 5.7 4 9s-1.5 6.5-4 9c-2.5-2.5-4-5.7-4-9s1.5-6.5 4-9Z"/></svg></span> 选免版权</button>
       </div>
       <!-- v3.6.1 accept 收紧为纯 audio/*（不带扩展名列表），避免系统文件选择器把「照片和视频」等非音频入口列出来 -->
       <input type="file" id="eeFileInput" accept="audio/*" multiple style="display:none;" onchange="eeOnFiles(this)">
@@ -2621,6 +2642,23 @@
       <button class="btn btn-primary" onclick="eeConfirmPickCat()">确定</button>
     </div>
     <div class="ee-cat-pick-hint" id="eeCatPickHint" style="display:none;"></div>
+  </div>
+</div>
+<!-- v3.6.3 本地音频：网页内录音弹窗（绕开手机系统「照片/视频」选择器） -->
+<div class="modal-overlay" id="eeRecordModal" onclick="closeModal(event,'eeRecordModal')">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:340px;">
+    <button class="modal-close" onclick="hideModal('eeRecordModal')">&times;</button>
+    <div class="modal-title">🎙 本地音频</div>
+    <div class="ee-rec-timer" id="eeRecTimer">00:00</div>
+    <div class="ee-rec-status" id="eeRecStatus">点击下方按钮开始录音（录音保存在本机，完成后上传）</div>
+    <div class="ee-rec-wave" id="eeRecWave" style="display:none;">
+      <button class="fab-btn" onclick="eeStopRecord()"><span class="fab-icon fab-emoji">⏹</span>停止并保存</button>
+    </div>
+    <div class="ee-rec-actions">
+      <button class="btn btn-primary" id="eeRecStartBtn" onclick="eeStartRecord()">🎙 开始录音</button>
+      <button class="btn" onclick="eePickFileFromRecord()">📁 选择音频文件</button>
+    </div>
+    <div class="ee-tip">网页内录音不会弹出手机系统的「照片 / 视频」选择器；若改用「选择音频文件」时系统列出「照片和视频」等入口，请切换到「录音机」或从中选择音频文件（MP3/M4A/WAV 等）。</div>
   </div>
 </div>
 <!-- v3.5.141 今日计划详情弹窗 -->
@@ -2789,6 +2827,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.6.2"></script>
+<script src="app.js?v=v3.6.3"></script>
 </body>
 </html>

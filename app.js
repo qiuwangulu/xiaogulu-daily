@@ -879,20 +879,16 @@ function doPush(achArr, totalMilk, newAchievements) {
     try {
       const ds = getTodayDateStr();
 
-      // 通知标题 = 本次新增的成就（v3.5.64：推送只呈现"本次更新"的内容）
-      // 超过 3 条时标题只放前 3 条，但补上"等N条"让家人知道还有更多，完整内容看正文
-      const titleSrc = newAchievements.length > 0 ? newAchievements : achArr;
-      const displayTitle = titleSrc.length > 3
-        ? titleSrc.slice(0, 3).join(' · ') + ` 等${titleSrc.length}条`
-        : titleSrc.join(' · ');
+      // v3.6.3 通知标题明确「本次新增」语义，不再罗列全天全部内容
+      const newN = newAchievements.length;
+      const displayTitle = newN > 3
+        ? `🏆 新增${newN}条：` + newAchievements.slice(0, 3).join(' · ') + ` 等${newN}条`
+        : `🏆 新增${newN}条：` + newAchievements.join(' · ');
 
-      // 详情内容 = 今日全部成就，其中本次新增的高亮（v3.5.66 恢复）
-      // 标题段保持"本次新增"不变：通知栏只给结论，点开才看全天完整清单
+      // v3.6.3 详情只呈现「本次更新」的成就：标题写本次新增，列表不再含全天历史内容
       const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const newSet = new Set(newAchievements);
-      const items = achArr.map(a => newSet.has(a)
-        ? `<li><span style="background:#ffecb3;color:#c0392b;font-weight:bold;padding:1px 4px;border-radius:3px;">${esc(a)}</span></li>`
-        : `<li>${esc(a)}</li>`
+      const items = newAchievements.map(a =>
+        `<li><span style="background:#ffecb3;color:#c0392b;font-weight:bold;padding:1px 4px;border-radius:3px;">${esc(a)}</span></li>`
       ).join('');
       // 当天统计（v3.5.79 统一走 getRecordsByDate 过滤脏记录）
       const recs = getRecordsByDate(ds);
@@ -903,10 +899,8 @@ function doPush(achArr, totalMilk, newAchievements) {
         else if (r.type === 'sleep' && r.duration) sleepMin += r.duration;
       });
       const fmtDur = min => { min = Math.round(min); const h = Math.floor(min / 60), m = min % 60; if (h > 0 && m > 0) return `${h}小时${m}分钟`; return h > 0 ? `${h}小时` : `${m}分钟`; };
-      // 区块标题按是否有新增区分：有新增时才写"本次新增"高亮说明
-      const achLabel = newAchievements.length > 0 ? '🏆 今日成就（加亮为本次新增）:' : '🏆 今日成就:';
-      const achBlock = items ? `<p><b>${achLabel}</b></p><ul>${items}</ul>` : '';
-      const content = `<h3>小咕噜的今日成就 ${ds}</h3>` + achBlock +
+      const achBlock = items ? `<p><b>🏆 本次新增成就:</b></p><ul>${items}</ul>` : '';
+      const content = `<h3>小咕噜今日成就 · 本次新增 ${newN} 条 · ${ds}</h3>` + achBlock +
         `<p><b>🍼 水+奶量:</b> ${Math.round(totalMilk * 1.12)} ml</p>` +
         `<p><b>💩 大便次数:</b> ${poopCount} 次</p>` +
         `<p><b>☀️ 户外活动:</b> ${fmtDur(outdoorMin)}</p>` +
@@ -1384,7 +1378,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.2'; // v3.6.2: ①里程碑编辑弹窗「是否首次」改为原生radio组件(与辅食饭后情况同款)+卡片编辑图标与文案防重合;②音频上传入口改名「本地音频」并提示避开系统选择器的照片/视频入口;③工资结算任务图标✏️→💰;④今日计划补剂M/W/F判定明确按本计划日(=任务触发当天)星期,禁止按第二天(prompt升v7触发重新生成)
+const APP_VERSION = 'v3.6.3'; // v3.6.3: ①音频管理「选免版权」图标改白色SVG地球, 新增网页内录音入口(绕开手机系统「照片/视频」选择器);②育儿嫂「本月已工作」改为本月1号至当天−≤今天的休假日, 备忘录待办事项增加展开/收起(默认展开), 待办/已办/育儿嫂三标题统一 chevron+图标+文案左对齐;③今日计划简化: 每天0点AI生成当天计划(天气/补剂按当天, 大便/早教按前一天), 任务中可编辑, 按触发时刻推送并更新首页, 推送后至次日0点只读;④成就推送标题与正文改为「本次新增」语义, 不再罗列全天全部内容
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3551,6 +3545,11 @@ function toggleMemoDoneExpand() {
   const h = document.getElementById('memoDoneHead'), b = document.getElementById('memoDoneBody');
   if (h && b) { h.classList.toggle('open'); b.classList.toggle('open'); }
 }
+// v3.6.3 待办事项增加展开/收起（默认展开）
+function toggleMemoTodoExpand() {
+  const h = document.getElementById('memoTodoHead'), b = document.getElementById('memoTodoBody');
+  if (h && b) { h.classList.toggle('open'); b.classList.toggle('open'); }
+}
 
 /* ---------- 备忘录加密同步家庭云（v3.5.115） ----------
  * 此前备忘录只存本机 localStorage，清缓存/换设备即丢。现与知识库/历史对话共用同一套端到端加密。
@@ -3694,8 +3693,21 @@ function renderNannyVacation() {
   const workEl = document.getElementById('nannyWorkDays');
   if (workEl) {
     const daysInMonth = daysInNannyMonth(ym);
-    const vacThisMonth = list.filter(d => d.slice(0, 7) === ym).length;
-    workEl.textContent = `本月已工作 ${daysInMonth - vacThisMonth} 天（本月 ${daysInMonth} 天，休假 ${vacThisMonth} 天）`;
+    const todayStr = getTodayDateStr();
+    const todayYm = todayStr.slice(0, 7);
+    const todayDay = parseInt(todayStr.slice(8, 10), 10) || 1;
+    if (ym === todayYm) {
+      // v3.6.3 本月已工作 = 本月1号至当天的日历天数 − 本月中≤今天的休假天数
+      const vacCount = list.filter(d => {
+        if (d.slice(0, 7) !== ym) return false;
+        const dd = parseInt(d.slice(8, 10), 10);
+        return dd <= todayDay;
+      }).length;
+      workEl.textContent = `本月已工作 ${todayDay - vacCount} 天（本月 1 号至今 ${todayDay} 天，休假 ${vacCount} 天）`;
+    } else {
+      const vacThisMonth = list.filter(d => d.slice(0, 7) === ym).length;
+      workEl.textContent = `本月已工作 ${daysInMonth - vacThisMonth} 天（本月 ${daysInMonth} 天，休假 ${vacThisMonth} 天）`;
+    }
   }
   const wrap = document.getElementById('nannyVacList');
   if (!wrap) return;
@@ -5400,11 +5412,11 @@ const WEATHER_ADDR_KEY = 'weather_addr';
 const WEATHER_ADDR_CLOUD_KEY = 'weather_addr_v1';   // 加密家庭云（地址不写死、可配置）
 const WEATHER_GEO_CACHE_KEY = 'weather_geo_cache';
 const SCHED_DEFAULT_ADDR = '上海市闵行区七宝镇宝南路55弄九星家园';
-const SCHED_GEN_LEAD = 12 * 3600000;     // 提前 12 小时生成计划
+const SCHED_GEN_LEAD = 12 * 3600000;     // v3.6.3 起不再使用：改为每天 0 点生成「当天」计划（保留字段仅兼容旧云端 ctx）
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内才推送（避免补推历史）
 const SCHED_GEN_COOLDOWN = 30 * 60000;   // AI 生成失败重试冷却 30 分钟
 // AI 计划 prompt 版本：内容与分类结构变化时递增，可强制所有 AI 任务用最新 prompt 重新生成
-const PLAN_PROMPT_VERSION = '7'; // v3.6.2 计划prompt: 补剂 M/W/F 判定明确按「本计划日(=任务触发当天)」星期，禁止按第二天；另①里程碑编辑弹窗是否首次改原生radio(同辅食饭后情况)+图标文案防重合;②音频上传入口改名「本地音频」;③工资结算任务图标改💰
+const PLAN_PROMPT_VERSION = '8'; // v3.6.3 计划prompt: 今日计划改为「每天0点生成当天计划」(天气/补剂按当天, 大便/早教按前一天), 新增【统计口径】明确行, 触发重新生成
 let SCHED_TASKS = [];
 const _pad2 = n => String(n).padStart(2, '0');
 
@@ -5690,10 +5702,7 @@ function eeIsVideoItem(it) { if (!it) return false; if (it.kind) return it.kind 
 // v3.5.162 本地上传：先弹分类选择，确定后再选文件（本地上传需指定分类）
 // v3.6.0 仅支持音频：本地音频文件与录音；图片/视频/文档一律拦截
 function eeTriggerUpload() {
-  eeOpenCatPick('选择上传音频的分类', (t) => {
-    eePendingUploadType = t;
-    const inp = document.getElementById('eeFileInput'); if (inp) inp.click();
-  }, '✅ 支持：本地音频文件与录音（mp3 / m4a / wav / amr…）<br>🚫 不支持：照片、视频、文档等无法播放的文件<br>💡 若系统选择器列出「照片和视频」等入口，请切换到「录音机 / 音频」或从中选择音频文件');
+  eeOpenCatPick('选择音频分类', (t) => { eeShowRecord(t); }, '✅ 支持：网页内录音与本地音频文件 / 录音（mp3 / m4a / wav / amr…）<br>🚫 不支持：照片、视频、文档等无法播放的文件<br>💡 选「开始录音」不会弹出手机系统选择器；选「选择音频文件」时若系统列出「照片和视频」入口，请切换到「录音机」或从中选音频文件');
 }
 async function eeOnFiles(input) {
   const files = Array.from(input.files || []);
@@ -5722,15 +5731,8 @@ async function eeOnFiles(input) {
   showToast('上传中（' + list.length + ' 个）…');
   let ok = 0, fail = 0;
   for (const f of list) {
-    try {
-      const kind = eeFileKind(f);   // 恒为 'audio'
-      const ext = eeFileExt(f.name) || 'mp3';
-      const fid = getFamilyId() || 'default';
-      const path = fid + '/ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '.' + ext;
-      const url = await eeUploadFile(f, path, kind);
-      EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: f.name.replace(/\.[^.]+$/, ''), type, src: 'upload', kind: 'audio', playable: true, url, path, addedAt: Date.now() });
-      ok++;
-    } catch (e) { fail++; console.warn('[音频] 上传失败', e); }
+    try { if (await eeUploadOne(f, type)) ok++; else fail++; }
+    catch (e) { fail++; console.warn('[音频] 上传失败', e); }
   }
   scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard();
   const parts = [];
@@ -5780,6 +5782,87 @@ async function eeUploadFile(file, path, kind) {
   });
   if (!res.ok) { const t = await res.text(); throw new Error('上传失败 ' + res.status + ' ' + t.slice(0, 80)); }
   return base + '/object/public/' + EARLY_EDU_BUCKET + '/' + encodeURIComponent(path);
+}
+// v3.6.3 单个音频文件上传（本地上传 / 网页内录音共用）
+async function eeUploadOne(file, type) {
+  const kind = eeFileKind(file);
+  if (kind !== 'audio') { showToast('不支持的文件类型，请选择音频文件或录音'); return false; }
+  const ext = eeFileExt(file.name) || 'webm';
+  const fid = getFamilyId() || 'default';
+  const path = fid + '/ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '.' + ext;
+  const url = await eeUploadFile(file, path, kind);
+  EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: (file.name || '录音').replace(/\.[^.]+$/, ''), type, src: 'upload', kind: 'audio', playable: true, url, path, addedAt: Date.now() });
+  scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard();
+  return true;
+}
+/* ---------- v3.6.3 网页内录音（绕开手机系统「照片/视频」选择器） ---------- */
+let _eeRecStream = null, _eeRecRec = null, _eeRecChunks = [], _eeRecTimer = null, _eeRecStart = 0, _eeRecType = '儿歌';
+function eeShowRecord(type) {
+  _eeRecType = type || '儿歌';
+  const st = document.getElementById('eeRecStatus');
+  if (st) st.textContent = '当前分类：' + _eeRecType + '，点击「开始录音」或选择本地音频文件';
+  const tm = document.getElementById('eeRecTimer'); if (tm) tm.textContent = '00:00';
+  const wave = document.getElementById('eeRecWave'); if (wave) wave.style.display = 'none';
+  const sb = document.getElementById('eeRecStartBtn'); if (sb) sb.style.display = '';
+  showModal('eeRecordModal');
+}
+function _eeRecCleanup() {
+  if (_eeRecStream) { try { _eeRecStream.getTracks().forEach(t => t.stop()); } catch (e) {} _eeRecStream = null; }
+  if (_eeRecTimer) { clearInterval(_eeRecTimer); _eeRecTimer = null; }
+  _eeRecRec = null;
+}
+async function eeStartRecord() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showToast('当前浏览器不支持录音，请改用「选择音频文件」'); return; }
+  try { _eeRecStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { showToast('无法获取麦克风权限：' + (e && e.message || e)); return; }
+  let mime = '';
+  try {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mime = 'audio/webm;codecs=opus';
+  } catch (e) {}
+  try { _eeRecRec = new MediaRecorder(_eeRecStream, mime ? { mimeType: mime } : undefined); }
+  catch (e) { _eeRecCleanup(); showToast('录音初始化失败：' + (e && e.message || e)); return; }
+  _eeRecChunks = [];
+  _eeRecRec.ondataavailable = e => { if (e.data && e.data.size) _eeRecChunks.push(e.data); };
+  _eeRecRec.onstop = () => { _eeRecFinish(); };
+  try { _eeRecRec.start(250); } catch (e) { _eeRecCleanup(); showToast('录音启动失败：' + (e && e.message || e)); return; }
+  _eeRecStart = Date.now();
+  const st = document.getElementById('eeRecStatus'); if (st) st.textContent = '录音中…（分类：' + _eeRecType + '）';
+  const wave = document.getElementById('eeRecWave'); if (wave) wave.style.display = '';
+  const sb = document.getElementById('eeRecStartBtn'); if (sb) sb.style.display = 'none';
+  _eeRecTimer = setInterval(() => {
+    const s = Math.floor((Date.now() - _eeRecStart) / 1000);
+    const t = document.getElementById('eeRecTimer');
+    if (t) t.textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  }, 500);
+}
+function eeStopRecord() {
+  try { if (_eeRecRec && _eeRecRec.state !== 'inactive') _eeRecRec.stop(); } catch (e) {}
+  if (_eeRecTimer) { clearInterval(_eeRecTimer); _eeRecTimer = null; }
+}
+async function _eeRecFinish() {
+  if (_eeRecStream) { try { _eeRecStream.getTracks().forEach(t => t.stop()); } catch (e) {} _eeRecStream = null; }
+  _eeRecRec = null;
+  if (!_eeRecChunks.length) { showToast('未录到音频，请重试'); return; }
+  const mime = (_eeRecChunks[0] && _eeRecChunks[0].type) || 'audio/webm';
+  let ext = 'webm';
+  if (mime.indexOf('mp4') >= 0) ext = 'm4a';
+  else if (mime.indexOf('ogg') >= 0 || mime.indexOf('oga') >= 0) ext = 'ogg';
+  const blob = new Blob(_eeRecChunks, { type: mime });
+  _eeRecChunks = [];
+  let file;
+  try { file = new File([blob], '录音_' + getTodayDateStr() + '.' + ext, { type: mime }); }
+  catch (e) { file = blob; file.name = '录音_' + getTodayDateStr() + '.' + ext; }
+  try {
+    showToast('上传中…');
+    await eeUploadOne(file, _eeRecType);
+    showToast('已添加录音到「' + _eeRecType + '」');
+    hideModal('eeRecordModal');
+  } catch (e) { showToast('上传失败：' + (e && e.message || e)); }
+}
+function eePickFileFromRecord() {
+  hideModal('eeRecordModal');
+  eePendingUploadType = _eeRecType;
+  const inp = document.getElementById('eeFileInput'); if (inp) inp.click();
 }
 async function eeShowWiki() {
   const list = document.getElementById('eeWikiList');
@@ -6341,6 +6424,7 @@ function buildPlanSystemPrompt(dateStr, wText, stats) {
     + '【健康·出行】户外活动时间与时长（结合天气与昨日户外时长，给出具体时段如"上午9-10点、下午4-5点"及总时长建议）、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物；结合知识库「穿衣」给出是否戴帽子、是否裹薄包被/纱巾。\n'
     + '【辅食提醒】若上方"辅食记录"备注含过敏/异常（如某品牌米粉过敏），在喂养或辅食处提醒今日更换品牌（具体到备注里的牌子）。\n'
     + '【补剂判定】营养补剂是否为补剂日（周一/三/五），一律按本计划日（即上方"目标日期"、任务触发当天）的星期判断；不得按"第二天"或其他任何日期判断。\n'
+    + '【统计口径】天气与营养补剂一律按「本计划日（上方目标日期、任务触发当天）」判断；大便次数与早教一律按「前一日」的记录判断。两者口径不得混用。\n'
     + '【早教】放在最后一段输出。结合上方"前一日早教数据"：次数<1 的项目必须纳入今日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。\n'
     + '【温度要求】上方天气已给出当日最高温和最低温，请在「起居护理·穿衣」与「健康·出行」中明确写出具体温度数值（如"今日 28℃/19℃，短袖即可"），不要只写"根据天气"。\n'
     + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【喂养】【起居护理】【健康·出行】【早教】顺序分块给出内容（早教在最后）。';
@@ -6440,26 +6524,22 @@ async function pushTask(task, trig, pk) {
 }
 
 /* ---------- 调度器（静态站点：页面打开时由定时器检查触发） ---------- */
-// v3.5.136 是否处于「提前 12 小时生成窗口」，即 [下次触发-12h, 下次触发)
-// 跨天也成立：每天 08:00 的任务，当天 20:00 起即可生成/编辑次日计划
-function planGenWindowOpen(task, now) {
-  const n = now || new Date();
-  const { next } = computeTriggers(task, n);
-  if (!next) return false;
-  const winStart = new Date(next.getTime() - SCHED_GEN_LEAD);
-  return n >= winStart && n < next;
+/* ---------- v3.6.3 今日计划：每天 0 点生成「当天」计划 ----------
+ * 简化规则：每天 0 点调用 AI 生成当天计划（天气/营养补剂按当天；大便/早教按前一天）；
+ * 用户在任务中可编辑；到用户设定的触发时刻推送并更新首页；推送后至次日 0 点只读不可编辑。 */
+function _planToday() { return new Date(getTodayDateStr() + 'T00:00:00'); }
+function planPushedToday(task) {
+  try { return !!task && task.pushPeriod === periodKey(task, _planToday()); } catch (e) { return false; }
 }
-// v3.5.136 可编辑判定直接对齐生成窗口（原来要求"下次触发的周期=今天"，导致 20:00 后生成的次日计划被误判为不可编辑）
 function isPlanEditable(task) {
   if (task.mode !== 'ai') return true;
-  return planGenWindowOpen(task);
+  if (task.genDate !== getTodayDateStr()) return false;   // 当天计划未生成 → 不可编辑
+  return !planPushedToday(task);                          // 已推送 → 只读
 }
-// v3.5.136 只读提示：本周期已推送完成且下一周期计划尚未生成时，沿用原有文案
 function planLockMsg(task) {
-  const now = new Date();
-  const { prev } = computeTriggers(task, now);
-  if (prev && task.pushPeriod === periodKey(task, prev)) return '因今日计划已推送，明日计划未生成，无法编辑';
-  return '未到计划生成时间，暂无法编辑';
+  if (task.genDate !== getTodayDateStr()) return '今日计划尚未生成（每天 0 点自动生成），暂无法编辑';
+  if (planPushedToday(task)) return '今日计划已推送，在次日 0 点生成新计划前为只读，不可编辑';
+  return '暂无法编辑';
 }
 let _schedRunning = false;
 async function runScheduler(forceGen) {
@@ -6475,20 +6555,17 @@ async function runScheduler(forceGen) {
   for (const task of SCHED_TASKS) {
     if (!task.enabled) continue;
     const { prev, next } = computeTriggers(task, now);
-    // AI 计划生成：进入 [触发-12h, 触发) 窗口且本周期未生成。
-    // v3.5.136 生成不再受"由本设备负责推送"限制——任务为本机所有，否则未开启推送的设备上计划会一直空白。
-    // forceGen=true（用户主动打开任务页/新建/开启任务）时忽略失败冷却，计划内容仍为空则当场重试。
-    if (task.mode === 'ai' && next) {
-      const winStart = new Date(next.getTime() - SCHED_GEN_LEAD);
-      if (now >= winStart && now < next) {
-        const pk = periodKey(task, next);
-        const cooling = (Date.now() - (task.genTryTs || 0)) <= SCHED_GEN_COOLDOWN;
-        // v3.5.142 内容版本过期也重生成：已有内容但用的是旧 prompt 版本，用户主动查看(forceGen)时立即刷新
-        const staleVer = (task.planVer || '') !== PLAN_PROMPT_VERSION;
-        if ((task.genPeriod !== pk || staleVer) && (!cooling || (forceGen && (!task.content || staleVer)))) {
-          task.genTryTs = Date.now(); saveSchedTasks();
-          await generatePlanForTask(task, next);
-        }
+    // v3.6.3 AI 计划：每天 0 点生成「当天」计划（不再提前 12h 生成次日计划）。
+    // genDate !== 今天 或 prompt 版本过期 → 以今天 00:00 为触发日重新生成
+    // （天气/营养补剂按当天判断，大便/早教/辅食/户外按前一天记录）。
+    if (task.mode === 'ai') {
+      const todayStr = getTodayDateStr();
+      const cooling = (Date.now() - (task.genTryTs || 0)) <= SCHED_GEN_COOLDOWN;
+      // 内容版本过期也重生成：已有内容但用的是旧 prompt 版本，用户主动查看(forceGen)时立即刷新
+      const staleVer = (task.planVer || '') !== PLAN_PROMPT_VERSION;
+      if ((task.genDate !== todayStr || staleVer) && (!cooling || (forceGen && (!task.content || staleVer)))) {
+        task.genTryTs = Date.now(); saveSchedTasks();
+        await generatePlanForTask(task, new Date(todayStr + 'T00:00:00'));
       }
     }
     // 触发推送：触发时刻起、宽限 3 小时内（仅"由本设备负责推送"的设备执行，避免多设备重复推送）
@@ -6505,7 +6582,7 @@ async function runScheduler(forceGen) {
     }
   }
   if (currentManageTab === 'tasks') renderSchedTasks();
-  // v3.6.0 首页只在「本次有推送」时才刷新：18:30 生成次日计划不污染首页；6:30 推送才更新首页
+  // v3.6.0 首页只在「本次有推送」时才刷新：0 点生成当天计划不污染首页；触发时刻推送才更新首页
   if (pushedThisRun) renderTodayPlanCard();
   scheduleSchedCloudSave();   // v3.5.154 页面运行期间定期同步上下文（token/天气地址/知识库等变更）
   } finally { _schedRunning = false; }
@@ -6523,11 +6600,9 @@ async function migratePlanPromptVersion() {
   for (const t of aiTasks) {
     if (!t.enabled) continue;
     try {
-      const now = new Date();
-      const { prev, next } = computeTriggers(t, now);
-      const trig = next || (t.freq === 'once' ? prev : null) || now;
       const before = t.content || '';
-      await generatePlanForTask(t, trig);
+      // v3.6.3 prompt 升级后重新生成「当天」计划（天气/补剂按当天、大便/早教按前一天）
+      await generatePlanForTask(t, new Date(getTodayDateStr() + 'T00:00:00'));
       if (!t.content || t.content === before) {   // 生成失败 → 保留旧内容并清掉周期标记，之后窗口内还会重试
         t.content = before; t.genPeriod = ''; saveSchedTasks();
       }
@@ -6548,34 +6623,15 @@ function initScheduler() {
 }
 
 /* ---------- 今日计划（首页总览卡片） ---------- */
-// v3.5.142 重写：只要 AI 任务有已生成内容就展示，不再苛求「触发周期==今天」。
-// 优先展示「今日计划」（genDate==今天），否则展示最近生成的那份（如提前 12h 生成的次日计划），
-// 避免每天 00:00~触发时刻之间、以及已推送次日计划后总览空白。
-// v3.6.0 首页今日计划展示规则：只展示「今日已推送」的计划；提前生成的次日计划不污染首页。
-// 展示优先级：① 今日已推送(pushPeriod==今天) → ② 今日已生成(genDate==今天，推送前预览) →
-//            ③ 最近一次已推送的计划(两次推送之间不空白) → ④ 窗口内占位。
+// v3.6.3 首页今日计划只展示「当天」的计划：当天已生成(genDate==今天)或今天已推送。
+// 0 点前未生成 → 无卡片；推送后同一份继续展示（只读）。
 function getCurrentPlan() {
   const task = SCHED_TASKS.find(t => t.enabled && t.mode === 'ai');
   if (!task) return null;
   const todayStr = getTodayDateStr();
-  const editable = isPlanEditable(task);
-  if (task.content) {
-    if (task.pushPeriod === todayStr || task.genDate === todayStr) {
-      return { text: task.content, editable: editable, date: task.genDate || todayStr, today: true, pushed: task.pushPeriod === todayStr, pending: false };
-    }
-    const { prev } = computeTriggers(task, new Date());
-    if (prev && task.pushPeriod === periodKey(task, prev)) {
-      return { text: task.content, editable: editable, date: task.genDate || todayStr, today: false, pushed: true, pending: false };
-    }
-  }
-  // 尚无内容：处于生成窗口内则显示占位；否则若有即将到来的触发点也给出占位提示
-  const now = new Date();
-  const { next } = computeTriggers(task, now);
-  if (next) {
-    const winStart = new Date(next.getTime() - SCHED_GEN_LEAD);
-    if (now >= winStart) {
-      return { text: '', editable: true, date: periodKey(task, next), today: periodKey(task, next) === todayStr, pushed: false, pending: true };
-    }
+  const pushed = planPushedToday(task);
+  if (task.content && (task.genDate === todayStr || pushed)) {
+    return { text: task.content, editable: isPlanEditable(task), date: task.genDate || todayStr, today: true, pushed: pushed, pending: false };
   }
   return null;
 }

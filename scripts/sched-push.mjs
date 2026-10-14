@@ -27,9 +27,9 @@ const SCHED_CLOUD_KEY = '_sched_cloud';
 const SALT_KEY = '_salt';
 const SCHED_DEDUP_KEY = '_schedpushdedup';
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内推送
-const SCHED_GEN_LEAD = 12 * 3600000;     // 提前 12 小时生成计划
+const SCHED_GEN_LEAD = 12 * 3600000;     // v3.6.3 起不再使用：改为每天 0 点生成「当天」计划
 const DEDUP_MAX_AGE = 12 * 3600000;      // 去重有效期
-const PLAN_PROMPT_VERSION = '7'; // v3.6.2 计划prompt: 补剂 M/W/F 判定明确按「本计划日(=任务触发当天)」星期，禁止按第二天
+const PLAN_PROMPT_VERSION = '8'; // v3.6.3 计划prompt: 今日计划改为「每天0点生成当天计划」(天气/补剂按当天, 大便/早教按前一天)，新增【统计口径】明确行
 
 // v3.6.0 育儿嫂休假 / 工资结算常量（与前端一致）
 const NANNY_VACATION_CLOUD_KEY = '_nanny_vacation';
@@ -232,6 +232,7 @@ function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec) {
     + '【健康·出行】户外活动时间与时长（结合天气与昨日户外时长，给出具体时段如"上午9-10点、下午4-5点"及总时长建议）、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物；结合知识库「穿衣」给出是否戴帽子、是否裹薄包被/纱巾。\n'
     + '【辅食提醒】若上方"辅食记录"备注含过敏/异常（如某品牌米粉过敏），在喂养或辅食处提醒今日更换品牌（具体到备注里的牌子）。\n'
     + '【补剂判定】营养补剂是否为补剂日（周一/三/五），一律按本计划日（即上方"目标日期"、任务触发当天）的星期判断；不得按"第二天"或其他任何日期判断。\n'
+    + '【统计口径】天气与营养补剂一律按「本计划日（上方目标日期、任务触发当天）」判断；大便次数与早教一律按「前一日」的记录判断。两者口径不得混用。\n'
     + '【早教】放在最后一段输出。结合上方"前一日早教数据"：次数<1 的项目必须纳入今日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。\n'
     + '【温度要求】上方天气已给出当日最高温和最低温，请在「起居护理·穿衣」与「健康·出行」中明确写出具体温度数值（如"今日 28℃/19℃，短袖即可"），不要只写"根据天气"。\n'
     + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【喂养】【起居护理】【健康·出行】【早教】顺序分块给出内容（早教在最后）。';
@@ -463,16 +464,16 @@ async function main() {
     const { prev, next } = computeTriggers(task, now);
     const name = (task.name && String(task.name).trim()) ? String(task.name).trim() : (task.mode === 'ai' ? '今日计划' : '定时提醒');
 
-    // ① AI 计划提前生成：进入 [触发-12h, 触发) 窗口且本周期未生成
-    if (task.mode === 'ai' && next && ctx.ai) {
-      const winStart = new Date(next.getTime() - SCHED_GEN_LEAD);
-      if (now >= winStart && now < next) {
-        const pk = periodKey(task, next);
-        const staleVer = (task.planVer || '') !== (ctx.promptVer || PLAN_PROMPT_VERSION);
-        if (task.genPeriod !== pk || staleVer || !task.content) {
-          console.log('[Sched] 生成计划:', name, 'for', pk);
-          if (await generatePlan(task, next, ctx, fid, key)) changed = true;
-        }
+    // ① v3.6.3 AI 计划：每天 0 点生成「当天」计划（不再提前 12h 生成次日计划）
+    //    云端未生成当天计划(genDate !== 今天) 或 prompt 版本过期 → 用今天 00:00 生成；
+    //    前端已生成/编辑当天计划并同步到云端时，此处不覆盖（保护用户编辑）。
+    if (task.mode === 'ai' && ctx.ai) {
+      const todayStr = fmtDateLocal(now);
+      const todayTrg = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const staleVer = (task.planVer || '') !== (ctx.promptVer || PLAN_PROMPT_VERSION);
+      if (task.genDate !== todayStr || staleVer || !task.content) {
+        console.log('[Sched] 生成今日计划:', name, 'for', todayStr);
+        if (await generatePlan(task, todayTrg, ctx, fid, key)) changed = true;
       }
     }
 
