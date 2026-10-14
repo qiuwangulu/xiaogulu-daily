@@ -29,7 +29,12 @@ const SCHED_DEDUP_KEY = '_schedpushdedup';
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内推送
 const SCHED_GEN_LEAD = 12 * 3600000;     // 提前 12 小时生成计划
 const DEDUP_MAX_AGE = 12 * 3600000;      // 去重有效期
-const PLAN_PROMPT_VERSION = '4';
+const PLAN_PROMPT_VERSION = '5'; // v3.6.0 计划prompt新增【早教】段/大便/辅食/户外统计/M-W-F补剂判定/辅食过敏换品牌提醒
+
+// v3.6.0 育儿嫂休假 / 工资结算常量（与前端一致）
+const NANNY_VACATION_CLOUD_KEY = '_nanny_vacation';
+const NANNY_BASE_SALARY = 10000;
+const NANNY_PAY_DIVISOR = 26;
 
 /* ==================== 加密（与前端一致） ==================== */
 function sha256hex8(s) { return crypto.createHash('sha256').update(s, 'utf8').digest().subarray(0, 8).toString('hex'); }
@@ -82,16 +87,20 @@ function addMonths(date, n) {
   d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
   return d;
 }
-function stepFwd(t, freq) {
-  if (freq === 'daily') return new Date(t.getTime() + 86400000);
-  if (freq === 'weekly') return new Date(t.getTime() + 7 * 86400000);
-  if (freq === 'monthly') return addMonths(t, 1);
+// v3.6.0 任务间隔：步进单位数（默认1）
+function taskInterval(task) { return Math.max(1, parseInt((task && task.interval) || 1, 10) || 1); }
+function stepFwd(t, freq, interval) {
+  interval = interval || 1;
+  if (freq === 'daily') return new Date(t.getTime() + interval * 86400000);
+  if (freq === 'weekly') return new Date(t.getTime() + interval * 7 * 86400000);
+  if (freq === 'monthly') return addMonths(t, interval);
   return null;
 }
-function stepBack(t, freq) {
-  if (freq === 'daily') return new Date(t.getTime() - 86400000);
-  if (freq === 'weekly') return new Date(t.getTime() - 7 * 86400000);
-  if (freq === 'monthly') return addMonths(t, -1);
+function stepBack(t, freq, interval) {
+  interval = interval || 1;
+  if (freq === 'daily') return new Date(t.getTime() - interval * 86400000);
+  if (freq === 'weekly') return new Date(t.getTime() - interval * 7 * 86400000);
+  if (freq === 'monthly') return addMonths(t, -interval);
   return null;
 }
 function computeTriggers(task, now) {
@@ -99,10 +108,11 @@ function computeTriggers(task, now) {
   if (task.freq === 'once') {
     return { prev: first.getTime() <= now.getTime() ? first : null, next: first.getTime() > now.getTime() ? first : null };
   }
+  const iv = taskInterval(task);
   let prev = new Date(first.getTime());
-  if (prev.getTime() > now.getTime()) { while (prev.getTime() > now.getTime()) prev = stepBack(prev, task.freq); }
-  else { while (stepFwd(prev, task.freq).getTime() <= now.getTime()) prev = stepFwd(prev, task.freq); }
-  return { prev: prev, next: stepFwd(prev, task.freq) };
+  if (prev.getTime() > now.getTime()) { while (prev.getTime() > now.getTime()) prev = stepBack(prev, task.freq, iv); }
+  else { while (stepFwd(prev, task.freq, iv).getTime() <= now.getTime()) prev = stepFwd(prev, task.freq, iv); }
+  return { prev: prev, next: stepFwd(prev, task.freq, iv) };
 }
 function periodKey(task, trig) {
   const y = trig.getFullYear();
@@ -117,7 +127,62 @@ function periodKey(task, trig) {
   return '';
 }
 
-/* ==================== 计划生成（复刻前端） ==================== */
+/* ==================== 计划生成（复刻前端 v3.6.0） ==================== */
+// v3.6.0 早教类型映射（与前端 PLAN_EE_TYPES 一致）
+const PLAN_EE_TYPES = {
+  learnLanguage: '学语言', readBook: '读书', learnLogic: '学算术',
+  fineMotor: '精细动作', grossMotor: '大运动', listenStory: '听故事', listenMusic: '听歌'
+};
+const PLAN_DOW = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+// v3.6.0 拉取并解密某一天的云端记录（family_records，与前端同密钥）
+async function fetchDayRecords(fid, key, dateStr) {
+  try {
+    const rows = await sbGet(`family_records?family_id=eq.${fid}&record_date=eq.${dateStr}&select=encrypted_data,iv`);
+    if (!rows.length || !rows[0].encrypted_data || !rows[0].iv) return [];
+    const plain = decrypt(key, rows[0].encrypted_data, rows[0].iv);
+    const arr = JSON.parse(plain);
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) { console.warn('[记录] 当日记录读取失败', dateStr, e && e.message); return []; }
+}
+// v3.6.0 采集某天记录的早教/大便/辅食/户外统计（移植前端 collectPlanDayStats）
+function collectPlanDayStats(recs) {
+  const counts = {}; Object.keys(PLAN_EE_TYPES).forEach(k => counts[k] = 0);
+  let poop = 0, outdoorMin = 0;
+  const foods = [];
+  for (const r of recs) {
+    if (!r || !r.type) continue;
+    if (Object.prototype.hasOwnProperty.call(PLAN_EE_TYPES, r.type)) counts[r.type]++;
+    if (r.type === 'poop') poop++;
+    if (r.type === 'outdoor' && r.duration) outdoorMin += r.duration;
+    if (r.type === 'solidFood') foods.push({ names: Array.isArray(r.solidFoods) ? r.solidFoods.slice() : [], note: (r.note || '').trim() });
+  }
+  return { counts, poop, outdoorMin, foods };
+}
+// v3.6.0 营养补剂建议：读最近 N 天记录中最后一条 supplement，返回相反项（移植前端 getSupplementSuggestion）
+async function recentSupplement(fid, key) {
+  try {
+    const today = new Date();
+    const minDate = new Date(today.getTime() - 14 * 86400000);
+    const minStr = minDate.getFullYear() + '-' + pad2(minDate.getMonth() + 1) + '-' + pad2(minDate.getDate());
+    const rows = await sbGet(`family_records?family_id=eq.${fid}&record_date=gte.${minStr}&order=record_date.desc&select=encrypted_data,iv`);
+    for (const row of rows) {
+      if (!row.encrypted_data || !row.iv) continue;
+      let recs = []; try { recs = JSON.parse(decrypt(key, row.encrypted_data, row.iv)); } catch { continue; }
+      if (!Array.isArray(recs)) continue;
+      // 取当天最晚（数组末尾）的补剂记录
+      for (let i = recs.length - 1; i >= 0; i--) {
+        const r = recs[i];
+        if (r && r.type === 'supplement' && r.supplementTypes && r.supplementTypes.length) {
+          if (r.supplementTypes.includes('AD') && !r.supplementTypes.includes('D3')) return 'D3';
+          if (r.supplementTypes.includes('D3') && !r.supplementTypes.includes('AD')) return 'AD';
+          return 'AD';
+        }
+      }
+    }
+  } catch (e) { console.warn('[补剂] 读取失败', e && e.message); }
+  return 'AD';
+}
+
 function getAgeDetail(birthStr, ds) {
   const [by, bm, bd] = birthStr.split('-').map(Number);
   const [y, m, d] = ds.split('-').map(Number);
@@ -130,22 +195,44 @@ function getAgeDetail(birthStr, ds) {
   if (days < 0) days = 0;
   return { months, days };
 }
-function buildPlanSystemPrompt(ctx, dateStr, wText) {
+function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec) {
   const ad = getAgeDetail(ctx.birthDate, dateStr);
   const h = ctx.height || '', w = ctx.weight || '';
   const kbPart = (ctx.kb || []).slice(0, 50).map(x => '- [' + x.cat + '] ' + x.text).join('\n');
+  // v3.6.0 目标日星期（M/W/F 补剂判定）与生成日当天早教/大便/辅食统计
+  const targetDow = new Date(dateStr + 'T00:00:00').getDay();
+  const targetIsMWF = (targetDow === 1 || targetDow === 3 || targetDow === 5);
+  let dayPart = '';
+  if (stats) {
+    const c = stats.counts;
+    const eeLine = Object.keys(PLAN_EE_TYPES).map(k => PLAN_EE_TYPES[k] + c[k] + '次').join('、');
+    dayPart = '\n【生成日当天已记录的早教/起居数据（用于安排次日计划）】\n'
+      + '- 早教各项次数：' + eeLine + '\n'
+      + '- 大便次数：' + stats.poop + ' 次\n'
+      + '- 户外时长：' + stats.outdoorMin + ' 分钟\n'
+      + (stats.foods.length ? ('- 辅食记录：' + stats.foods.map(f => (f.names.join('/') || '辅食') + (f.note ? '（备注：' + f.note + '）' : '')).join('；') + '\n') : '')
+      + '- 营养补剂建议（与上次相反）：' + (supRec || '—') + '\n';
+  }
   return '你是一位专业、贴心的婴幼儿育儿规划助手，服务对象是长辈（外婆）带小宝宝，目标是提前生成「今日计划」以减少带娃决策压力。\n'
     + '请用简体中文、具体可操作；不要使用 markdown 标记；分点请用「·」。内容精炼：每个分类 3 条以内、每条不超过 20 字。\n\n'
     + '【宝宝档案】\n- 姓名：' + ctx.babyName + '；出生：' + ctx.birthDate + '；当前 ' + ad.months + ' 月龄 ' + ad.days + ' 天\n'
     + ((h || w) ? '- 身高 ' + (h || '—') + 'cm，体重 ' + (w || '—') + 'kg\n' : '')
-    + '\n【家庭知识库（优先参考，含权威育儿资料）】\n' + (kbPart || '（暂无）') + '\n'
-    + '\n【目标日期天气】' + dateStr + ' ' + wText + '\n'
-    + '\n【规划规则——请严格按以下三部分输出】\n'
-    + '【喂养】单次奶量、喝奶次数、辅食（尝试食物及量）、喝水、营养补剂、过敏/防呛提醒。\n'
-    + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度，据此建议穿什么）、洗澡、剪指甲、睡眠、排便关注。\n'
-    + '【健康·出行】户外活动时间与时长、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物。\n'
+    + '\n【家庭知识库（优先参考，含权威育儿资料与早教/穿衣建议）】\n' + (kbPart || '（暂无）') + '\n'
+    + dayPart
+    + '\n【目标日期天气】' + dateStr + '（' + PLAN_DOW[targetDow] + '） ' + wText + '\n'
+    + '\n【规划规则——请严格按以下四部分输出】\n'
+    + '【早教】结合上方"生成日当天早教数据"：次数<1 的项目必须纳入明日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。\n'
+    + '【喂养】单次奶量、喝奶次数、辅食（尝试食物及量）、喝水、过敏/防呛提醒；'
+    + (targetIsMWF ? ('明日为' + PLAN_DOW[targetDow] + '（周一/三/五补剂日），营养补剂请安排：' + (supRec || 'D3') + '（与上次相反）。')
+                   : '明日非周一/周三/周五，营养补剂项写明「今日无需补剂」。')
+    + '\n'
+    + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度，据此建议穿什么、几件多厚，参考知识库「穿衣」）；洗澡、剪指甲、睡眠、排便关注'
+    + (stats && stats.poop === 0 ? '；今日大便 0 次，需关注是否便秘：两餐间记得喂水、多顺时针揉腹'
+       : (stats && stats.poop >= 3 ? '；今日大便≥3 次，需关注拉肚子：注意保暖、防红屁屁' : '')) + '。\n'
+    + '【健康·出行】户外活动时间与时长（结合天气与今日户外时长，给出具体时段如"上午9-10点、下午4-5点"及总时长建议）、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物；结合知识库「穿衣」给出是否戴帽子、是否裹薄包被/纱巾。\n'
+    + '【辅食提醒】若上方"辅食记录"备注含过敏/异常（如某品牌米粉过敏），在喂养或辅食处提醒明日更换品牌（具体到备注里的牌子）。\n'
     + '【温度要求】上方天气已给出当日最高温和最低温，请在「起居护理·穿衣」与「健康·出行」中明确写出具体温度数值（如"今日 28℃/19℃，短袖即可"），不要只写"根据天气"。\n'
-    + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【喂养】【起居护理】【健康·出行】分块给出内容。';
+    + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【早教】【喂养】【起居护理】【健康·出行】分块给出内容。';
 }
 function splitPlan(full) {
   if (!full) return { summary: '', detail: '' };
@@ -158,6 +245,45 @@ function splitPlan(full) {
   return { summary, detail };
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+/* ==================== 育儿嫂休假 / 工资（v3.6.0） ==================== */
+function fmtDateLocal(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+// 拉取云端育儿嫂休假集合
+async function fetchNannyVacation(fid, key) {
+  try {
+    const rows = await sbGet(`family_config?family_id=eq.${fid}&config_key=eq.${NANNY_VACATION_CLOUD_KEY}&select=encrypted_data,iv`);
+    if (!rows.length || !rows[0].encrypted_data || !rows[0].iv) return [];
+    const arr = JSON.parse(decrypt(key, rows[0].encrypted_data, rows[0].iv));
+    return Array.isArray(arr) ? arr.filter(d => typeof d === 'string') : [];
+  } catch (e) { console.warn('[Nanny] 读取失败', e && e.message); return []; }
+}
+// 计算工资任务在某触发周期内的结算明细（移植前端 computeWage）
+function computeWage(task, trig, vacList) {
+  const dailyRate = NANNY_BASE_SALARY / NANNY_PAY_DIVISOR;
+  const end = new Date(trig.getFullYear(), trig.getMonth(), trig.getDate());
+  const startStr = (task.lastWageDate && /^\d{4}-\d{2}-\d{2}$/.test(task.lastWageDate)) ? task.lastWageDate : (task.startDate || fmtDateLocal(end));
+  const start = new Date(startStr + 'T00:00:00');
+  if (isNaN(start.getTime())) start.setTime(end.getTime());
+  let totalDays = Math.round((end - start) / 86400000);
+  if (totalDays < 1) totalDays = 1;
+  let vacDays = 0;
+  for (const d of (vacList || [])) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+    const dd = new Date(d + 'T00:00:00');
+    if (dd >= start && dd < end) vacDays++;
+  }
+  const workDays = Math.max(0, totalDays - vacDays);
+  const wage = Math.round(dailyRate * workDays);
+  return { dailyRate, totalDays, vacDays, workDays, wage, startStr, endStr: fmtDateLocal(new Date(end.getTime() - 86400000)) };
+}
+function wagePushContent(w) {
+  return `结算周期：${w.startStr} ~ ${w.endStr}（${w.totalDays} 天）\n`
+    + `周期总天数：${w.totalDays} 天\n`
+    + `休假天数：${w.vacDays} 天\n`
+    + `实际工作天数：${w.workDays} 天\n`
+    + `日工资标准：¥${w.dailyRate.toFixed(2)}（${NANNY_BASE_SALARY}÷${NANNY_PAY_DIVISOR}）\n`
+    + `应付工资：¥${w.wage}`;
+}
 
 /* ==================== 天气（Open-Meteo） ==================== */
 const WMO_CODES = { 0: '晴', 1: '大致晴朗', 2: '局部多云', 3: '阴', 45: '雾', 48: '雾凇', 51: '毛毛雨(弱)', 53: '毛毛雨', 55: '毛毛雨(强)', 56: '冻毛毛雨', 57: '冻毛毛雨', 61: '小雨', 63: '中雨', 65: '大雨', 66: '冻雨', 67: '冻雨', 71: '小雪', 73: '中雪', 75: '大雪', 77: '雪粒', 80: '阵雨(弱)', 81: '阵雨', 82: '阵雨(强)', 85: '阵雪', 86: '阵雪(强)', 95: '雷阵雨', 96: '雷阵雨伴小冰雹', 99: '雷阵雨伴大冰雹' };
@@ -216,14 +342,26 @@ async function callAI(cfg, messages) {
   } catch (e) { console.warn('[AI] 调用失败', e && e.message); return null; }
   finally { clearTimeout(timer); }
 }
-async function generatePlan(task, trig, ctx) {
+async function generatePlan(task, trig, ctx, fid, key) {
   const dateStr = trig.getFullYear() + '-' + pad2(trig.getMonth() + 1) + '-' + pad2(trig.getDate());
   if (!ctx.ai || !ctx.ai.apiKey) { console.warn('[计划] 无 AI 密钥，跳过生成'); return false; }
   if (DRY_RUN) { console.log('[DRY] 触发计划生成（跳过真实调用）', dateStr); return false; }
   let wText = '（未获取）';
   try { wText = await weatherText(ctx.weatherAddr, dateStr); } catch { /* ignore */ }
+  // v3.6.0 取"生成日当天"(今天)的早教/大便/辅食/户外统计 + 最近补剂，供 AI 排次日计划
+  let stats = null, supRec = 'AD';
+  if (key && fid) {
+    try {
+      const genDay = new Date();
+      const genStr = genDay.getFullYear() + '-' + pad2(genDay.getMonth() + 1) + '-' + pad2(genDay.getDate());
+      const recs = await fetchDayRecords(fid, key, genStr);
+      stats = collectPlanDayStats(recs);
+      supRec = await recentSupplement(fid, key);
+      console.log('[计划] 生成日统计', genStr, '早教=', JSON.stringify(stats && stats.counts), '大便=', stats && stats.poop, '户外=', stats && stats.outdoorMin, '补剂=', supRec);
+    } catch (e) { console.warn('[计划] 统计读取失败', e && e.message); }
+  }
   const r = await callAI(ctx.ai, [
-    { role: 'system', content: buildPlanSystemPrompt(ctx, dateStr, wText) },
+    { role: 'system', content: buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec) },
     { role: 'user', content: '请为 ' + dateStr + '（地址：' + (ctx.weatherAddr || '') + '）生成今日计划，严格按格式输出。' }
   ]);
   if (!r) { console.warn('[计划] 生成失败，跳过'); return false; }
@@ -285,6 +423,11 @@ async function main() {
   const ctx = data.ctx || {};
   console.log('[Sched] 任务数 =', tasks.length, '| AI密钥 =', ctx.ai && ctx.ai.apiKey ? '有' : '无', '| 推送token =', ctx.pushToken ? '有' : '无', '| 天气地址 =', ctx.weatherAddr || '');
 
+  // v3.6.0 育儿嫂休假集合（供工资任务扣减）
+  let nannyVac = [];
+  try { nannyVac = await fetchNannyVacation(fid, key); } catch (e) { console.warn('[Nanny] 读取失败', e && e.message); }
+  console.log('[Sched] 育儿嫂休假天数 =', nannyVac.length);
+
   const now = new Date();
   let changed = false;
 
@@ -301,7 +444,7 @@ async function main() {
         const staleVer = (task.planVer || '') !== (ctx.promptVer || PLAN_PROMPT_VERSION);
         if (task.genPeriod !== pk || staleVer || !task.content) {
           console.log('[Sched] 生成计划:', name, 'for', pk);
-          if (await generatePlan(task, next, ctx)) changed = true;
+          if (await generatePlan(task, next, ctx, fid, key)) changed = true;
         }
       }
     }
@@ -316,10 +459,15 @@ async function main() {
     const sig = 'task|' + (task.id || task.name || '') + '|' + pk;
     if (await cloudDup(fid, sig)) { console.log('[Sched] 云端已推过，跳过:', name, pk); task.pushPeriod = pk; changed = true; continue; }
 
-    if (task.mode === 'ai' && !task.content) { await generatePlan(task, trig, ctx); }
+    if (task.mode === 'ai' && !task.content) { await generatePlan(task, trig, ctx, fid, key); }
 
     let title, content;
-    if (task.mode === 'ai') {
+    // v3.6.0 育儿嫂工资任务：触发时按周期(上次结算日~本次触发)算工作天数与工资
+    if (task.type === 'wage') {
+      const w = computeWage(task, trig, nannyVac);
+      title = '👩 育儿嫂工资结算';
+      content = '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(wagePushContent(w)) + '</pre>';
+    } else if (task.mode === 'ai') {
       const sp = splitPlan(task.content);
       title = '📅 ' + name;
       const sum = sp.summary ? '<p style="font-size:16px;font-weight:600;">📌 ' + escapeHtml(sp.summary) + '</p>' : '';
@@ -334,6 +482,7 @@ async function main() {
     if (ok) {
       await cloudMark(fid, sig);
       task.pushPeriod = pk; task.pushTs = Date.now();
+      if (task.type === 'wage') { task.lastWageDate = fmtDateLocal(trig); }
       if (task.freq === 'once') task.enabled = false;
       changed = true;
     } else {

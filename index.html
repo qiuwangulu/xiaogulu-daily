@@ -1079,6 +1079,16 @@
   .memo-section-title .todo-q { color: #ff7675; font-weight: 700; }
   .memo-section-title .cnt { color: #fff; font-size: 13px; }
   .memo-empty { text-align: center; color: #636e72; padding: 16px 0; font-size: 14px; }
+  .nanny-vac-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .nanny-work-days { font-size: 13px; color: #dfe6e9; }
+  .nanny-vac-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .nanny-vac-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 14px;
+    background: rgba(253,203,110,0.16); color: #fdcb6e; font-size: 13px; cursor: pointer;
+    border: 1px solid rgba(253,203,110,0.4);
+  }
+  .nanny-vac-chip b { font-weight: 700; opacity: .8; }
+  .nanny-vac-chip:active { transform: scale(.96); }
   .memo-item { display: flex; align-items: flex-start; gap: 10px; padding: 11px 0;
     border-bottom: 1px solid rgba(255,255,255,0.06); }
   .memo-check {
@@ -1417,7 +1427,15 @@
     background: rgba(255,255,255,0.045);
     border-radius: 10px; padding: 8px 10px;
     border-left: 3px solid #74b9ff;
+    position: relative;
   }
+  .ms-edit {
+    position: absolute; top: 6px; right: 6px;
+    width: 24px; height: 24px; border-radius: 6px; border: none; cursor: pointer;
+    background: rgba(255,255,255,0.1); color: #dfe6e9; font-size: 13px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ms-edit:active { background: rgba(255,255,255,0.22); }
   .ms-text { font-size: 13px; color: #dfe6e9; line-height: 1.45; word-break: break-word; }
   .ms-meta { margin-top: 5px; display: flex; gap: 5px; flex-wrap: wrap; }
   .ms-tag { font-size: 9.5px; padding: 1.5px 6px; border-radius: 8px; font-weight: 600; }
@@ -1672,6 +1690,8 @@
   body.theme-day .memo-date { color: #0984e3; }
   body.theme-day .memo-done-head { color: #3d4852; border-top-color: rgba(9,132,227,0.12); }
   body.theme-day .memo-mini-cancel { color: #636e72; }
+  body.theme-day .nanny-work-days { color: #3d4852; }
+  body.theme-day .nanny-vac-chip { background: rgba(214,162,26,0.14); color: #b8860b; border-color: rgba(214,162,26,0.4); }
   body.theme-day .memo-item .rec-edit svg, body.theme-day .memo-done-item .rec-edit svg,
   body.theme-day .memo-item .rec-delete svg, body.theme-day .memo-done-item .rec-delete svg { stroke: #3d4852; }
 
@@ -1914,7 +1934,7 @@
   /* v3.5.162 分类选择弹窗按钮网格 */
   .ee-cat-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 6px 2px 2px; }
   .ee-cat-pick .fab-btn { justify-content: center; }
-  /* v3.5.165 上传前提示：支持音频/视频，图片不可用 */
+  /* v3.6.0 上传前提示：仅支持本地音频文件与录音，图片/视频不可用 */
   .ee-cat-pick-hint { margin-top: 10px; font-size: 12px; line-height: 1.6; color: #b2bec3; }
   body.theme-day .ee-cat-pick-hint { color: #7b8a94; }
   /* v3.5.160 选免版权分组 */
@@ -2230,6 +2250,13 @@
       <span class="chev">▶</span><span>✅ 已办事项</span><span class="cnt" id="memoDoneCnt">0</span>
     </div>
     <div class="memo-done-body" id="memoDoneBody"></div>
+    <!-- v3.6.0 育儿嫂休假：记录休假日期，自动算当月已工作天数，并供工资任务扣减 -->
+    <div class="memo-section-title">👩 育儿嫂休假 <span class="cnt" id="nannyVacDays">0</span></div>
+    <div class="nanny-vac-row">
+      <button class="fab-btn" type="button" onclick="openNannyVacationPicker()"><span class="fab-icon fab-emoji">📅</span>添加休假日期</button>
+      <span class="nanny-work-days" id="nannyWorkDays"></span>
+    </div>
+    <div id="nannyVacList" class="nanny-vac-list"></div>
   </div>
 </div>
 <!-- 历史 -->
@@ -2425,7 +2452,7 @@
         <span id="eeUploadBtnWrap"><button class="fab-btn" onclick="eeTriggerUpload()"><span class="fab-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg></span> 本地上传</button></span>
         <button class="fab-btn" id="eeWikiBtn" onclick="eeShowWiki()"><span class="fab-icon fab-emoji">🌐</span> 选免版权</button>
       </div>
-      <input type="file" id="eeFileInput" accept="audio/*,video/*,.mp3,.m4a,.m4b,.aac,.wav,.ogg,.oga,.opus,.flac,.amr,.awb,.caf,.aif,.aiff,.wma,.mp4,.m4v,.mov,.3gp,.3gpp,.mkv,.webm" multiple style="display:none;" onchange="eeOnFiles(this)">
+      <input type="file" id="eeFileInput" accept="audio/*,.mp3,.m4a,.m4b,.aac,.wav,.ogg,.oga,.opus,.flac,.amr,.awb,.caf,.aif,.aiff,.wma,.weba" multiple style="display:none;" onchange="eeOnFiles(this)">
       <div class="ee-list" id="eeList"></div>
     </div>
     <!-- v3.5.69 底部固定操作条：选项区很长，滚到最底下也能一键关闭（选项为即时保存，无需"保存"按钮） -->
@@ -2454,6 +2481,15 @@
       </div>
       <div class="te-hint" id="taskFreqHint"></div>
     </div>
+    <div class="te-field" id="taskIntervalField">
+      <div class="te-label">间隔</div>
+      <div class="te-time-row">
+        <span class="te-prefix">每隔</span>
+        <input type="number" id="taskInterval" min="1" max="365" value="1" inputmode="numeric" class="te-interval-input" style="width:64px;">
+        <span class="te-unit" id="taskIntervalUnit">天</span>
+      </div>
+      <div class="te-hint">如「每隔 2 周」即每两周触发一次</div>
+    </div>
     <div class="te-field">
       <div class="te-label">开始时间</div>
       <div class="te-time-row">
@@ -2470,6 +2506,7 @@
       <div class="te-seg" id="taskModeSeg">
         <label class="cat-tag"><input type="radio" name="taskMode" value="ai" checked onchange="syncSeg(this);onModeChange()"><span>🤖 AI 推荐</span></label>
         <label class="cat-tag"><input type="radio" name="taskMode" value="custom" onchange="syncSeg(this);onModeChange()"><span>✏️ 自定义</span></label>
+        <label class="cat-tag"><input type="radio" name="taskMode" value="wage" onchange="syncSeg(this);onModeChange()"><span>👩 工资结算</span></label>
       </div>
     </div>
     <div class="te-field" id="taskCustomField" style="display:none;">
@@ -2525,6 +2562,28 @@
     <div class="modal-title">📅 今日计划</div>
     <div class="plan-detail-sum" id="planDetailSum"></div>
     <div class="plan-detail-body" id="planDetailBody"></div>
+  </div>
+</div>
+<!-- 里程碑编辑 -->
+<div class="modal-overlay" id="msEditModal" onclick="closeModal(event,'msEditModal')">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:360px;">
+    <button class="modal-close" onclick="hideModal('msEditModal')">&times;</button>
+    <div class="modal-title">✏️ 修改里程碑</div>
+    <div class="te-field">
+      <div class="te-label">类型</div>
+      <select id="msEditType" class="te-input"></select>
+    </div>
+    <div class="te-field">
+      <div class="te-label">是否首次</div>
+      <div class="te-seg" id="msFirstSeg">
+        <label class="cat-tag"><input type="radio" name="msFirst" id="msFirstYes" onclick="setMsFirst(true)"><span>是（第一次）</span></label>
+        <label class="cat-tag"><input type="radio" name="msFirst" id="msFirstNo" onclick="setMsFirst(false)"><span>否</span></label>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="hideModal('msEditModal')">取消</button>
+      <button class="btn btn-success" onclick="saveMsEdit()">保存</button>
+    </div>
   </div>
 </div>
 <!-- 分析 -->
@@ -2661,6 +2720,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.5.165"></script>
+<script src="app.js?v=v3.6.0"></script>
 </body>
 </html>

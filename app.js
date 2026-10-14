@@ -230,6 +230,8 @@ function init() {
   initSync();
   aiInit();
   loadMemoCloud().catch(() => {});   // v3.5.115 备忘录启动即从家庭云恢复（本地优先合并）
+  loadMsOverrideCloud().catch(() => {}); // v3.6.0 里程碑类型/首次覆盖 启动即从家庭云恢复
+  loadNannyVacationCloud().catch(() => {}); // v3.6.0 育儿嫂休假 启动即从家庭云恢复
   loadEarlyEdu().then(() => { renderEarlyEduCard(); }).catch(() => {}); // v3.5.157 早教音频
   eeSetupMediaSession(); // v3.5.157 锁屏播放/停止
   bindVoiceTouch();
@@ -1382,7 +1384,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.5.165'; // v3.5.165: ①本地上传 accept 放宽(音频+视频+常见扩展名),支持手机录屏mp4等视频(只播放声音);②图片/不支持类型/超50MB文件明确拦截并提示;③视频上传后探测音轨可解码性,无法播放的标⚠️并提示转MP3;④分类选择弹窗(上传时)加「支持音频与视频,不支持图片」提示;⑤播放失败提示引导到管理删除重传
+const APP_VERSION = 'v3.6.0'; // v3.6.0: ①成长里程碑可改类型/是否首次;②上传本地音频仅支持音频(取消图片/视频/录像);③AI今日计划增强(早教/大便/辅食/补剂/户外);④首页计划仅推送时更新;⑤备忘录新增育儿嫂休假+工资任务类型;⑥任务支持每隔N周/天/月
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2961,7 +2963,7 @@ function renderHistoryDatePicker() {
   const prevMonthDays = new Date(_dpViewYear, _dpViewMonth, 0).getDate();
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-  const lockFuture = _dpMode !== 'task'; // 历史模式禁选未来；定时任务模式可选任意日期
+  const lockFuture = (_dpMode !== 'task' && _dpMode !== 'nanny'); // 历史模式禁选未来；定时任务/育儿嫂休假模式可选任意日期
   let html = '';
   // 上月尾部
   for (let i = startOffset - 1; i >= 0; i--) {
@@ -2992,7 +2994,7 @@ function renderHistoryDatePicker() {
   grid.innerHTML = html;
 }
 function dpSelectDay(key) {
-  if (_dpMode !== 'task') {
+  if (_dpMode !== 'task' && _dpMode !== 'nanny') {
     // 历史模式禁止选择当天及以后
     const t = new Date();
     const todayKey = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
@@ -3019,6 +3021,12 @@ function dpPickQuick(deltaDays) {
 }
 function confirmHistoryDatePicker() {
   if (!_dpSelected) { showToast('请先选择日期'); return; }
+  // 育儿嫂休假模式：把所选日期加入休假集合并关闭（允许选择任意日期）
+  if (_dpMode === 'nanny') {
+    addNannyVacation(_dpSelected);
+    hideModal('historyDatePickerModal');
+    return;
+  }
   // 定时任务模式：回填「开始日期」并关闭，允许选择未来
   if (_dpMode === 'task') {
     setTaskStartDateValue(_dpSelected);
@@ -3439,6 +3447,7 @@ function openMemo() {
   _memoEditingId = null;
   const ta = document.getElementById('memoInput'); if (ta) ta.value = '';
   renderMemo();
+  renderNannyVacation();
   showModal('memoModal');
 }
 function closeMemo() {
@@ -3555,6 +3564,121 @@ async function saveMemoCloud() {
     const { data, iv } = await encrypt(key, JSON.stringify(getMemos()));
     await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: MEMO_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
   } catch (e) { console.warn('[Memo] 云端保存失败:', e); }
+}
+
+/* ---------- 育儿嫂休假（v3.6.0，req5） ----------
+ * 存储一组休假日期（YYYY-MM-DD），加密同步家庭云 `_nanny_vacation`，合并策略取并集。
+ * 用于：①备忘录内展示「当月已工作天数」；②育儿嫂工资任务按周期扣减休假天数算工资。 */
+const NANNY_VACATION_KEY = 'nanny_vacation_v1';
+const NANNY_VACATION_CLOUD_KEY = '_nanny_vacation';
+function getNannyVacation() {
+  try { const arr = JSON.parse(localStorage.getItem(NANNY_VACATION_KEY) || '[]'); return Array.isArray(arr) ? arr.filter(d => typeof d === 'string') : []; }
+  catch { return []; }
+}
+function saveNannyVacation(list) {
+  const uniq = Array.isArray(list) ? [...new Set(list.filter(d => typeof d === 'string'))].sort() : [];
+  localStorage.setItem(NANNY_VACATION_KEY, JSON.stringify(uniq));
+  saveNannyVacationCloud();
+  renderNannyVacation();
+}
+// v3.6.0 工资结算常量（月薪 / 计薪基准天数）
+const NANNY_BASE_SALARY = 10000;
+const NANNY_PAY_DIVISOR = 26;
+// 把 Date 格式化为 YYYY-MM-DD（本地时区）
+function fmtDateLocal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+// 计算工资任务在某个触发周期内的结算明细：
+// 周期 = 上次结算日(lastWageDate，首次用 startDate) ~ 本次触发日(trig)，左闭右开。
+// 周期总天数 = 跨度天数；工作天数 = 总天数 − 该周期内的休假天数；工资 = 10000/26 × 工作天数。
+function computeWage(task, trig, vacList) {
+  const dailyRate = NANNY_BASE_SALARY / NANNY_PAY_DIVISOR;
+  const end = new Date(trig.getFullYear(), trig.getMonth(), trig.getDate());
+  const startStr = (task.lastWageDate && /^\d{4}-\d{2}-\d{2}$/.test(task.lastWageDate)) ? task.lastWageDate : (task.startDate || fmtDateLocal(end));
+  const start = new Date(startStr + 'T00:00:00');
+  if (isNaN(start.getTime())) { start.setTime(end.getTime()); }
+  let totalDays = Math.round((end - start) / 86400000);
+  if (totalDays < 1) totalDays = 1;
+  const vac = (vacList && Array.isArray(vacList)) ? vacList : getNannyVacation();
+  let vacDays = 0;
+  for (const d of vac) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+    const dd = new Date(d + 'T00:00:00');
+    if (dd >= start && dd < end) vacDays++;
+  }
+  const workDays = Math.max(0, totalDays - vacDays);
+  const wage = Math.round(dailyRate * workDays);
+  return { dailyRate, totalDays, vacDays, workDays, wage, startStr, endStr: fmtDateLocal(new Date(end.getTime() - 86400000)) };
+}
+function wagePushContent(w) {
+  return `结算周期：${w.startStr} ~ ${w.endStr}（${w.totalDays} 天）\n`
+    + `周期总天数：${w.totalDays} 天\n`
+    + `休假天数：${w.vacDays} 天\n`
+    + `实际工作天数：${w.workDays} 天\n`
+    + `日工资标准：¥${w.dailyRate.toFixed(2)}（${NANNY_BASE_SALARY}÷${NANNY_PAY_DIVISOR}）\n`
+    + `应付工资：¥${w.wage}`;
+}
+function openNannyVacationPicker() {
+  _dpMode = 'nanny';
+  const today = getTodayDateStr();
+  const d = new Date(today + 'T00:00:00');
+  if (isNaN(d.getTime())) { const n = new Date(); _dpViewYear = n.getFullYear(); _dpViewMonth = n.getMonth(); }
+  else { _dpViewYear = d.getFullYear(); _dpViewMonth = d.getMonth(); }
+  _dpSelected = today;
+  renderHistoryDatePicker();
+  const q = document.getElementById('dpQuick'); if (q) q.style.display = 'none';
+  showModal('historyDatePickerModal');
+}
+function addNannyVacation(date) {
+  if (!date) return;
+  const list = getNannyVacation();
+  if (list.indexOf(date) >= 0) { showToast('该日期已是休假'); return; }
+  list.push(date); saveNannyVacation(list); showToast('已添加休假：' + date);
+}
+function removeNannyVacation(date) {
+  const list = getNannyVacation().filter(x => x !== date);
+  saveNannyVacation(list);
+}
+function renderNannyVacation() {
+  const list = getNannyVacation().slice().sort();
+  const cntEl = document.getElementById('nannyVacDays'); if (cntEl) cntEl.textContent = list.length;
+  const workEl = document.getElementById('nannyWorkDays');
+  if (workEl) {
+    const now = new Date(); const y = now.getFullYear(), m = now.getMonth();
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const vacThisMonth = list.filter(d => { const p = d.split('-'); return p.length === 3 && +p[0] === y && (+p[1] - 1) === m; }).length;
+    workEl.textContent = `本月已工作 ${daysInMonth - vacThisMonth} 天（本月 ${daysInMonth} 天，休假 ${vacThisMonth} 天）`;
+  }
+  const wrap = document.getElementById('nannyVacList');
+  if (!wrap) return;
+  if (!list.length) { wrap.innerHTML = '<div class="memo-empty">尚未添加休假日期</div>'; return; }
+  wrap.innerHTML = list.map(d => `<span class="nanny-vac-chip" onclick="removeNannyVacation('${d}')" title="点击删除">${d} <b>✕</b></span>`).join('');
+}
+async function saveNannyVacationCloud() {
+  if (!isSyncReady()) return;
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const { data, iv } = await encrypt(key, JSON.stringify(getNannyVacation()));
+    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: NANNY_VACATION_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
+  } catch (e) { console.warn('[Nanny] 云端保存失败:', e); }
+}
+async function loadNannyVacationCloud() {
+  if (!isSyncReady()) return false;
+  try {
+    const key = await getCryptoKey(); if (!key) return false;
+    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${NANNY_VACATION_CLOUD_KEY}&select=encrypted_data,iv`);
+    if (rows.length > 0 && rows[0].encrypted_data && rows[0].iv) {
+      const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
+      const arr = JSON.parse(json);
+      if (Array.isArray(arr)) {
+        const merged = [...new Set(getNannyVacation().concat(arr.filter(d => typeof d === 'string')))].sort();
+        localStorage.setItem(NANNY_VACATION_KEY, JSON.stringify(merged));
+        if (document.getElementById('memoModal') && document.getElementById('memoModal').classList.contains('show')) renderNannyVacation();
+        return true;
+      }
+    }
+  } catch (e) { console.warn('[Nanny] 云端加载失败:', e); }
+  return false;
 }
 
 /* ==================== 数据分析 ==================== */
@@ -5208,7 +5332,7 @@ const SCHED_GEN_LEAD = 12 * 3600000;     // 提前 12 小时生成计划
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内才推送（避免补推历史）
 const SCHED_GEN_COOLDOWN = 30 * 60000;   // AI 生成失败重试冷却 30 分钟
 // AI 计划 prompt 版本：内容与分类结构变化时递增，可强制所有 AI 任务用最新 prompt 重新生成
-const PLAN_PROMPT_VERSION = '4'; // v3.5.143 计划prompt新增"给出当日具体温度"要求,强制重新生成
+const PLAN_PROMPT_VERSION = '5'; // v3.6.0 计划prompt新增【早教】段(结合当日早教次数)、大便/辅食/户外统计、M/W/F补剂判定、辅食过敏换品牌提醒
 let SCHED_TASKS = [];
 const _pad2 = n => String(n).padStart(2, '0');
 
@@ -5462,23 +5586,18 @@ const EE_VIDEO_EXT = ['mp4', 'm4v', 'mov', '3gp', '3gpp', 'mkv', 'webm', 'avi', 
 const EE_IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tif', 'tiff', 'svg'];
 const EE_MAX_UPLOAD_MB = 50;                      // Supabase Storage 免费版单文件上限
 function eeFileExt(name) { const m = String(name || '').toLowerCase().match(/\.([a-z0-9]{1,5})(\?|$)/); return m ? m[1] : ''; }
+// v3.6.0 上传仅支持音频（本地文件与录音，录音本质是音频文件）；视频/图片/文档一律归为 other 拦截
 function eeFileKind(f) {
   const ext = eeFileExt(f && f.name);
   const mime = String((f && f.type) || '').toLowerCase();
   if (EE_AUDIO_EXT.includes(ext) || mime.startsWith('audio/')) return 'audio';
-  if (EE_VIDEO_EXT.includes(ext) || mime.startsWith('video/')) return 'video';
   if (mime.startsWith('image/') || EE_IMAGE_EXT.includes(ext)) return 'image';
   return 'other';
 }
-// 视频容器统一以 audio/* 声明，保证 <audio> 只解其中音轨时不被 MIME 拦下
+// v3.6.0 上传仅音频：统一以 audio/* 声明 Content-Type，保证 <audio> 正常解码
 function eeContentTypeFor(f, kind) {
   const t = String((f && f.type) || '').toLowerCase();
-  if (kind !== 'video') return t || 'audio/mpeg';
-  const ext = eeFileExt(f && f.name);
-  if (ext === '3gp' || ext === '3gpp' || t.includes('3gpp')) return 'audio/3gpp';
-  if (ext === 'webm' || t.includes('webm')) return 'audio/webm';
-  if (ext === 'ogg' || ext === 'oga' || t.includes('ogg')) return 'audio/ogg';
-  return 'audio/mp4';
+  return t && t.startsWith('audio/') ? t : 'audio/mpeg';
 }
 // 探测某个 URL 的音轨能否被当前浏览器解码（用于视频/录屏文件，避免"传上去却播不出"）
 function eeProbePlayable(url, timeoutMs) {
@@ -5497,12 +5616,12 @@ function eeProbePlayable(url, timeoutMs) {
 }
 function eeIsVideoItem(it) { if (!it) return false; if (it.kind) return it.kind === 'video'; return EE_VIDEO_EXT.includes(eeFileExt(it.path || it.url || '')); }
 // v3.5.162 本地上传：先弹分类选择，确定后再选文件（本地上传需指定分类）
-// v3.5.165 支持音频与视频（视频只播放其中的声音），图片会被明确拦截
+// v3.6.0 仅支持音频：本地音频文件与录音；图片/视频/文档一律拦截
 function eeTriggerUpload() {
   eeOpenCatPick('选择上传音频的分类', (t) => {
     eePendingUploadType = t;
     const inp = document.getElementById('eeFileInput'); if (inp) inp.click();
-  }, '✅ 支持：音频（mp3 / m4a / wav / amr…）与视频（mp4 等，只播放其中的声音，如手机录屏）<br>🚫 不支持：图片、文档等无法播放的文件');
+  }, '✅ 支持：本地音频文件与录音（mp3 / m4a / wav / amr…）<br>🚫 不支持：图片、视频、文档等无法播放的文件');
 }
 async function eeOnFiles(input) {
   const files = Array.from(input.files || []);
@@ -5511,36 +5630,33 @@ async function eeOnFiles(input) {
   const type = eePendingUploadType || '儿歌';
   eePendingUploadType = null;
 
-  // 先按类型/体积分桶，能上传的才进队列
-  const bucket = { audio: [], video: [], image: [], other: [], big: [] };
+  // 先按类型/体积分桶，能上传的才进队列（仅 audio 可上传；视频/图片/文档一律拦截）
+  const bucket = { audio: [], image: [], other: [], big: [] };
   files.forEach(f => {
     const k = eeFileKind(f);
-    if (k === 'image') bucket.image.push(f);
-    else if (k === 'other') bucket.other.push(f);
+    if (k === 'audio') bucket.audio.push(f);
+    else if (k === 'image') bucket.image.push(f);
     else if ((f.size || 0) > EE_MAX_UPLOAD_MB * 1024 * 1024) bucket.big.push(f);
-    else bucket[k].push(f);
+    else bucket.other.push(f);   // 视频/文档等不支持类型
   });
-  const list = bucket.audio.concat(bucket.video);
+  const list = bucket.audio;
   if (!list.length) {
-    if (bucket.image.length) showToast('图片无法作为音频播放，已取消上传（请选择音频或视频文件）');
-    else if (bucket.other.length) showToast('不支持的文件类型，请选择音频或视频文件');
-    else showToast('文件超过 ' + EE_MAX_UPLOAD_MB + 'MB，请先裁剪或压缩后再上传');
+    if (bucket.image.length) showToast('图片无法作为音频播放，已取消上传（请选择音频文件或录音）');
+    else if (bucket.big.length) showToast('文件超过 ' + EE_MAX_UPLOAD_MB + 'MB，请先裁剪或压缩后再上传');
+    else showToast('不支持的文件类型，请选择音频文件或录音（不支持图片、视频、文档）');
     return;
   }
 
   showToast('上传中（' + list.length + ' 个）…');
-  let ok = 0, fail = 0, badPlay = 0;
+  let ok = 0, fail = 0;
   for (const f of list) {
     try {
-      const kind = eeFileKind(f);
-      const ext = eeFileExt(f.name) || (kind === 'video' ? 'mp4' : 'mp3');
+      const kind = eeFileKind(f);   // 恒为 'audio'
+      const ext = eeFileExt(f.name) || 'mp3';
       const fid = getFamilyId() || 'default';
       const path = fid + '/ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '.' + ext;
       const url = await eeUploadFile(f, path, kind);
-      // 视频（如手机录屏）上传后探测音轨是否可解码，避免"上传成功却播不出"
-      let playable = true;
-      if (kind === 'video') { playable = await eeProbePlayable(url, 8000); if (!playable) badPlay++; }
-      EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: f.name.replace(/\.[^.]+$/, ''), type, src: 'upload', kind, playable, url, path, addedAt: Date.now() });
+      EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: f.name.replace(/\.[^.]+$/, ''), type, src: 'upload', kind: 'audio', playable: true, url, path, addedAt: Date.now() });
       ok++;
     } catch (e) { fail++; console.warn('[音频] 上传失败', e); }
   }
@@ -5549,11 +5665,9 @@ async function eeOnFiles(input) {
   if (ok) parts.push('已添加 ' + ok + ' 个');
   if (fail) parts.push(fail + ' 个上传失败');
   if (bucket.image.length) parts.push(bucket.image.length + ' 张图片已跳过（无法播放）');
-  if (bucket.other.length) parts.push(bucket.other.length + ' 个类型不支持已跳过');
+  if (bucket.other.length) parts.push(bucket.other.length + ' 个不支持的类型已跳过');
   if (bucket.big.length) parts.push(bucket.big.length + ' 个超过 ' + EE_MAX_UPLOAD_MB + 'MB 已跳过');
-  let msg = parts.length ? parts.join('，') : '上传失败，请检查网络或稍后重试';
-  if (badPlay) msg += '；其中 ' + badPlay + ' 个视频音轨无法播放，建议先转成 MP3';
-  showToast(msg);
+  showToast(parts.length ? parts.join('，') : '上传失败，请检查网络或稍后重试');
 }
 // v3.5.162 分类选择弹窗（上传 / 修改分类 共用）；v3.5.165 支持可选提示行
 function eeOpenCatPick(title, cb, hint) {
@@ -6036,16 +6150,20 @@ function addMonths(date, n) {
   d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
   return d;
 }
-function stepFwd(t, freq) {
-  if (freq === 'daily') return new Date(t.getTime() + 86400000);
-  if (freq === 'weekly') return new Date(t.getTime() + 7 * 86400000);
-  if (freq === 'monthly') return addMonths(t, 1);
+// v3.6.0 任务间隔：返回触发步进单位数（默认1，即"每1天/周/月"）
+function taskInterval(task) { return Math.max(1, parseInt((task && task.interval) || 1, 10) || 1); }
+function stepFwd(t, freq, interval) {
+  interval = interval || 1;
+  if (freq === 'daily') return new Date(t.getTime() + interval * 86400000);
+  if (freq === 'weekly') return new Date(t.getTime() + interval * 7 * 86400000);
+  if (freq === 'monthly') return addMonths(t, interval);
   return null;
 }
-function stepBack(t, freq) {
-  if (freq === 'daily') return new Date(t.getTime() - 86400000);
-  if (freq === 'weekly') return new Date(t.getTime() - 7 * 86400000);
-  if (freq === 'monthly') return addMonths(t, -1);
+function stepBack(t, freq, interval) {
+  interval = interval || 1;
+  if (freq === 'daily') return new Date(t.getTime() - interval * 86400000);
+  if (freq === 'weekly') return new Date(t.getTime() - interval * 7 * 86400000);
+  if (freq === 'monthly') return addMonths(t, -interval);
   return null;
 }
 function computeTriggers(task, now) {
@@ -6054,13 +6172,14 @@ function computeTriggers(task, now) {
     return { prev: first.getTime() <= now.getTime() ? first : null,
              next: first.getTime() > now.getTime() ? first : null };
   }
+  const iv = taskInterval(task);
   let prev = new Date(first.getTime());
   if (prev.getTime() > now.getTime()) {
-    while (prev.getTime() > now.getTime()) prev = stepBack(prev, task.freq);
+    while (prev.getTime() > now.getTime()) prev = stepBack(prev, task.freq, iv);
   } else {
-    while (stepFwd(prev, task.freq).getTime() <= now.getTime()) prev = stepFwd(prev, task.freq);
+    while (stepFwd(prev, task.freq, iv).getTime() <= now.getTime()) prev = stepFwd(prev, task.freq, iv);
   }
-  return { prev: prev, next: stepFwd(prev, task.freq) };
+  return { prev: prev, next: stepFwd(prev, task.freq, iv) };
 }
 function periodKey(task, trig) {
   const y = trig.getFullYear();
@@ -6076,24 +6195,68 @@ function periodKey(task, trig) {
 }
 
 /* ---------- 计划生成（AI） ---------- */
-function buildPlanSystemPrompt(dateStr, wText) {
+// v3.6.0 早教 7 项（用于统计"生成日当天"次数，次数<1 的项目纳入次日计划）
+const PLAN_EE_TYPES = {
+  learnLanguage: '学语言', readBook: '读书', learnLogic: '学算术',
+  fineMotor: '精细动作', grossMotor: '大运动', listenStory: '听故事', listenMusic: '听歌'
+};
+// v3.6.0 采集某天记录里的早教/大便/辅食/户外统计（供 AI 排次日计划参考）
+function collectPlanDayStats(dateStr) {
+  const recs = (typeof getRecordsByDate === 'function') ? (getRecordsByDate(dateStr) || []) : [];
+  const counts = {}; Object.keys(PLAN_EE_TYPES).forEach(k => counts[k] = 0);
+  let poop = 0, outdoorMin = 0;
+  const foods = [];
+  for (const r of recs) {
+    if (!r || !r.type) continue;
+    if (Object.prototype.hasOwnProperty.call(PLAN_EE_TYPES, r.type)) counts[r.type]++;
+    if (r.type === 'poop') poop++;
+    if (r.type === 'outdoor' && r.duration) outdoorMin += r.duration;
+    if (r.type === 'solidFood') foods.push({ names: Array.isArray(r.solidFoods) ? r.solidFoods.slice() : [], note: (r.note || '').trim() });
+  }
+  return { counts, poop, outdoorMin, foods };
+}
+const PLAN_DOW = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+function buildPlanSystemPrompt(dateStr, wText, stats) {
   const ad = getAgeDetail(dateStr);
   const birthStr = BIRTH_DATE.getFullYear() + '-' + _pad2(BIRTH_DATE.getMonth() + 1) + '-' + _pad2(BIRTH_DATE.getDate());
   const h = localStorage.getItem('babyHeight') || '';
   const w = localStorage.getItem('babyWeight') || '';
   const kbPart = KB.slice(0, 50).map(x => '- [' + x.cat + '] ' + x.text).join('\n');
+  // v3.6.0 目标日星期（营养补剂 M/W/F 判定）与生成日当天早教/大便/辅食统计
+  const targetDow = new Date(dateStr + 'T00:00:00').getDay();
+  const targetIsMWF = (targetDow === 1 || targetDow === 3 || targetDow === 5);
+  const supRec = (typeof getSupplementSuggestion === 'function') ? getSupplementSuggestion() : 'D3';
+  let dayPart = '';
+  if (stats) {
+    const c = stats.counts;
+    const eeLine = Object.keys(PLAN_EE_TYPES).map(k => PLAN_EE_TYPES[k] + c[k] + '次').join('、');
+    dayPart = '\n【生成日当天已记录的早教/起居数据（用于安排次日计划）】\n'
+      + '- 早教各项次数：' + eeLine + '\n'
+      + '- 大便次数：' + stats.poop + ' 次\n'
+      + '- 户外时长：' + stats.outdoorMin + ' 分钟\n'
+      + (stats.foods.length ? ('- 辅食记录：' + stats.foods.map(f => (f.names.join('/') || '辅食') + (f.note ? '（备注：' + f.note + '）' : '')).join('；') + '\n') : '')
+      + '- 营养补剂建议（与上次相反）：' + (supRec || '—') + '\n';
+  }
   return '你是一位专业、贴心的婴幼儿育儿规划助手，服务对象是长辈（外婆）带小宝宝，目标是提前生成「今日计划」以减少带娃决策压力。\n'
     + '请用简体中文、具体可操作；不要使用 markdown 标记；分点请用「·」。内容精炼：每个分类 3 条以内、每条不超过 20 字。\n\n'
     + '【宝宝档案】\n- 姓名：' + BABY_NAME + '；出生：' + birthStr + '；当前 ' + ad.months + ' 月龄 ' + ad.days + ' 天\n'
     + ((h || w) ? '- 身高 ' + (h || '—') + 'cm，体重 ' + (w || '—') + 'kg\n' : '')
-    + '\n【家庭知识库（优先参考，含权威育儿资料）】\n' + (kbPart || '（暂无）') + '\n'
-    + '\n【目标日期天气】' + dateStr + ' ' + wText + '\n'
-    + '\n【规划规则——请严格按以下三部分输出】\n'
-    + '【喂养】单次奶量、喝奶次数、辅食（尝试食物及量）、喝水、营养补剂、过敏/防呛提醒。\n'
-    + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度，据此建议穿什么）、洗澡、剪指甲、睡眠、排便关注。\n'
-    + '【健康·出行】户外活动时间与时长、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物。\n'
+    + '\n【家庭知识库（优先参考，含权威育儿资料与早教/穿衣建议）】\n' + (kbPart || '（暂无）') + '\n'
+    + dayPart
+    + '\n【目标日期天气】' + dateStr + '（' + PLAN_DOW[targetDow] + '） ' + wText + '\n'
+    + '\n【规划规则——请严格按以下四部分输出】\n'
+    + '【早教】结合上方"生成日当天早教数据"：次数<1 的项目必须纳入明日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。\n'
+    + '【喂养】单次奶量、喝奶次数、辅食（尝试食物及量）、喝水、过敏/防呛提醒；'
+    + (targetIsMWF ? ('明日为' + PLAN_DOW[targetDow] + '（周一/三/五补剂日），营养补剂请安排：' + (supRec || 'D3') + '（与上次相反）。')
+                   : '明日非周一/周三/周五，营养补剂项写明「今日无需补剂」。')
+    + '\n'
+    + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度，据此建议穿什么、几件多厚，参考知识库「穿衣」）；洗澡、剪指甲、睡眠、排便关注'
+    + (stats && stats.poop === 0 ? '；今日大便 0 次，需关注是否便秘：两餐间记得喂水、多顺时针揉腹'
+       : (stats && stats.poop >= 3 ? '；今日大便≥3 次，需关注拉肚子：注意保暖、防红屁屁' : '')) + '。\n'
+    + '【健康·出行】户外活动时间与时长（结合天气与今日户外时长，给出具体时段如"上午9-10点、下午4-5点"及总时长建议）、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物；结合知识库「穿衣」给出是否戴帽子、是否裹薄包被/纱巾。\n'
+    + '【辅食提醒】若上方"辅食记录"备注含过敏/异常（如某品牌米粉过敏），在喂养或辅食处提醒明日更换品牌（具体到备注里的牌子）。\n'
     + '【温度要求】上方天气已给出当日最高温和最低温，请在「起居护理·穿衣」与「健康·出行」中明确写出具体温度数值（如"今日 28℃/19℃，短袖即可"），不要只写"根据天气"。\n'
-    + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【喂养】【起居护理】【健康·出行】分块给出内容。';
+    + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【早教】【喂养】【起居护理】【健康·出行】分块给出内容。';
 }
 function splitPlan(full) {
   if (!full) return { summary: '', detail: '' };
@@ -6119,8 +6282,10 @@ async function generatePlanForTask(task, trig) {
   const dateStr = trig.getFullYear() + '-' + _pad2(trig.getMonth() + 1) + '-' + _pad2(trig.getDate());
   let wText = '（未获取）';
   try { wText = weatherText(await fetchWeather(getWeatherAddr(), dateStr)); } catch (e) {}
+  // v3.6.0 取"生成日当天"的早教/大便/辅食/户外统计，供 AI 排次日计划
+  const stats = (typeof collectPlanDayStats === 'function') ? collectPlanDayStats(typeof getTodayDateStr === 'function' ? getTodayDateStr() : dateStr) : null;
   const r = await callAIChat(cfg, [
-    { role: 'system', content: buildPlanSystemPrompt(dateStr, wText) },
+    { role: 'system', content: buildPlanSystemPrompt(dateStr, wText, stats) },
     { role: 'user', content: '请为 ' + dateStr + '（地址：' + getWeatherAddr() + '）生成今日计划，严格按格式输出。' }
   ]);
   if (typeof r === 'string' && r.indexOf('__FAIL__:') === 0) { console.warn('[计划] AI 生成失败', r); return; }
@@ -6129,7 +6294,7 @@ async function generatePlanForTask(task, trig) {
   task.genDate = dateStr;
   task.planVer = PLAN_PROMPT_VERSION;   // v3.5.142 记录生成本内容所用的 prompt 版本
   saveSchedTasks();
-  renderTodayPlanCard();                // 生成后即时刷新首页总览
+  // v3.6.0 生成仅写任务页，不刷新首页（首页只在推送时更新）
 }
 
 /* ---------- 推送（复用今日成就的 PushPlus 配置） ---------- */
@@ -6145,7 +6310,12 @@ async function pushTask(task, trig, pk) {
   try { if (await _cloudSchedDup(_sig)) return true; } catch (e) {}
 
   let title, content;
-  if (task.mode === 'ai') {
+  // v3.6.0 育儿嫂工资任务：触发时按周期(上次结算日~本次触发)算工作天数与工资，自动生成推送内容
+  if (task.type === 'wage') {
+    const w = computeWage(task, trig);
+    title = '👩 育儿嫂工资结算';
+    content = '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(wagePushContent(w)) + '</pre>';
+  } else if (task.mode === 'ai') {
     const sp = splitPlan(task.content);
     // v3.5.153 推送标题改为「任务名称」，不再拼接日期
     const nm = (task.name && String(task.name).trim()) ? String(task.name).trim() : '今日计划';
@@ -6161,6 +6331,8 @@ async function pushTask(task, trig, pk) {
   const ok = await notifyPushplus(title, content);
   if (ok) {
     try { _cloudSchedMark(_sig); } catch (e) {}
+    // v3.6.0 工资任务结算成功后记录本次结算日（=触发日），作为下一周期起点
+    if (task.type === 'wage') { task.lastWageDate = fmtDateLocal(trig); saveSchedTasks(); }
     if (task.freq === 'once') { task.enabled = false; saveSchedTasks(); }
   } else {
     // 推送失败：回滚认领状态，允许下一次调度重试，避免漏推
@@ -6201,6 +6373,7 @@ async function runScheduler(forceGen) {
   try {
   const now = new Date();
   const canPush = isPushSender();
+  let pushedThisRun = false;   // v3.6.0 仅当本次实际推送了计划，才在结束后刷新首页
   for (const task of SCHED_TASKS) {
     if (!task.enabled) continue;
     const { prev, next } = computeTriggers(task, now);
@@ -6228,12 +6401,14 @@ async function runScheduler(forceGen) {
       const pk = periodKey(task, trig);
       if (task.pushPeriod !== pk) {
         if (task.mode === 'ai' && !task.content) { await generatePlanForTask(task, trig); }
-        await pushTask(task, trig, pk);
+        const pp = await pushTask(task, trig, pk);
+        if (pp) pushedThisRun = true;
       }
     }
   }
   if (currentManageTab === 'tasks') renderSchedTasks();
-  renderTodayPlanCard();
+  // v3.6.0 首页只在「本次有推送」时才刷新：18:30 生成次日计划不污染首页；6:30 推送才更新首页
+  if (pushedThisRun) renderTodayPlanCard();
   scheduleSchedCloudSave();   // v3.5.154 页面运行期间定期同步上下文（token/天气地址/知识库等变更）
   } finally { _schedRunning = false; }
 }
@@ -6278,18 +6453,24 @@ function initScheduler() {
 // v3.5.142 重写：只要 AI 任务有已生成内容就展示，不再苛求「触发周期==今天」。
 // 优先展示「今日计划」（genDate==今天），否则展示最近生成的那份（如提前 12h 生成的次日计划），
 // 避免每天 00:00~触发时刻之间、以及已推送次日计划后总览空白。
+// v3.6.0 首页今日计划展示规则：只展示「今日已推送」的计划；提前生成的次日计划不污染首页。
+// 展示优先级：① 今日已推送(pushPeriod==今天) → ② 今日已生成(genDate==今天，推送前预览) →
+//            ③ 最近一次已推送的计划(两次推送之间不空白) → ④ 窗口内占位。
 function getCurrentPlan() {
   const task = SCHED_TASKS.find(t => t.enabled && t.mode === 'ai');
   if (!task) return null;
   const todayStr = getTodayDateStr();
   const editable = isPlanEditable(task);
-  const pushToday = task.pushPeriod === todayStr;
-  // ① 有内容：优先今日，否则取最近生成的计划（genDate 最接近今天）
   if (task.content) {
-    const genToday = task.genDate === todayStr;
-    return { text: task.content, editable: editable, date: task.genDate || todayStr, today: genToday, pushed: pushToday, pending: false };
+    if (task.pushPeriod === todayStr || task.genDate === todayStr) {
+      return { text: task.content, editable: editable, date: task.genDate || todayStr, today: true, pushed: task.pushPeriod === todayStr, pending: false };
+    }
+    const { prev } = computeTriggers(task, new Date());
+    if (prev && task.pushPeriod === periodKey(task, prev)) {
+      return { text: task.content, editable: editable, date: task.genDate || todayStr, today: false, pushed: true, pending: false };
+    }
   }
-  // ② 尚无内容：处于生成窗口内则显示占位；否则若有即将到来的触发点也给出占位提示
+  // 尚无内容：处于生成窗口内则显示占位；否则若有即将到来的触发点也给出占位提示
   const now = new Date();
   const { next } = computeTriggers(task, now);
   if (next) {
@@ -6376,7 +6557,7 @@ function renderSchedTasks() {
       + '<div class="task-row">'
       + '<div class="task-info" onclick="toggleTaskExpand(\'' + t.id + '\')">'
       + '<div class="task-name' + (expanded ? ' open' : '') + '"><span class="task-chev">▶</span>' + icon + ' ' + escapeHtml(nm) + '</div>'
-      + '<div class="task-sub">' + SCHED_FREQ_LABEL[t.freq] + ' ' + t.startDate + ' ' + t.startTime + ' · ' + (t.mode === 'ai' ? 'AI 推荐计划' : '自定义内容') + (t.enabled ? '' : ' · 已停止') + '</div>'
+      + '<div class="task-sub">' + ((t.interval && t.interval > 1) ? ('每隔' + t.interval + (t.freq === 'daily' ? '天' : t.freq === 'weekly' ? '周' : '月') + ' · ') : '') + SCHED_FREQ_LABEL[t.freq] + ' ' + t.startDate + ' ' + t.startTime + ' · ' + (t.type === 'wage' ? '👩 育儿嫂工资结算' : (t.mode === 'ai' ? 'AI 推荐计划' : '自定义内容')) + (t.enabled ? '' : ' · 已停止') + '</div>'
       + '</div>'
       + '<div class="task-actions">'
       + '<span class="rec-edit" onclick="openTaskEditor(\'' + t.id + '\')" title="编辑"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>'
@@ -6408,11 +6589,13 @@ function onPlanFocus(id) {
 }
 function openTaskEditor(id) {
   document.getElementById('taskEditId').value = id || '';
+  let curInt = 1;
   if (id) {
     const t = SCHED_TASKS.find(x => x.id === id);
     setRadio('taskFreq', t.freq); setRadio('taskMode', t.mode);
     setTaskStartDateValue(t.startDate);
     setTaskTimeVal(t.startTime);
+    curInt = t.interval || 1;
     document.getElementById('taskName').value = t.name || '';
     document.getElementById('taskCustom').value = t.content || '';
   } else {
@@ -6422,6 +6605,7 @@ function openTaskEditor(id) {
     document.getElementById('taskName').value = '';
     document.getElementById('taskCustom').value = '';
   }
+  const ivEl = document.getElementById('taskInterval'); if (ivEl) ivEl.value = curInt;
   // v3.5.137 AI 推荐任务最多一个：新建时若已存在 AI 任务，禁用该选项并自动切到「自定义」
   setAIModeDisabled(hasOtherAITask(id || ''), !id);
   onFreqChange(); onModeChange();
@@ -6432,6 +6616,8 @@ function saveTask() {
   const freq = document.querySelector('input[name="taskFreq"]:checked').value;
   const startDate = document.getElementById('taskStartDate').value;
   const startTime = getTaskTimeVal();
+  const intervalEl = document.getElementById('taskInterval');
+  const interval = Math.max(1, parseInt((intervalEl && intervalEl.value) || '1', 10) || 1);
   const mode = document.querySelector('input[name="taskMode"]:checked').value;
   const nameEl = document.getElementById('taskName');
   const name = nameEl ? nameEl.value.trim() : '';
@@ -6441,11 +6627,14 @@ function saveTask() {
   if (id) {
     const t = SCHED_TASKS.find(x => x.id === id);
     t.name = name;
-    t.freq = freq; t.startDate = startDate; t.startTime = startTime; t.mode = mode;
+    t.freq = freq; t.interval = interval; t.startDate = startDate; t.startTime = startTime; t.mode = mode;
+    t.type = (mode === 'wage') ? 'wage' : 'normal';
     if (mode === 'custom') t.content = document.getElementById('taskCustom').value;
+    else if (mode === 'wage') { t.content = ''; if (!t.lastWageDate) t.lastWageDate = ''; }
   } else {
-    SCHED_TASKS.push({ id: 't_' + Date.now(), name: name, freq: freq, startDate: startDate, startTime: startTime, mode: mode,
-      content: mode === 'custom' ? document.getElementById('taskCustom').value : '', enabled: true,
+    const isWage = (mode === 'wage');
+    SCHED_TASKS.push({ id: 't_' + Date.now(), name: name, freq: freq, interval: interval, startDate: startDate, startTime: startTime, mode: mode, type: isWage ? 'wage' : 'normal',
+      content: mode === 'custom' ? document.getElementById('taskCustom').value : '', enabled: true, lastWageDate: isWage ? '' : undefined,
       genPeriod: '', pushPeriod: '', genTryTs: 0 });
   }
   const isNew = !id;
@@ -6490,11 +6679,19 @@ function onFreqChange() {
   const hint = document.getElementById('taskFreqHint');
   const map = { once: '仅在该日期时刻执行一次', daily: '每天该时刻执行（AI 任务提前 12 小时生成次日计划）', weekly: '每周该日期时刻执行', monthly: '每月该日期时刻执行' };
   if (hint) hint.textContent = map[freq] || '';
+  // v3.6.0 间隔输入：单位跟随频率（天/周/月），仅一次时隐藏
+  const unit = { daily: '天', weekly: '周', monthly: '月' }[freq] || '';
+  const unitEl = document.getElementById('taskIntervalUnit');
+  if (unitEl) unitEl.textContent = unit;
+  const field = document.getElementById('taskIntervalField');
+  if (field) field.style.display = (freq === 'once') ? 'none' : '';
 }
 function onModeChange() {
   const mode = document.querySelector('input[name="taskMode"]:checked').value;
   const f = document.getElementById('taskCustomField');
   if (f) f.style.display = mode === 'custom' ? 'block' : 'none';
+  // v3.6.0 育儿嫂工资任务默认按月结算：选择工资类型时强制频率为「每月」并展示间隔
+  if (mode === 'wage') { setRadio('taskFreq', 'monthly'); onFreqChange(); }
 }
 // v3.5.131 方案A：首次启动把权威育儿资料（崔玉涛体系等）投喂进家庭知识库，标注「权威资料」。
 // 仅摘要+注明出处，不整本搬运；一次性（按 kb_auth_seed 版本号），用户删除后不会重复投喂。
@@ -6515,12 +6712,22 @@ const KB_AUTH_SEEDS = [
   '6月龄前纯母乳或配方奶喂养通常不需额外喂水；添加辅食后及炎热出汗多时可少量补水。',
   '建立固定睡前程序（洗澡-抚触-喂奶-放床）有助于宝宝学会自主入睡；新生儿可用包裹、白噪音、轻摇模拟宫内环境安抚。'
 ];
+// v3.6.0 早教/穿衣 知识库种子（供 AI 今日计划参考月龄早教建议与穿衣厚薄）；用户可改删
+const KB_EG_SEED_VER = '1';
+const KB_EG_SEEDS = [
+  { cat: '早教', text: '4-6月：多趴卧练抬头与翻身、黑白卡追视、摇铃练追声；6-8月：读布书认物(动物/水果)、积木对敲练精细、躲猫猫练因果；8-12月：扶站学走、仿声学"爸爸/妈妈"、简单指令游戏。按宝宝当前月龄选做。' },
+  { cat: '早教', text: '每日早教总时长建议 30-60 分钟，分段进行；宝宝状态好(吃饱睡足)时做，哭闹或犯困立刻停；不强迫，以游戏化、互动为主。' },
+  { cat: '穿衣', text: '洋葱式穿衣：内层纯棉连体哈衣+中间马甲/薄外套+外层外套；判断标准——颈背温热干燥刚好，手脚微凉正常。气温 20-26℃ 一件薄连体+薄外套；15-20℃ 加马甲；10-15℃ 厚外套+帽子；<10℃ 羽绒+帽子+包被。' },
+  { cat: '穿衣', text: '外出必带：根据气温备帽子(防晒/保暖)、薄包被或纱巾(风大时遮挡)；车内/室内暖气足要能随时减衣，避免捂热。' }
+];
 function seedAuthoritativeKB() {
   try {
-    if (localStorage.getItem('kb_auth_seed') === KB_SEED_VER) return;
+    if (localStorage.getItem('kb_auth_seed') === KB_SEED_VER && localStorage.getItem('kb_eg_seed') === KB_EG_SEED_VER) return;
     let added = 0;
     KB_AUTH_SEEDS.forEach(s => { if (s && !KB.some(x => x.text === s)) { KB.push({ text: s, cat: KB_AUTH_CAT }); added++; } });
+    KB_EG_SEEDS.forEach(s => { if (s && !KB.some(x => x.text === s.text)) { KB.push({ text: s.text, cat: s.cat }); added++; } });
     localStorage.setItem('kb_auth_seed', KB_SEED_VER);
+    localStorage.setItem('kb_eg_seed', KB_EG_SEED_VER);
     if (added) { saveKBLocal(); if (typeof saveKBCloud === 'function') saveKBCloud().catch(() => {}); renderKb(); updateKbCntLine(); }
   } catch (e) {}
 }
@@ -6736,12 +6943,44 @@ function collectMilestones() {
   }
   // 按日期倒序（最新在上），同一天保持原顺序
   items.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  // v3.6.0 应用用户手动覆盖（类型/是否首次）
+  const ov = loadMsOverride();
   for (const it of items) {
     it.domain = classifyMilestone(it.text);
     const ad = getAgeDetail(it.date);
     it.ageMonths = ad.months; it.ageDays = ad.days;
+    const o = ov[msOverrideKey(it.date, it.text)];
+    if (o) {
+      if (o.domainId) it.domain = msDomainById(o.domainId);
+      if (typeof o.isFirst === 'boolean') it.isFirst = o.isFirst;
+    }
   }
   return items;
+}
+// v3.6.0 里程碑类型/首次 手动覆盖存储（localStorage + 加密同步家庭云）
+const MILESTONE_OVERRIDE_KEY = 'ms_override_v1';
+const MS_OVERRIDE_CLOUD_KEY = '_ms_override';
+function msOverrideKey(date, text) { return date + '||' + text; }
+function loadMsOverride() { try { return JSON.parse(localStorage.getItem(MILESTONE_OVERRIDE_KEY) || '{}') || {}; } catch { return {}; } }
+function saveMsOverride(obj) { try { localStorage.setItem(MILESTONE_OVERRIDE_KEY, JSON.stringify(obj)); } catch {} saveMsOverrideCloud(); }
+async function saveMsOverrideCloud() {
+  if (typeof isSyncReady !== 'function' || !isSyncReady()) return;
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const { data, iv } = await encrypt(key, JSON.stringify(loadMsOverride()));
+    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: MS_OVERRIDE_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
+  } catch (e) { console.warn('[里程碑] 云同步失败', e); }
+}
+async function loadMsOverrideCloud() {
+  if (typeof isSyncReady !== 'function' || !isSyncReady()) return;
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${MS_OVERRIDE_CLOUD_KEY}&select=encrypted_data,iv`);
+    if (rows.length && rows[0].encrypted_data && rows[0].iv) {
+      const obj = JSON.parse(await decrypt(key, rows[0].encrypted_data, rows[0].iv));
+      if (obj && typeof obj === 'object') { localStorage.setItem(MILESTONE_OVERRIDE_KEY, JSON.stringify(obj)); }
+    }
+  } catch (e) { console.warn('[里程碑] 云加载失败', e); }
 }
 let _milestoneItems = [];
 let _milestoneExpanded = false;
@@ -6847,12 +7086,14 @@ function renderMilestoneInner() {
     let cards = '';
     for (const it of g.items) {
       const d = it.domain;
+      const gi = _milestoneItems.indexOf(it);
       cards += `<div class="ms-card" style="border-left-color:${d.color}">` +
         `<div class="ms-text">${it.text.replace(/</g, '&lt;')}</div>` +
         `<div class="ms-meta">` +
           `<span class="ms-tag" style="background:${d.color}22;color:${d.color}">${d.icon} ${d.name}</span>` +
           (it.isFirst ? `<span class="ms-first">首次</span>` : '') +
         `</div>` +
+        `<button class="ms-edit" onclick="openMsEdit(${gi})" title="修改类型/首次">✎</button>` +
       `</div>`;
     }
     html += `<div class="ms-group">` +
@@ -6869,6 +7110,41 @@ function toggleMilestoneExpand() {
   _milestoneExpanded = !_milestoneExpanded;
   const el = document.getElementById('milestoneTimeline');
   if (el) el.innerHTML = renderMilestoneInner();   // 只重绘时间轴，保持弹窗滚动位置
+}
+// v3.6.0 里程碑编辑：修改类型/是否首次
+let _msEditIdx = -1, _msEditFirst = false;
+function openMsEdit(idx) {
+  const it = _milestoneItems[idx]; if (!it) return;
+  _msEditIdx = idx; _msEditFirst = !!it.isFirst;
+  const sel = document.getElementById('msEditType');
+  if (sel) {
+    sel.innerHTML = MILESTONE_DOMAINS.concat([MILESTONE_OTHER]).map(d => '<option value="' + d.id + '">' + d.icon + ' ' + d.name + '</option>').join('');
+    sel.value = it.domain.id;
+  }
+  const yes = document.getElementById('msFirstYes'), no = document.getElementById('msFirstNo');
+  if (yes) yes.classList.toggle('active', _msEditFirst);
+  if (no) no.classList.toggle('active', !_msEditFirst);
+  showModal('msEditModal');
+}
+function setMsFirst(v) {
+  _msEditFirst = !!v;
+  const yes = document.getElementById('msFirstYes'), no = document.getElementById('msFirstNo');
+  if (yes) yes.classList.toggle('active', _msEditFirst);
+  if (no) no.classList.toggle('active', !_msEditFirst);
+}
+function saveMsEdit() {
+  const it = _milestoneItems[_msEditIdx]; if (!it) { hideModal('msEditModal'); return; }
+  const domId = (document.getElementById('msEditType') || {}).value || it.domain.id;
+  const ov = loadMsOverride();
+  ov[msOverrideKey(it.date, it.text)] = { domainId: domId, isFirst: _msEditFirst };
+  saveMsOverride(ov);
+  // 清徽章缓存并重算（保证徽章与"第一次"计数立即更新）
+  try { localStorage.removeItem(MS_BADGE_CACHE_KEY); localStorage.removeItem(MS_BADGE_LAST_KEY); } catch {}
+  _milestoneItems = collectMilestones();
+  const be = document.getElementById('milestoneBadges'); if (be) be.outerHTML = renderMilestoneBadges(_milestoneItems);
+  const tl = document.getElementById('milestoneTimeline'); if (tl) tl.innerHTML = renderMilestoneInner();
+  hideModal('msEditModal');
+  showToast('已更新里程碑');
 }
 /* ==================== 奶量趋势（双轴折线图，v3.5.59） ====================
  * 横轴：日期（全部已记录数据，非近15天）
