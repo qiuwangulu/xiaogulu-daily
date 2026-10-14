@@ -1386,7 +1386,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.5'; // v3.6.5: 修复今日计划 0 点档 bug——计划日改用真实日历日(0点翻页)而非业务日(1点翻页,effectiveNow)：0:00-0:59 之间不再出现「新计划不生成、旧计划被当成今天已推送而只读」；新增 planTodayStr() 并用于 _planToday/isPlanEditable/planLockMsg/runScheduler生成块/migratePlanPromptVersion/getCurrentPlan/planStatsDateStr；0 点生成后也刷新首页计划卡；任务卡 placeholder 文案更新为「每天 0 点自动生成」
+const APP_VERSION = 'v3.6.6'; // v3.6.6: 根治 0 点档「今日计划不更新/不可编辑」第二层根因——定时任务云同步此前只有推送没有拉取：①服务端 0 点生成的当天计划手机端看不到；②_schedCloudLast 是内存变量、每次开 app 必把本地陈旧状态推上云覆盖服务端计划。新增 loadSchedCloud() 开 app 先拉取合并（按任务 id：云端 genDate 更新以云端为准/本地编辑优先/删除任务墓碑不复活），拉取完成前不推送；本地缺 AI密钥/天气地址/推送token 时用云端 ctx 兜底；页面常开时每 5 分钟+切回前台补拉云
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5438,13 +5438,30 @@ function saveSchedTasks() {
 }
 /* v3.5.154 定时任务加密同步到家庭云（config_key=_sched_cloud）。
  * 内容 = 任务数组 + 生成计划所需上下文（AI密钥/推送token+topic/天气地址/身高体重/宝宝档案/知识库）。
- * 服务端（GitHub Actions）用家庭码派生密钥解密后，即可在「无需打开网页」时准时推送。 */
+ * 服务端（GitHub Actions）用家庭码派生密钥解密后，即可在「无需打开网页」时准时推送。
+ * v3.6.6 根治 0 点档「今日计划不更新/不可编辑」第二层根因——此前只有推送、没有拉取：
+ *   ① 服务端 0 点生成的当天计划，手机端因从不拉取而看不到，首页/任务卡停留旧计划被锁死；
+ *   ② _schedCloudLast 是内存变量、刷新即重置 → 每次开 app 约 1.5s 后必把本地陈旧状态
+ *      （genDate 还是昨天）全量推回云端，覆盖服务端刚生成的计划（服务端日志里 0 点后
+ *      反复重新生成即由此而来）。现在：开 app 先拉取合并，拉取完成前不推送。 */
 let _schedCloudTimer = null;
 let _schedCloudLast = '';
+let _schedCloudCtx = null;               // v3.6.6 最近一次拉到的云端 ctx（本地缺配置时兜底，避免把空配置推上云）
+let _schedCloudPullPromise = null;       // v3.6.6 开 app 后的首次云端拉取（完成前不推送）
+let _schedCloudPullSettled = false;      // v3.6.6 首次拉取已结束（成功或失败）
 function scheduleSchedCloudSave(delay) {
   if (typeof isSyncReady === 'function' && !isSyncReady()) return;
   if (_schedCloudTimer) clearTimeout(_schedCloudTimer);
-  _schedCloudTimer = setTimeout(() => { _schedCloudTimer = null; saveSchedCloud().catch(() => {}); }, delay == null ? 5000 : delay);
+  _schedCloudTimer = setTimeout(() => {
+    _schedCloudTimer = null;
+    // v3.6.6 首次拉取还没回来 → 等它（最多再等 8s）再推，防止陈旧本地状态覆盖云端最新计划
+    if (_schedCloudPullPromise && !_schedCloudPullSettled) {
+      Promise.race([_schedCloudPullPromise, new Promise(r => setTimeout(r, 8000))])
+        .then(() => saveSchedCloud().catch(() => {}));
+      return;
+    }
+    saveSchedCloud().catch(() => {});
+  }, delay == null ? 5000 : delay);
 }
 async function saveSchedCloud() {
   if (typeof isSyncReady !== 'function' || !isSyncReady()) return;
@@ -5452,16 +5469,19 @@ async function saveSchedCloud() {
     const key = await getCryptoKey(); if (!key) return;
     const ai = getAITagConfig();
     const bd = BIRTH_DATE;
+    // v3.6.6 本地没配的项用云端 ctx 兜底：避免多设备中「无密钥/无地址」的设备把服务端可用的配置覆盖成空
+    const cc = _schedCloudCtx;
+    const kbSrc = (KB && KB.length) ? KB : (cc && Array.isArray(cc.kb) ? cc.kb : []);
     const ctx = {
-      ai: ai ? { base: ai.base, model: ai.model, apiKey: ai.apiKey } : null,
-      pushToken: localStorage.getItem('pushplus_token') || _DEFAULT_PUSHTOKEN,
-      pushTopic: localStorage.getItem('pushplus_topic') || _DEFAULT_PUSHTOPIC,
-      weatherAddr: getWeatherAddr(),
+      ai: (ai && ai.apiKey) ? { base: ai.base, model: ai.model, apiKey: ai.apiKey } : (cc && cc.ai) || null,
+      pushToken: localStorage.getItem('pushplus_token') || (cc && cc.pushToken) || _DEFAULT_PUSHTOKEN,
+      pushTopic: localStorage.getItem('pushplus_topic') || (cc && cc.pushTopic) || _DEFAULT_PUSHTOPIC,
+      weatherAddr: localStorage.getItem(WEATHER_ADDR_KEY) || (cc && cc.weatherAddr) || SCHED_DEFAULT_ADDR,
       height: localStorage.getItem('babyHeight') || '',
       weight: localStorage.getItem('babyWeight') || '',
       babyName: BABY_NAME,
       birthDate: bd.getFullYear() + '-' + _pad2(bd.getMonth() + 1) + '-' + _pad2(bd.getDate()),
-      kb: KB.slice(0, 50).map(x => ({ cat: x.cat, text: x.text })),
+      kb: kbSrc.slice(0, 50).map(x => ({ cat: x.cat, text: x.text })),
       promptVer: PLAN_PROMPT_VERSION,
       genLead: SCHED_GEN_LEAD
     };
@@ -5472,6 +5492,76 @@ async function saveSchedCloud() {
     _schedCloudLast = body;
     console.log('[Sched] 定时任务已同步家庭云');
   } catch (e) { console.warn('[Sched] 定时任务云端同步失败:', e); }
+}
+
+/* v3.6.6 从家庭云拉取定时任务并合并（服务端 0 点生成的当天计划由此到达手机）。
+ * 合并策略（按任务 id）：
+ *   - 云端有、本地无 → 加入本地（新设备/重装恢复；本机删过的不复活，见墓碑）；
+ *   - 云端 genDate 比本地新 → 整任务以云端为准（服务端只改计划字段后整组回写，其余字段本就来自某台设备）；
+ *   - 其余 → 保留本地（用户在本机的编辑优先），仅当云端 pushPeriod 更新时补合并
+ *     （服务端已推送 → 本机置只读、不重复推）。 */
+const SCHED_TOMB_KEY = 'sched_tombstones';   // v3.6.6 已删除任务 id 墓碑（保留 30 天），防止云端旧数据把删除的任务拉回来
+function _schedTombstones() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(SCHED_TOMB_KEY) || '[]');
+    const now = Date.now();
+    return Array.isArray(arr) ? arr.filter(x => x && x.id != null && now - (x.ts || 0) < 30 * 86400000) : [];
+  } catch (e) { return []; }
+}
+function _schedTombAdd(id) {
+  try {
+    const arr = _schedTombstones().filter(x => String(x.id) !== String(id));
+    arr.push({ id: id, ts: Date.now() });
+    localStorage.setItem(SCHED_TOMB_KEY, JSON.stringify(arr.slice(-100)));
+  } catch (e) {}
+}
+async function loadSchedCloud() {
+  if (typeof isSyncReady !== 'function' || !isSyncReady()) return false;
+  try {
+    const fid = getFamilyId(); if (!fid) return false;
+    const key = await getCryptoKey(); if (!key) return false;
+    // 网络超时 8s 兜底：拉不下来不影响本地调度（推送闸门也会在 8s 后放行）
+    const rows = await Promise.race([
+      supabaseGet(`family_config?family_id=eq.${fid}&config_key=eq.${SCHED_CLOUD_KEY}&select=encrypted_data,iv`),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('sched cloud timeout')), 8000))
+    ]);
+    if (!Array.isArray(rows) || rows.length === 0 || !rows[0].encrypted_data || !rows[0].iv) return false;
+    let obj = null;
+    try { obj = JSON.parse(await decrypt(key, rows[0].encrypted_data, rows[0].iv)); } catch (e) { return false; }
+    if (!obj || !Array.isArray(obj.tasks)) return false;
+    _schedCloudCtx = (obj.ctx && typeof obj.ctx === 'object') ? obj.ctx : null;
+    return mergeSchedCloudTasks(obj.tasks);
+  } catch (e) { console.warn('[Sched] 定时任务云端加载失败:', e); return false; }
+}
+function mergeSchedCloudTasks(cloudTasks) {
+  if (!Array.isArray(cloudTasks) || !cloudTasks.length) return false;
+  const tombIds = new Set(_schedTombstones().map(x => String(x.id)));
+  let changed = false;
+  const localMap = new Map();
+  SCHED_TASKS.forEach(t => { if (t && t.id != null) localMap.set(t.id, t); });
+  for (const ct of cloudTasks) {
+    if (!ct || ct.id == null) continue;
+    if (tombIds.has(String(ct.id))) continue;          // 本机删过的任务不复活
+    const lt = localMap.get(ct.id);
+    if (!lt) { SCHED_TASKS.push(ct); localMap.set(ct.id, ct); changed = true; continue; }
+    const cg = ct.genDate || '', lg = lt.genDate || '';
+    if (cg > lg && ct.content) {
+      // 服务端 0 点生成了更新的当天计划 → 整任务以云端为准
+      Object.assign(lt, ct);
+      changed = true;
+    } else {
+      // 计划状态不更新 → 保留本地编辑；仅合并更新的推送周期标记
+      const cp = ct.pushPeriod || '', lp = lt.pushPeriod || '';
+      if (cp && cp > lp) { lt.pushPeriod = cp; changed = true; }
+    }
+  }
+  if (changed) {
+    saveSchedTasks();          // 落本地 + 安排云端同步（把合并结果写回，供服务端继续用）
+    if (currentManageTab === 'tasks') renderSchedTasks();
+    renderTodayPlanCard();     // 首页计划卡从「旧计划/未生成」刷新为服务端刚生成的当天计划
+    console.log('[Sched] 已合并家庭云定时任务');
+  }
+  return changed;
 }
 
 /* ================= 早教音频（v3.5.157） =================
@@ -6625,15 +6715,31 @@ async function migratePlanPromptVersion() {
 }
 function initScheduler() {
   loadSchedTasks();
-  Promise.resolve(migratePlanPromptVersion()).then(() => runScheduler()).catch(() => runScheduler());
+  // v3.6.6 开 app 先从家庭云拉任务（含服务端 0 点生成的当天计划）：拉取完成前不推送、不跑本地生成，
+  // 避免本地陈旧状态（genDate 还是昨天）覆盖/顶掉云端最新计划（此前每次开 app 都必推一次）
+  _schedCloudPullSettled = false;   // 先复位：新拉取开始，闸门重新关上
+  _schedCloudPullPromise = Promise.resolve()
+    .then(() => loadSchedCloud())
+    .catch(() => false)
+    .then(ok => { _schedCloudPullSettled = true; return ok; });
+  const pullGate = () => Promise.race([_schedCloudPullPromise, new Promise(r => setTimeout(r, 8000))]);
+  Promise.resolve(migratePlanPromptVersion())
+    .then(() => pullGate())
+    .then(() => runScheduler())
+    .catch(() => runScheduler());
   loadWeatherAddrCloud().catch(() => {});
   // v3.5.154 云端 AI 密钥加载完成后再首次同步定时任务到家庭云（确保 ctx.ai 有值）
   Promise.resolve()
     .then(() => (typeof loadCloudAITagKey === 'function' ? loadCloudAITagKey() : null))
     .catch(() => {})
+    .then(() => pullGate())
     .then(() => scheduleSchedCloudSave(1500));
   setInterval(runScheduler, 60000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) runScheduler(); });
+  // v3.6.6 页面常开时不拉云会看不到服务端 0 点生成的新计划：每 5 分钟 + 切回前台时补拉一次
+  setInterval(() => { if (!document.hidden) loadSchedCloud().catch(() => {}); }, 5 * 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) { loadSchedCloud().catch(() => {}); runScheduler(); }
+  });
 }
 
 /* ---------- 今日计划（首页总览卡片） ---------- */
@@ -6829,6 +6935,7 @@ function deleteTask(id) {
   showConfirm('删除任务', '确定删除任务「' + nm + '」？\n删除后不再推送消息，且从任务页移除（不可恢复）。', function () {
     SCHED_TASKS = SCHED_TASKS.filter(x => x.id !== id);
     delete taskExpanded[id];
+    _schedTombAdd(id);   // v3.6.6 记墓碑，防止云端旧任务被拉取合并时复活
     saveSchedTasks(); renderSchedTasks(); runScheduler(true);
     showToast('已删除任务：' + nm);
   }, '删除');
