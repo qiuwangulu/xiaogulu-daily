@@ -1465,7 +1465,8 @@
   .ms-edit:active svg { stroke: #74b9ff; }
   body.theme-day .ms-edit svg { stroke: #3d4852; }
   body.theme-day .ms-edit { background: rgba(61,72,82,0.08); }
-  .ms-text { font-size: 13px; color: #dfe6e9; line-height: 1.45; word-break: break-word; }
+  /* v3.6.2 右侧留出编辑图标空间，避免与文案重合 */
+  .ms-text { font-size: 13px; color: #dfe6e9; line-height: 1.45; word-break: break-word; padding-right: 30px; }
   .ms-meta { margin-top: 5px; display: flex; gap: 5px; flex-wrap: wrap; }
   .ms-tag { font-size: 9.5px; padding: 1.5px 6px; border-radius: 8px; font-weight: 600; }
   .ms-first {
@@ -2505,7 +2506,7 @@
         <input class="act-search ee-search" id="eeSearch" type="text" placeholder="🔍 搜索音频名称…" oninput="onEeSearch()">
       </div>
       <div class="ee-add-row" id="eeAddRow">
-        <span id="eeUploadBtnWrap"><button class="fab-btn" onclick="eeTriggerUpload()"><span class="fab-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg></span> 本地上传</button></span>
+        <span id="eeUploadBtnWrap"><button class="fab-btn" onclick="eeTriggerUpload()"><span class="fab-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg></span> 本地音频</button></span>
         <button class="fab-btn" id="eeWikiBtn" onclick="eeShowWiki()"><span class="fab-icon fab-emoji">🌐</span> 选免版权</button>
       </div>
       <!-- v3.6.1 accept 收紧为纯 audio/*（不带扩展名列表），避免系统文件选择器把「照片和视频」等非音频入口列出来 -->
@@ -2597,7 +2598,7 @@
   <div class="modal-box" onclick="event.stopPropagation()" style="max-width:420px;">
     <button class="modal-close" onclick="hideModal('eeWikiModal')">&times;</button>
     <div class="modal-title">🌐 选免版权音频（Wikimedia · CC）</div>
-    <div class="ee-tip">以下为公版/CC 授权音频（共 20+ 首，已按中文 / 英文分组）。点击「添加」即实时解析真实直链并加入音频列表，按分类自动归入古诗 / 儿歌 / 故事(中文/英文)。说明：Commons 上<b>中文儿歌/古诗资源极少</b>，中文项以搜索兜底为主，命中不佳请到「儿歌/古诗」分类<b>本地上传 MP3</b>；英文童谣/故事资源丰富、命中率高。iOS 可能不支持 OGG，建议安卓/电脑试听。</div>
+    <div class="ee-tip">以下为公版/CC 授权音频（共 20+ 首，已按中文 / 英文分组）。点击「添加」即实时解析真实直链并加入音频列表，按分类自动归入古诗 / 儿歌 / 故事(中文/英文)。说明：Commons 上<b>中文儿歌/古诗资源极少</b>，中文项以搜索兜底为主，命中不佳请到「儿歌/古诗」分类点<b>本地音频</b>上传 MP3；英文童谣/故事资源丰富、命中率高。iOS 可能不支持 OGG，建议安卓/电脑试听。</div>
     <div id="eeWikiList"></div>
     <div class="modal-actions" style="justify-content:flex-end;">
       <button class="btn btn-success" onclick="hideModal('eeWikiModal')">完成</button>
@@ -2642,9 +2643,10 @@
     </div>
     <div class="te-field">
       <div class="te-label">是否首次</div>
-      <div class="te-seg" id="msFirstSeg">
-        <label class="cat-tag"><input type="radio" name="msFirst" id="msFirstYes" onclick="setMsFirst(true)"><span>是（第一次）</span></label>
-        <label class="cat-tag"><input type="radio" name="msFirst" id="msFirstNo" onclick="setMsFirst(false)"><span>否</span></label>
+      <!-- v3.6.2 与辅食「饭后情况」同款 radio-group 原生单选 -->
+      <div class="radio-group">
+        <label><input type="radio" name="msFirst" id="msFirstYes" onclick="setMsFirst(true)"> 是（第一次）</label>
+        <label><input type="radio" name="msFirst" id="msFirstNo" onclick="setMsFirst(false)"> 否</label>
       </div>
     </div>
     <div class="modal-actions">
@@ -2787,6 +2789,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.6.1"></script>
+<script src="app.js?v=v3.6.2"></script>
 </body>
 </html>

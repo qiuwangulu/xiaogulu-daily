@@ -1384,7 +1384,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.1'; // v3.6.1: ①里程碑编辑图标改为首页同款SVG铅笔+弹窗层级修复(盖过分析/管理大弹窗);②育儿嫂休假可展开收起/显示当前年月/日期多选/结算后归档当月休假到已办并切下月;③工资结算任务改为默认只读内容「年-月:休假X天,工作Y天,应发工资Z元,请转账。」;④音频上传分类改下拉框单选+accept收紧为audio/*;⑤今日计划早教置尾+早教/大便/辅食/户外统计改为目标日前一天
+const APP_VERSION = 'v3.6.2'; // v3.6.2: ①里程碑编辑弹窗「是否首次」改为原生radio组件(与辅食饭后情况同款)+卡片编辑图标与文案防重合;②音频上传入口改名「本地音频」并提示避开系统选择器的照片/视频入口;③工资结算任务图标✏️→💰;④今日计划补剂M/W/F判定明确按本计划日(=任务触发当天)星期,禁止按第二天(prompt升v7触发重新生成)
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5404,7 +5404,7 @@ const SCHED_GEN_LEAD = 12 * 3600000;     // 提前 12 小时生成计划
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内才推送（避免补推历史）
 const SCHED_GEN_COOLDOWN = 30 * 60000;   // AI 生成失败重试冷却 30 分钟
 // AI 计划 prompt 版本：内容与分类结构变化时递增，可强制所有 AI 任务用最新 prompt 重新生成
-const PLAN_PROMPT_VERSION = '6'; // v3.6.1 计划prompt: 早教段移到输出最后; 早教/大便/辅食/户外统计口径改为「目标日期的前一天」(如10-14计划按10-13记录)
+const PLAN_PROMPT_VERSION = '7'; // v3.6.2 计划prompt: 补剂 M/W/F 判定明确按「本计划日(=任务触发当天)」星期，禁止按第二天；另①里程碑编辑弹窗是否首次改原生radio(同辅食饭后情况)+图标文案防重合;②音频上传入口改名「本地音频」;③工资结算任务图标改💰
 let SCHED_TASKS = [];
 const _pad2 = n => String(n).padStart(2, '0');
 
@@ -5693,7 +5693,7 @@ function eeTriggerUpload() {
   eeOpenCatPick('选择上传音频的分类', (t) => {
     eePendingUploadType = t;
     const inp = document.getElementById('eeFileInput'); if (inp) inp.click();
-  }, '✅ 支持：本地音频文件与录音（mp3 / m4a / wav / amr…）<br>🚫 不支持：照片、视频、文档等无法播放的文件');
+  }, '✅ 支持：本地音频文件与录音（mp3 / m4a / wav / amr…）<br>🚫 不支持：照片、视频、文档等无法播放的文件<br>💡 若系统选择器列出「照片和视频」等入口，请切换到「录音机 / 音频」或从中选择音频文件');
 }
 async function eeOnFiles(input) {
   const files = Array.from(input.files || []);
@@ -6331,14 +6331,16 @@ function buildPlanSystemPrompt(dateStr, wText, stats) {
     + '\n【目标日期天气】' + dateStr + '（' + PLAN_DOW[targetDow] + '） ' + wText + '\n'
     + '\n【规划规则——请严格按以下四部分输出，顺序固定：喂养 → 起居护理 → 健康·出行 → 早教（早教必须放在最后）】\n'
     + '【喂养】单次奶量、喝奶次数、辅食（尝试食物及量）、喝水、过敏/防呛提醒；'
-    + (targetIsMWF ? ('今日为' + PLAN_DOW[targetDow] + '（周一/三/五补剂日），营养补剂请安排：' + (supRec || 'D3') + '（与上次相反）。')
-                   : '今日非周一/周三/周五，营养补剂项写明「今日无需补剂」。')
+    // v3.6.2 补剂判定明确按「本计划日（=任务触发当天）」的星期，不用第二天的星期
+    + (targetIsMWF ? ('本计划日 ' + dateStr + ' 为' + PLAN_DOW[targetDow] + '（即任务触发当天；周一/三/五为补剂日），营养补剂请安排：' + (supRec || 'D3') + '（与上次相反）。')
+                   : ('本计划日 ' + dateStr + ' 为' + PLAN_DOW[targetDow] + '（即任务触发当天；非周一/周三/周五），营养补剂项写明「今日无需补剂」。'))
     + '\n'
     + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度，据此建议穿什么、几件多厚，参考知识库「穿衣」）；洗澡、剪指甲、睡眠、排便关注'
     + (stats && stats.poop === 0 ? '；昨日大便 0 次，需关注是否便秘：两餐间记得喂水、多顺时针揉腹'
        : (stats && stats.poop >= 3 ? '；昨日大便≥3 次，需关注拉肚子：注意保暖、防红屁屁' : '')) + '。\n'
     + '【健康·出行】户外活动时间与时长（结合天气与昨日户外时长，给出具体时段如"上午9-10点、下午4-5点"及总时长建议）、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物；结合知识库「穿衣」给出是否戴帽子、是否裹薄包被/纱巾。\n'
     + '【辅食提醒】若上方"辅食记录"备注含过敏/异常（如某品牌米粉过敏），在喂养或辅食处提醒今日更换品牌（具体到备注里的牌子）。\n'
+    + '【补剂判定】营养补剂是否为补剂日（周一/三/五），一律按本计划日（即上方"目标日期"、任务触发当天）的星期判断；不得按"第二天"或其他任何日期判断。\n'
     + '【早教】放在最后一段输出。结合上方"前一日早教数据"：次数<1 的项目必须纳入今日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。\n'
     + '【温度要求】上方天气已给出当日最高温和最低温，请在「起居护理·穿衣」与「健康·出行」中明确写出具体温度数值（如"今日 28℃/19℃，短袖即可"），不要只写"根据天气"。\n'
     + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【喂养】【起居护理】【健康·出行】【早教】顺序分块给出内容（早教在最后）。';
@@ -6647,7 +6649,8 @@ function renderSchedTasks() {
   SCHED_TASKS.forEach(t => {
     const editable = isPlanEditable(t);
     const nm = (t.name && String(t.name).trim()) ? String(t.name).trim() : (t.mode === 'ai' ? '今日计划' : '定时提醒');
-    const icon = t.mode === 'ai' ? '🤖' : '✏️';
+    // v3.6.2 工资结算任务用 💰（与育儿嫂/工资语义匹配），AI 任务 🤖，其余 ✏️
+    const icon = t.mode === 'ai' ? '🤖' : (t.mode === 'wage' ? '💰' : '✏️');
     const expanded = !!taskExpanded[t.id];
     h += '<div class="task-card" id="taskcard_' + t.id + '">'
       + '<div class="task-row">'
@@ -7221,16 +7224,17 @@ function openMsEdit(idx) {
     sel.innerHTML = MILESTONE_DOMAINS.concat([MILESTONE_OTHER]).map(d => '<option value="' + d.id + '">' + d.icon + ' ' + d.name + '</option>').join('');
     sel.value = it.domain.id;
   }
+  // v3.6.2 是否首次改用原生 radio（与辅食饭后情况同款），用 checked 回显
   const yes = document.getElementById('msFirstYes'), no = document.getElementById('msFirstNo');
-  if (yes) yes.classList.toggle('active', _msEditFirst);
-  if (no) no.classList.toggle('active', !_msEditFirst);
+  if (yes) yes.checked = _msEditFirst;
+  if (no) no.checked = !_msEditFirst;
   showModal('msEditModal');
 }
 function setMsFirst(v) {
   _msEditFirst = !!v;
   const yes = document.getElementById('msFirstYes'), no = document.getElementById('msFirstNo');
-  if (yes) yes.classList.toggle('active', _msEditFirst);
-  if (no) no.classList.toggle('active', !_msEditFirst);
+  if (yes) yes.checked = _msEditFirst;
+  if (no) no.checked = !_msEditFirst;
 }
 function saveMsEdit() {
   const it = _milestoneItems[_msEditIdx]; if (!it) { hideModal('msEditModal'); return; }
