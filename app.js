@@ -1384,7 +1384,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.0'; // v3.6.0: ①成长里程碑可改类型/是否首次;②上传本地音频仅支持音频(取消图片/视频/录像);③AI今日计划增强(早教/大便/辅食/补剂/户外);④首页计划仅推送时更新;⑤备忘录新增育儿嫂休假+工资任务类型;⑥任务支持每隔N周/天/月
+const APP_VERSION = 'v3.6.1'; // v3.6.1: ①里程碑编辑图标改为首页同款SVG铅笔+弹窗层级修复(盖过分析/管理大弹窗);②育儿嫂休假可展开收起/显示当前年月/日期多选/结算后归档当月休假到已办并切下月;③工资结算任务改为默认只读内容「年-月:休假X天,工作Y天,应发工资Z元,请转账。」;④音频上传分类改下拉框单选+accept收紧为audio/*;⑤今日计划早教置尾+早教/大便/辅食/户外统计改为目标日前一天
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2917,7 +2917,8 @@ function addHistoryRecord() {
 }
 // ---------- 自绘日期选择器（替代系统 picker：蓝色"确定"按钮 + 蓝色头部） ----------
 let _dpViewYear = 0, _dpViewMonth = 0, _dpSelected = '';
-let _dpMode = 'history'; // v3.5.135 日期选择器模式：history(历史,禁未来) | task(定时任务,可选未来)
+let _dpPicked = []; // v3.6.1 育儿嫂休假多选：本次会话勾选的日期集合
+let _dpMode = 'history'; // v3.5.135 日期选择器模式：history(历史,禁未来) | task(定时任务,可选未来) | nanny(育儿嫂休假,多选)
 function openHistoryDatePicker() {
   _dpMode = 'history';
   const cur = document.getElementById('historyDate').value;
@@ -2964,6 +2965,7 @@ function renderHistoryDatePicker() {
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
   const lockFuture = (_dpMode !== 'task' && _dpMode !== 'nanny'); // 历史模式禁选未来；定时任务/育儿嫂休假模式可选任意日期
+  const multi = (_dpMode === 'nanny');   // v3.6.1 育儿嫂休假：多选日期
   let html = '';
   // 上月尾部
   for (let i = startOffset - 1; i >= 0; i--) {
@@ -2977,7 +2979,10 @@ function renderHistoryDatePicker() {
     // 历史记录只能看过去，禁止选当天及以后的日期；定时任务模式可选未来
     const isFuture = key >= todayKey;
     if (key === todayKey) cls.push('today');
-    if (key === _dpSelected && (!lockFuture || !isFuture)) cls.push('selected');
+    if (multi) {
+      // 多选模式：已选日期高亮，再次点击取消
+      if (_dpPicked.indexOf(key) >= 0) cls.push('selected');
+    } else if (key === _dpSelected && (!lockFuture || !isFuture)) cls.push('selected');
     if (lockFuture && isFuture) cls.push('disabled');
     if (lockFuture && isFuture) {
       html += `<div class="${cls.join(' ')}" data-d="${d}">${d}</div>`;
@@ -2994,7 +2999,17 @@ function renderHistoryDatePicker() {
   grid.innerHTML = html;
 }
 function dpSelectDay(key) {
-  if (_dpMode !== 'task' && _dpMode !== 'nanny') {
+  if (_dpMode === 'nanny') {
+    // v3.6.1 多选：点一下加选，再点一下取消
+    const i = _dpPicked.indexOf(key);
+    if (i >= 0) _dpPicked.splice(i, 1); else _dpPicked.push(key);
+    _dpPicked.sort();
+    _dpSelected = _dpPicked[_dpPicked.length - 1] || '';
+    renderHistoryDatePicker();
+    updateDpMultiBar();
+    return;
+  }
+  if (_dpMode !== 'task') {
     // 历史模式禁止选择当天及以后
     const t = new Date();
     const todayKey = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
@@ -3020,13 +3035,19 @@ function dpPickQuick(deltaDays) {
   renderHistoryDatePicker();
 }
 function confirmHistoryDatePicker() {
-  if (!_dpSelected) { showToast('请先选择日期'); return; }
-  // 育儿嫂休假模式：把所选日期加入休假集合并关闭（允许选择任意日期）
+  // v3.6.1 育儿嫂休假模式（多选）：把勾选的所有日期加入休假集合并关闭
   if (_dpMode === 'nanny') {
-    addNannyVacation(_dpSelected);
+    if (!_dpPicked.length) { showToast('请先选择日期'); return; }
+    const list = getNannyVacation();
+    let added = 0;
+    _dpPicked.forEach(d => { if (list.indexOf(d) < 0) { list.push(d); added++; } });
+    saveNannyVacation(list);
+    showToast(added ? ('已添加 ' + added + ' 天休假') : '所选日期已是休假');
+    _dpPicked = [];
     hideModal('historyDatePickerModal');
     return;
   }
+  if (!_dpSelected) { showToast('请先选择日期'); return; }
   // 定时任务模式：回填「开始日期」并关闭，允许选择未来
   if (_dpMode === 'task') {
     setTaskStartDateValue(_dpSelected);
@@ -3566,11 +3587,14 @@ async function saveMemoCloud() {
   } catch (e) { console.warn('[Memo] 云端保存失败:', e); }
 }
 
-/* ---------- 育儿嫂休假（v3.6.0，req5） ----------
+/* ---------- 育儿嫂休假（v3.6.0 → v3.6.1） ----------
  * 存储一组休假日期（YYYY-MM-DD），加密同步家庭云 `_nanny_vacation`，合并策略取并集。
- * 用于：①备忘录内展示「当月已工作天数」；②育儿嫂工资任务按周期扣减休假天数算工资。 */
+ * 用于：①备忘录内展示「当月已工作天数」；②育儿嫂工资任务按周期扣减休假天数算工资。
+ * v3.6.1：新增「当前年月」概念（默认本月）；每月推送结算任务后，把当月休假日归档进
+ *         备忘录已办事项、清空当月休假，并自动切到下个月。 */
 const NANNY_VACATION_KEY = 'nanny_vacation_v1';
 const NANNY_VACATION_CLOUD_KEY = '_nanny_vacation';
+const NANNY_MONTH_KEY = 'nanny_month_v1';   // v3.6.1 当前展示年月 YYYY-MM
 function getNannyVacation() {
   try { const arr = JSON.parse(localStorage.getItem(NANNY_VACATION_KEY) || '[]'); return Array.isArray(arr) ? arr.filter(d => typeof d === 'string') : []; }
   catch { return []; }
@@ -3580,6 +3604,24 @@ function saveNannyVacation(list) {
   localStorage.setItem(NANNY_VACATION_KEY, JSON.stringify(uniq));
   saveNannyVacationCloud();
   renderNannyVacation();
+}
+// v3.6.1 当前年月（默认本月），格式 YYYY-MM
+function getNannyMonth() {
+  const v = localStorage.getItem(NANNY_MONTH_KEY);
+  if (v && /^\d{4}-\d{2}$/.test(v)) return v;
+  const n = new Date();
+  return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0');
+}
+function setNannyMonth(ym) { localStorage.setItem(NANNY_MONTH_KEY, ym); }
+function nextNannyMonth(ym) {
+  const m = /^(\d{4})-(\d{2})$/.exec(ym || ''); if (!m) return getNannyMonth();
+  let y = +m[1], mo = +m[2] + 1; if (mo > 12) { mo = 1; y++; }
+  return y + '-' + String(mo).padStart(2, '0');
+}
+// 某年月的自然天数
+function daysInNannyMonth(ym) {
+  const m = /^(\d{4})-(\d{2})$/.exec(ym || ''); if (!m) return 30;
+  return new Date(+m[1], +m[2], 0).getDate();
 }
 // v3.6.0 工资结算常量（月薪 / 计薪基准天数）
 const NANNY_BASE_SALARY = 10000;
@@ -3610,49 +3652,79 @@ function computeWage(task, trig, vacList) {
   const wage = Math.round(dailyRate * workDays);
   return { dailyRate, totalDays, vacDays, workDays, wage, startStr, endStr: fmtDateLocal(new Date(end.getTime() - 86400000)) };
 }
+// v3.6.1 工资结算推送内容改为固定默认格式（任务编辑时无需填写内容）：
+// 「YYYY-MM：休假 X 天，工作 Y 天，应发工资 Z 元，请转账。」
 function wagePushContent(w) {
-  return `结算周期：${w.startStr} ~ ${w.endStr}（${w.totalDays} 天）\n`
-    + `周期总天数：${w.totalDays} 天\n`
-    + `休假天数：${w.vacDays} 天\n`
-    + `实际工作天数：${w.workDays} 天\n`
-    + `日工资标准：¥${w.dailyRate.toFixed(2)}（${NANNY_BASE_SALARY}÷${NANNY_PAY_DIVISOR}）\n`
-    + `应付工资：¥${w.wage}`;
+  const ym = (w.endStr || '').slice(0, 7);
+  return `${ym}：休假 ${w.vacDays} 天，工作 ${w.workDays} 天，应发工资 ${w.wage} 元，请转账。`;
 }
 function openNannyVacationPicker() {
   _dpMode = 'nanny';
-  const today = getTodayDateStr();
-  const d = new Date(today + 'T00:00:00');
-  if (isNaN(d.getTime())) { const n = new Date(); _dpViewYear = n.getFullYear(); _dpViewMonth = n.getMonth(); }
-  else { _dpViewYear = d.getFullYear(); _dpViewMonth = d.getMonth(); }
-  _dpSelected = today;
+  _dpPicked = [];
+  // 定位到「当前年月」，并把该月已休日期作为默认勾选（方便改休假日）
+  const ym = getNannyMonth();
+  const mm = /^(\d{4})-(\d{2})$/.exec(ym);
+  if (mm) { _dpViewYear = +mm[1]; _dpViewMonth = +mm[2] - 1; }
+  else { const n = new Date(); _dpViewYear = n.getFullYear(); _dpViewMonth = n.getMonth(); }
+  _dpPicked = getNannyVacation().filter(d => d.slice(0, 7) === ym);
+  _dpSelected = _dpPicked[_dpPicked.length - 1] || (ym + '-01');
   renderHistoryDatePicker();
   const q = document.getElementById('dpQuick'); if (q) q.style.display = 'none';
+  const mb = document.getElementById('dpMultiBar'); if (mb) mb.style.display = '';
+  updateDpMultiBar();
   showModal('historyDatePickerModal');
 }
-function addNannyVacation(date) {
-  if (!date) return;
-  const list = getNannyVacation();
-  if (list.indexOf(date) >= 0) { showToast('该日期已是休假'); return; }
-  list.push(date); saveNannyVacation(list); showToast('已添加休假：' + date);
+// v3.6.1 多选提示条：显示已勾选数量
+function updateDpMultiBar() {
+  const h = document.getElementById('dpMultiHint');
+  if (h) h.textContent = _dpPicked.length ? ('已选 ' + _dpPicked.length + ' 天：' + _dpPicked.map(d => d.slice(5)).join('、')) : '点选日期，可多选';
 }
+function dpClearPicked() { _dpPicked = []; _dpSelected = ''; renderHistoryDatePicker(); updateDpMultiBar(); }
 function removeNannyVacation(date) {
   const list = getNannyVacation().filter(x => x !== date);
   saveNannyVacation(list);
 }
 function renderNannyVacation() {
   const list = getNannyVacation().slice().sort();
-  const cntEl = document.getElementById('nannyVacDays'); if (cntEl) cntEl.textContent = list.length;
+  const ym = getNannyMonth();
+  const cntEl = document.getElementById('nannyVacDays');
+  if (cntEl) cntEl.textContent = list.filter(d => d.slice(0, 7) === ym).length;
+  const monthEl = document.getElementById('nannyMonthLabel');
+  if (monthEl) monthEl.textContent = ym;
   const workEl = document.getElementById('nannyWorkDays');
   if (workEl) {
-    const now = new Date(); const y = now.getFullYear(), m = now.getMonth();
-    const daysInMonth = new Date(y, m + 1, 0).getDate();
-    const vacThisMonth = list.filter(d => { const p = d.split('-'); return p.length === 3 && +p[0] === y && (+p[1] - 1) === m; }).length;
+    const daysInMonth = daysInNannyMonth(ym);
+    const vacThisMonth = list.filter(d => d.slice(0, 7) === ym).length;
     workEl.textContent = `本月已工作 ${daysInMonth - vacThisMonth} 天（本月 ${daysInMonth} 天，休假 ${vacThisMonth} 天）`;
   }
   const wrap = document.getElementById('nannyVacList');
   if (!wrap) return;
-  if (!list.length) { wrap.innerHTML = '<div class="memo-empty">尚未添加休假日期</div>'; return; }
-  wrap.innerHTML = list.map(d => `<span class="nanny-vac-chip" onclick="removeNannyVacation('${d}')" title="点击删除">${d} <b>✕</b></span>`).join('');
+  const monthList = list.filter(d => d.slice(0, 7) === ym);
+  if (!monthList.length) { wrap.innerHTML = '<div class="memo-empty">' + ym + ' 尚未添加休假日期</div>'; return; }
+  wrap.innerHTML = monthList.map(d => `<span class="nanny-vac-chip" onclick="removeNannyVacation('${d}')" title="点击删除">${d} <b>✕</b></span>`).join('');
+}
+// v3.6.1 展开/收起（同已办事项）
+function toggleNannyVacExpand() {
+  const h = document.getElementById('nannyVacHead'), b = document.getElementById('nannyVacBody');
+  if (h && b) { h.classList.toggle('open'); b.classList.toggle('open'); }
+}
+// v3.6.1 月度归档：工资结算推送成功后调用
+// ①把当前年月的休假日写进备忘录「已办事项」；②清空当月休假；③当前年月切到下个月
+function archiveNannyMonth(monthKey) {
+  const ym = monthKey || getNannyMonth();
+  const list = getNannyVacation();
+  const monthList = list.filter(d => d.slice(0, 7) === ym);
+  const rest = list.filter(d => d.slice(0, 7) !== ym);
+  if (monthList.length) {
+    const items = getMemos();
+    items.unshift({ id: _memoNextId(), done: true, date: getTodayDateStr(),
+      text: '👩 育儿嫂休假 ' + ym + '：' + monthList.join('、') + '（共 ' + monthList.length + ' 天）' });
+    saveMemos(items);
+  }
+  saveNannyVacation(rest);
+  setNannyMonth(nextNannyMonth(ym));
+  renderNannyVacation();
+  return monthList.length;
 }
 async function saveNannyVacationCloud() {
   if (!isSyncReady()) return;
@@ -5332,7 +5404,7 @@ const SCHED_GEN_LEAD = 12 * 3600000;     // 提前 12 小时生成计划
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内才推送（避免补推历史）
 const SCHED_GEN_COOLDOWN = 30 * 60000;   // AI 生成失败重试冷却 30 分钟
 // AI 计划 prompt 版本：内容与分类结构变化时递增，可强制所有 AI 任务用最新 prompt 重新生成
-const PLAN_PROMPT_VERSION = '5'; // v3.6.0 计划prompt新增【早教】段(结合当日早教次数)、大便/辅食/户外统计、M/W/F补剂判定、辅食过敏换品牌提醒
+const PLAN_PROMPT_VERSION = '6'; // v3.6.1 计划prompt: 早教段移到输出最后; 早教/大便/辅食/户外统计口径改为「目标日期的前一天」(如10-14计划按10-13记录)
 let SCHED_TASKS = [];
 const _pad2 = n => String(n).padStart(2, '0');
 
@@ -5621,7 +5693,7 @@ function eeTriggerUpload() {
   eeOpenCatPick('选择上传音频的分类', (t) => {
     eePendingUploadType = t;
     const inp = document.getElementById('eeFileInput'); if (inp) inp.click();
-  }, '✅ 支持：本地音频文件与录音（mp3 / m4a / wav / amr…）<br>🚫 不支持：图片、视频、文档等无法播放的文件');
+  }, '✅ 支持：本地音频文件与录音（mp3 / m4a / wav / amr…）<br>🚫 不支持：照片、视频、文档等无法播放的文件');
 }
 async function eeOnFiles(input) {
   const files = Array.from(input.files || []);
@@ -5675,11 +5747,23 @@ function eeOpenCatPick(title, cb, hint) {
   const t = document.getElementById('eeCatPickTitle'); if (t) t.textContent = title || '选择分类';
   const h = document.getElementById('eeCatPickHint');
   if (h) { if (hint) { h.innerHTML = hint; h.style.display = ''; } else { h.innerHTML = ''; h.style.display = 'none'; } }
+  // v3.6.1 下拉框：上传默认「儿歌」，改分类时回填当前分类
+  const sel = document.getElementById('eeCatPickSelect');
+  if (sel) sel.value = (title || '').indexOf('修改') >= 0 ? (eeEditingType || '儿歌') : '儿歌';
   showModal('eeCatPickModal');
+}
+// v3.6.1 下拉框单选：点「确定」后取当前选中项
+function eeConfirmPickCat() {
+  const sel = document.getElementById('eeCatPickSelect');
+  const t = (sel && sel.value) || '儿歌';
+  eePickCat(t);
 }
 function eePickCat(t) { hideModal('eeCatPickModal'); const cb = eeCatPickCb; eeCatPickCb = null; if (cb) cb(t); }
 // 修改单个音频的分类
+let eeEditingType = '儿歌';
 function eeEditType(id) {
+  const it0 = EARLY_EDU.find(x => x.id === id);
+  eeEditingType = (it0 && it0.type) || '儿歌';
   eeOpenCatPick('修改音频分类', (t) => {
     const it = EARLY_EDU.find(x => x.id === id); if (!it) return;
     it.type = t; scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard();
@@ -6230,7 +6314,8 @@ function buildPlanSystemPrompt(dateStr, wText, stats) {
   if (stats) {
     const c = stats.counts;
     const eeLine = Object.keys(PLAN_EE_TYPES).map(k => PLAN_EE_TYPES[k] + c[k] + '次').join('、');
-    dayPart = '\n【生成日当天已记录的早教/起居数据（用于安排次日计划）】\n'
+    // v3.6.1 统计口径改为「目标日期的前一天」：如 10-14 早上生成的计划，按 10-13 的记录
+    dayPart = '\n【前一日已记录的早教/起居数据（用于安排今日计划）】\n'
       + '- 早教各项次数：' + eeLine + '\n'
       + '- 大便次数：' + stats.poop + ' 次\n'
       + '- 户外时长：' + stats.outdoorMin + ' 分钟\n'
@@ -6244,19 +6329,19 @@ function buildPlanSystemPrompt(dateStr, wText, stats) {
     + '\n【家庭知识库（优先参考，含权威育儿资料与早教/穿衣建议）】\n' + (kbPart || '（暂无）') + '\n'
     + dayPart
     + '\n【目标日期天气】' + dateStr + '（' + PLAN_DOW[targetDow] + '） ' + wText + '\n'
-    + '\n【规划规则——请严格按以下四部分输出】\n'
-    + '【早教】结合上方"生成日当天早教数据"：次数<1 的项目必须纳入明日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。\n'
+    + '\n【规划规则——请严格按以下四部分输出，顺序固定：喂养 → 起居护理 → 健康·出行 → 早教（早教必须放在最后）】\n'
     + '【喂养】单次奶量、喝奶次数、辅食（尝试食物及量）、喝水、过敏/防呛提醒；'
-    + (targetIsMWF ? ('明日为' + PLAN_DOW[targetDow] + '（周一/三/五补剂日），营养补剂请安排：' + (supRec || 'D3') + '（与上次相反）。')
-                   : '明日非周一/周三/周五，营养补剂项写明「今日无需补剂」。')
+    + (targetIsMWF ? ('今日为' + PLAN_DOW[targetDow] + '（周一/三/五补剂日），营养补剂请安排：' + (supRec || 'D3') + '（与上次相反）。')
+                   : '今日非周一/周三/周五，营养补剂项写明「今日无需补剂」。')
     + '\n'
     + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度，据此建议穿什么、几件多厚，参考知识库「穿衣」）；洗澡、剪指甲、睡眠、排便关注'
-    + (stats && stats.poop === 0 ? '；今日大便 0 次，需关注是否便秘：两餐间记得喂水、多顺时针揉腹'
-       : (stats && stats.poop >= 3 ? '；今日大便≥3 次，需关注拉肚子：注意保暖、防红屁屁' : '')) + '。\n'
-    + '【健康·出行】户外活动时间与时长（结合天气与今日户外时长，给出具体时段如"上午9-10点、下午4-5点"及总时长建议）、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物；结合知识库「穿衣」给出是否戴帽子、是否裹薄包被/纱巾。\n'
-    + '【辅食提醒】若上方"辅食记录"备注含过敏/异常（如某品牌米粉过敏），在喂养或辅食处提醒明日更换品牌（具体到备注里的牌子）。\n'
+    + (stats && stats.poop === 0 ? '；昨日大便 0 次，需关注是否便秘：两餐间记得喂水、多顺时针揉腹'
+       : (stats && stats.poop >= 3 ? '；昨日大便≥3 次，需关注拉肚子：注意保暖、防红屁屁' : '')) + '。\n'
+    + '【健康·出行】户外活动时间与时长（结合天气与昨日户外时长，给出具体时段如"上午9-10点、下午4-5点"及总时长建议）、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物；结合知识库「穿衣」给出是否戴帽子、是否裹薄包被/纱巾。\n'
+    + '【辅食提醒】若上方"辅食记录"备注含过敏/异常（如某品牌米粉过敏），在喂养或辅食处提醒今日更换品牌（具体到备注里的牌子）。\n'
+    + '【早教】放在最后一段输出。结合上方"前一日早教数据"：次数<1 的项目必须纳入今日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。\n'
     + '【温度要求】上方天气已给出当日最高温和最低温，请在「起居护理·穿衣」与「健康·出行」中明确写出具体温度数值（如"今日 28℃/19℃，短袖即可"），不要只写"根据天气"。\n'
-    + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【早教】【喂养】【起居护理】【健康·出行】分块给出内容。';
+    + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【喂养】【起居护理】【健康·出行】【早教】顺序分块给出内容（早教在最后）。';
 }
 function splitPlan(full) {
   if (!full) return { summary: '', detail: '' };
@@ -6276,14 +6361,21 @@ async function getAITagConfigWait() {
   }
   return cfg;
 }
+// v3.6.1 取「目标日期的前一天」的早教/大便/辅食/户外统计（如 10-14 的计划按 10-13 的记录）
+function planStatsDateStr(targetDateStr) {
+  const d = new Date((targetDateStr || getTodayDateStr()) + 'T00:00:00');
+  if (isNaN(d.getTime())) return getTodayDateStr();
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 async function generatePlanForTask(task, trig) {
   const cfg = await getAITagConfigWait();
   if (!cfg) { console.warn('[计划] 未配置 AI 密钥，跳过生成'); return; }
   const dateStr = trig.getFullYear() + '-' + _pad2(trig.getMonth() + 1) + '-' + _pad2(trig.getDate());
   let wText = '（未获取）';
   try { wText = weatherText(await fetchWeather(getWeatherAddr(), dateStr)); } catch (e) {}
-  // v3.6.0 取"生成日当天"的早教/大便/辅食/户外统计，供 AI 排次日计划
-  const stats = (typeof collectPlanDayStats === 'function') ? collectPlanDayStats(typeof getTodayDateStr === 'function' ? getTodayDateStr() : dateStr) : null;
+  // v3.6.1 统计前一天（目标日期 -1 天）的记录
+  const stats = (typeof collectPlanDayStats === 'function') ? collectPlanDayStats(planStatsDateStr(dateStr)) : null;
   const r = await callAIChat(cfg, [
     { role: 'system', content: buildPlanSystemPrompt(dateStr, wText, stats) },
     { role: 'user', content: '请为 ' + dateStr + '（地址：' + getWeatherAddr() + '）生成今日计划，严格按格式输出。' }
@@ -6332,7 +6424,11 @@ async function pushTask(task, trig, pk) {
   if (ok) {
     try { _cloudSchedMark(_sig); } catch (e) {}
     // v3.6.0 工资任务结算成功后记录本次结算日（=触发日），作为下一周期起点
-    if (task.type === 'wage') { task.lastWageDate = fmtDateLocal(trig); saveSchedTasks(); }
+    // v3.6.1 结算成功后：把当月休假日归档到备忘录已办、清空当月休假、切到下个月
+    if (task.type === 'wage') {
+      task.lastWageDate = fmtDateLocal(trig); saveSchedTasks();
+      try { archiveNannyMonth(getNannyMonth()); } catch (e) { console.warn('[Nanny] 归档失败', e); }
+    }
     if (task.freq === 'once') { task.enabled = false; saveSchedTasks(); }
   } else {
     // 推送失败：回滚认领状态，允许下一次调度重试，避免漏推
@@ -6689,7 +6785,10 @@ function onFreqChange() {
 function onModeChange() {
   const mode = document.querySelector('input[name="taskMode"]:checked').value;
   const f = document.getElementById('taskCustomField');
+  // v3.6.1 工资结算任务不需要填写内容（默认只读文案），隐藏自定义输入框
   if (f) f.style.display = mode === 'custom' ? 'block' : 'none';
+  const wf = document.getElementById('taskWageField');
+  if (wf) wf.style.display = mode === 'wage' ? 'block' : 'none';
   // v3.6.0 育儿嫂工资任务默认按月结算：选择工资类型时强制频率为「每月」并展示间隔
   if (mode === 'wage') { setRadio('taskFreq', 'monthly'); onFreqChange(); }
 }
@@ -7093,7 +7192,8 @@ function renderMilestoneInner() {
           `<span class="ms-tag" style="background:${d.color}22;color:${d.color}">${d.icon} ${d.name}</span>` +
           (it.isFirst ? `<span class="ms-first">首次</span>` : '') +
         `</div>` +
-        `<button class="ms-edit" onclick="openMsEdit(${gi})" title="修改类型/首次">✎</button>` +
+        // v3.6.1 编辑图标与首页记录卡一致（SVG 铅笔，复用 .rec-edit 样式）
+        `<span class="rec-edit ms-edit" onclick="openMsEdit(${gi})" title="修改类型/首次"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>` +
       `</div>`;
     }
     html += `<div class="ms-group">` +

@@ -1089,6 +1089,29 @@
   }
   .nanny-vac-chip b { font-weight: 700; opacity: .8; }
   .nanny-vac-chip:active { transform: scale(.96); }
+  /* v3.6.1 育儿嫂休假：可展开收起（同已办事项），默认收起 */
+  .nanny-vac-head {
+    display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700;
+    color: #dfe6e9; padding: 10px 4px 8px; cursor: pointer; user-select: none; -webkit-user-select: none;
+  }
+  .nanny-vac-head .chev { transition: transform .2s; display: inline-block; font-size: 9.8px; color: #fff; }
+  .nanny-vac-head.open .chev { transform: rotate(90deg); }
+  body.theme-day .nanny-vac-head { color: #3d4852; }
+  body.theme-day .nanny-vac-head .chev { color: #0984e3; }
+  .nanny-vac-head .cnt { font-size: 12px; opacity: .7; font-weight: 600; }
+  .nanny-vac-body { display: none; padding: 0 2px 4px; }
+  .nanny-vac-body.open { display: block; }
+  .nanny-month-label { font-size: 13px; font-weight: 700; color: #74b9ff; margin-right: 8px; }
+  body.theme-day .nanny-month-label { color: #0984e3; }
+  .nanny-month-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  /* v3.6.1 日期选择器多选提示条 */
+  .dp-multi-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin: 10px 2px 0; font-size: 12px; color: #b2bec3;
+  }
+  .dp-multi-bar .dp-quick-btn { border: 1px solid rgba(116,185,255,0.4); background: transparent; color: #74b9ff; }
+  body.theme-day .dp-multi-bar { color: #7b8a94; }
+  body.theme-day .dp-multi-bar .dp-quick-btn { color: #0984e3; border-color: rgba(9,132,227,0.4); }
   .memo-item { display: flex; align-items: flex-start; gap: 10px; padding: 11px 0;
     border-bottom: 1px solid rgba(255,255,255,0.06); }
   .memo-check {
@@ -1429,13 +1452,19 @@
     border-left: 3px solid #74b9ff;
     position: relative;
   }
+  /* v3.6.1 编辑图标与首页记录卡 .rec-edit 同款（SVG 铅笔） */
   .ms-edit {
     position: absolute; top: 6px; right: 6px;
     width: 24px; height: 24px; border-radius: 6px; border: none; cursor: pointer;
     background: rgba(255,255,255,0.1); color: #dfe6e9; font-size: 13px; line-height: 1;
     display: flex; align-items: center; justify-content: center;
+    padding: 2px; flex-shrink: 0; opacity: 0.7; transition: opacity 0.2s;
   }
-  .ms-edit:active { background: rgba(255,255,255,0.22); }
+  .ms-edit svg { width: 100%; height: 100%; display: block; stroke: #fff; stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .ms-edit:active { opacity: 1; background: rgba(255,255,255,0.22); }
+  .ms-edit:active svg { stroke: #74b9ff; }
+  body.theme-day .ms-edit svg { stroke: #3d4852; }
+  body.theme-day .ms-edit { background: rgba(61,72,82,0.08); }
   .ms-text { font-size: 13px; color: #dfe6e9; line-height: 1.45; word-break: break-word; }
   .ms-meta { margin-top: 5px; display: flex; gap: 5px; flex-wrap: wrap; }
   .ms-tag { font-size: 9.5px; padding: 1.5px 6px; border-radius: 8px; font-weight: 600; }
@@ -1934,7 +1963,20 @@
   /* v3.5.162 分类选择弹窗按钮网格 */
   .ee-cat-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 6px 2px 2px; }
   .ee-cat-pick .fab-btn { justify-content: center; }
-  /* v3.6.0 上传前提示：仅支持本地音频文件与录音，图片/视频不可用 */
+  /* v3.6.1 工资结算任务：只读默认内容预览 */
+  .te-wage-preview {
+    background: rgba(0,0,0,0.35); border: 1px dashed rgba(253,203,110,0.45);
+    border-radius: 10px; padding: 12px 14px; font-size: 14px; color: #fdcb6e; line-height: 1.6;
+    word-break: break-all;
+  }
+  body.theme-day .te-wage-preview { background: rgba(9,132,227,0.06); border-color: rgba(9,132,227,0.35); color: #0984e3; }
+  /* v3.6.1 音频分类下拉单选 */
+  .ee-cat-select-row { display: flex; align-items: center; gap: 10px; padding: 6px 2px 2px; }
+  .ee-cat-select {
+    flex: 1 1 auto; min-width: 0; background: rgba(0,0,0,0.35); border: 1px solid rgba(116,185,255,0.4);
+    border-radius: 10px; color: #fff; font-size: 15px; padding: 11px 12px; outline: none; font-family: inherit;
+  }
+  body.theme-day .ee-cat-select { background: rgba(9,132,227,0.06); border-color: rgba(9,132,227,0.35); color: #3d4852; }
   .ee-cat-pick-hint { margin-top: 10px; font-size: 12px; line-height: 1.6; color: #b2bec3; }
   body.theme-day .ee-cat-pick-hint { color: #7b8a94; }
   /* v3.5.160 选免版权分组 */
@@ -1995,6 +2037,8 @@
   body.theme-day .te-input { background: #fff; border-color: rgba(9,132,227,0.2); color: #2d3436; }
   /* v3.5.135 日期选择器浮层需盖在任务编辑弹窗/管理弹窗之上 */
   #historyDatePickerModal { z-index: 600; }
+  /* v3.6.1 里程碑编辑弹窗必须盖过分析/管理等已打开的大弹窗（同为 .modal-overlay z-index:200，按 DOM 顺序后者覆盖前者） */
+  #msEditModal { z-index: 700; }
   .te-textarea { width: 100%; box-sizing: border-box; min-height: 110px; resize: vertical; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.2); color: #dfe6e9; padding: 10px; font-size: 14px; line-height: 1.6; font-family: inherit; }
   body.theme-day .te-textarea { background: #fff; border-color: rgba(9,132,227,0.2); color: #2d3436; }
   /* 首页总览底部行：今日计划（第一行，左对齐满宽）+ 日报（下一行，仍贴最右） */
@@ -2251,12 +2295,20 @@
     </div>
     <div class="memo-done-body" id="memoDoneBody"></div>
     <!-- v3.6.0 育儿嫂休假：记录休假日期，自动算当月已工作天数，并供工资任务扣减 -->
-    <div class="memo-section-title">👩 育儿嫂休假 <span class="cnt" id="nannyVacDays">0</span></div>
-    <div class="nanny-vac-row">
-      <button class="fab-btn" type="button" onclick="openNannyVacationPicker()"><span class="fab-icon fab-emoji">📅</span>添加休假日期</button>
-      <span class="nanny-work-days" id="nannyWorkDays"></span>
+    <!-- v3.6.1 改为可展开收起（同已办事项，默认收起）；月份显示当前年月如 2026-10；日期支持多选 -->
+    <div class="nanny-vac-head" id="nannyVacHead" onclick="toggleNannyVacExpand()">
+      <span class="chev">▶</span><span>👩 育儿嫂休假</span><span class="cnt" id="nannyVacDays">0</span>
     </div>
-    <div id="nannyVacList" class="nanny-vac-list"></div>
+    <div class="nanny-vac-body" id="nannyVacBody">
+      <div class="nanny-month-row">
+        <span class="nanny-month-label" id="nannyMonthLabel">—</span>
+        <span class="nanny-work-days" id="nannyWorkDays"></span>
+      </div>
+      <div class="nanny-vac-row">
+        <button class="fab-btn" type="button" onclick="openNannyVacationPicker()"><span class="fab-icon fab-emoji">📅</span>添加</button>
+      </div>
+      <div id="nannyVacList" class="nanny-vac-list"></div>
+    </div>
   </div>
 </div>
 <!-- 历史 -->
@@ -2301,6 +2353,10 @@
       <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
     </div>
     <div class="dp-grid" id="dpGrid"></div>
+    <div class="dp-multi-bar" id="dpMultiBar" style="display:none;">
+      <span id="dpMultiHint">点选日期，可多选</span>
+      <button class="dp-quick-btn" onclick="dpClearPicked()">清空所选</button>
+    </div>
     <div class="dp-quick" id="dpQuick">
       <button class="dp-quick-btn" onclick="dpPickQuick(1)">昨天</button>
       <button class="dp-quick-btn" onclick="dpPickQuick(2)">前天</button>
@@ -2452,7 +2508,8 @@
         <span id="eeUploadBtnWrap"><button class="fab-btn" onclick="eeTriggerUpload()"><span class="fab-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg></span> 本地上传</button></span>
         <button class="fab-btn" id="eeWikiBtn" onclick="eeShowWiki()"><span class="fab-icon fab-emoji">🌐</span> 选免版权</button>
       </div>
-      <input type="file" id="eeFileInput" accept="audio/*,.mp3,.m4a,.m4b,.aac,.wav,.ogg,.oga,.opus,.flac,.amr,.awb,.caf,.aif,.aiff,.wma,.weba" multiple style="display:none;" onchange="eeOnFiles(this)">
+      <!-- v3.6.1 accept 收紧为纯 audio/*（不带扩展名列表），避免系统文件选择器把「照片和视频」等非音频入口列出来 -->
+      <input type="file" id="eeFileInput" accept="audio/*" multiple style="display:none;" onchange="eeOnFiles(this)">
       <div class="ee-list" id="eeList"></div>
     </div>
     <!-- v3.5.69 底部固定操作条：选项区很长，滚到最底下也能一键关闭（选项为即时保存，无需"保存"按钮） -->
@@ -2513,6 +2570,12 @@
       <div class="te-label">自定义内容</div>
       <textarea id="taskCustom" class="te-textarea" placeholder="输入要推送的消息内容"></textarea>
     </div>
+    <!-- v3.6.1 工资结算：无需填写内容，推送时自动按默认格式生成（只读） -->
+    <div class="te-field" id="taskWageField" style="display:none;">
+      <div class="te-label">推送内容（自动生成，无需填写）</div>
+      <div class="te-wage-preview" id="taskWagePreview">年-月：休假 天，工作 天，应发工资 元，请转账。</div>
+      <div class="te-hint">按「月薪 ÷ 26 天 × 实际工作天数」计算；工作天数 = 周期总天数 − 备忘录中的休假天数。结算成功后会清空当月休假并切换到下个月。</div>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-success" onclick="saveTask()">确定</button>
     </div>
@@ -2546,11 +2609,15 @@
   <div class="modal-box" onclick="event.stopPropagation()" style="max-width:360px;">
     <button class="modal-close" onclick="hideModal('eeCatPickModal')">&times;</button>
     <div class="modal-title" id="eeCatPickTitle">选择分类</div>
-    <div class="ee-cat-pick">
-      <button class="fab-btn" onclick="eePickCat('儿歌')"><span class="fab-icon fab-emoji">🎶</span> 儿歌</button>
-      <button class="fab-btn" onclick="eePickCat('古诗')"><span class="fab-icon fab-emoji">📜</span> 古诗</button>
-      <button class="fab-btn" onclick="eePickCat('故事(中文)')"><span class="fab-icon fab-emoji">📚</span> 故事(中文)</button>
-      <button class="fab-btn" onclick="eePickCat('故事(英文)')"><span class="fab-icon fab-emoji">📖</span> 故事(英文)</button>
+    <!-- v3.6.1 分类改为下拉框单选（儿歌/古诗/故事中文/故事英文） -->
+    <div class="ee-cat-select-row">
+      <select class="ee-cat-select" id="eeCatPickSelect">
+        <option value="儿歌">🎶 儿歌</option>
+        <option value="古诗">📜 古诗</option>
+        <option value="故事(中文)">📚 故事(中文)</option>
+        <option value="故事(英文)">📖 故事(英文)</option>
+      </select>
+      <button class="btn btn-primary" onclick="eeConfirmPickCat()">确定</button>
     </div>
     <div class="ee-cat-pick-hint" id="eeCatPickHint" style="display:none;"></div>
   </div>
@@ -2720,6 +2787,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.6.0"></script>
+<script src="app.js?v=v3.6.1"></script>
 </body>
 </html>

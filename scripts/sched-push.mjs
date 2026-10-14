@@ -29,7 +29,7 @@ const SCHED_DEDUP_KEY = '_schedpushdedup';
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内推送
 const SCHED_GEN_LEAD = 12 * 3600000;     // 提前 12 小时生成计划
 const DEDUP_MAX_AGE = 12 * 3600000;      // 去重有效期
-const PLAN_PROMPT_VERSION = '5'; // v3.6.0 计划prompt新增【早教】段/大便/辅食/户外统计/M-W-F补剂判定/辅食过敏换品牌提醒
+const PLAN_PROMPT_VERSION = '6'; // v3.6.1 计划prompt: 早教段移到输出最后; 早教/大便/辅食/户外统计口径改为「目标日期的前一天」
 
 // v3.6.0 育儿嫂休假 / 工资结算常量（与前端一致）
 const NANNY_VACATION_CLOUD_KEY = '_nanny_vacation';
@@ -199,14 +199,14 @@ function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec) {
   const ad = getAgeDetail(ctx.birthDate, dateStr);
   const h = ctx.height || '', w = ctx.weight || '';
   const kbPart = (ctx.kb || []).slice(0, 50).map(x => '- [' + x.cat + '] ' + x.text).join('\n');
-  // v3.6.0 目标日星期（M/W/F 补剂判定）与生成日当天早教/大便/辅食统计
+  // v3.6.1 目标日星期（M/W/F 补剂判定）与「前一日」早教/大便/辅食统计
   const targetDow = new Date(dateStr + 'T00:00:00').getDay();
   const targetIsMWF = (targetDow === 1 || targetDow === 3 || targetDow === 5);
   let dayPart = '';
   if (stats) {
     const c = stats.counts;
     const eeLine = Object.keys(PLAN_EE_TYPES).map(k => PLAN_EE_TYPES[k] + c[k] + '次').join('、');
-    dayPart = '\n【生成日当天已记录的早教/起居数据（用于安排次日计划）】\n'
+    dayPart = '\n【前一日已记录的早教/起居数据（用于安排今日计划）】\n'
       + '- 早教各项次数：' + eeLine + '\n'
       + '- 大便次数：' + stats.poop + ' 次\n'
       + '- 户外时长：' + stats.outdoorMin + ' 分钟\n'
@@ -220,19 +220,19 @@ function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec) {
     + '\n【家庭知识库（优先参考，含权威育儿资料与早教/穿衣建议）】\n' + (kbPart || '（暂无）') + '\n'
     + dayPart
     + '\n【目标日期天气】' + dateStr + '（' + PLAN_DOW[targetDow] + '） ' + wText + '\n'
-    + '\n【规划规则——请严格按以下四部分输出】\n'
-    + '【早教】结合上方"生成日当天早教数据"：次数<1 的项目必须纳入明日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。\n'
+    + '\n【规划规则——请严格按以下四部分输出，顺序固定：喂养 → 起居护理 → 健康·出行 → 早教（早教必须放在最后）】\n'
     + '【喂养】单次奶量、喝奶次数、辅食（尝试食物及量）、喝水、过敏/防呛提醒；'
-    + (targetIsMWF ? ('明日为' + PLAN_DOW[targetDow] + '（周一/三/五补剂日），营养补剂请安排：' + (supRec || 'D3') + '（与上次相反）。')
-                   : '明日非周一/周三/周五，营养补剂项写明「今日无需补剂」。')
+    + (targetIsMWF ? ('今日为' + PLAN_DOW[targetDow] + '（周一/三/五补剂日），营养补剂请安排：' + (supRec || 'D3') + '（与上次相反）。')
+                   : '今日非周一/周三/周五，营养补剂项写明「今日无需补剂」。')
     + '\n'
     + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度，据此建议穿什么、几件多厚，参考知识库「穿衣」）；洗澡、剪指甲、睡眠、排便关注'
-    + (stats && stats.poop === 0 ? '；今日大便 0 次，需关注是否便秘：两餐间记得喂水、多顺时针揉腹'
-       : (stats && stats.poop >= 3 ? '；今日大便≥3 次，需关注拉肚子：注意保暖、防红屁屁' : '')) + '。\n'
-    + '【健康·出行】户外活动时间与时长（结合天气与今日户外时长，给出具体时段如"上午9-10点、下午4-5点"及总时长建议）、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物；结合知识库「穿衣」给出是否戴帽子、是否裹薄包被/纱巾。\n'
-    + '【辅食提醒】若上方"辅食记录"备注含过敏/异常（如某品牌米粉过敏），在喂养或辅食处提醒明日更换品牌（具体到备注里的牌子）。\n'
+    + (stats && stats.poop === 0 ? '；昨日大便 0 次，需关注是否便秘：两餐间记得喂水、多顺时针揉腹'
+       : (stats && stats.poop >= 3 ? '；昨日大便≥3 次，需关注拉肚子：注意保暖、防红屁屁' : '')) + '。\n'
+    + '【健康·出行】户外活动时间与时长（结合天气与昨日户外时长，给出具体时段如"上午9-10点、下午4-5点"及总时长建议）、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物；结合知识库「穿衣」给出是否戴帽子、是否裹薄包被/纱巾。\n'
+    + '【辅食提醒】若上方"辅食记录"备注含过敏/异常（如某品牌米粉过敏），在喂养或辅食处提醒今日更换品牌（具体到备注里的牌子）。\n'
+    + '【早教】放在最后一段输出。结合上方"前一日早教数据"：次数<1 的项目必须纳入今日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。\n'
     + '【温度要求】上方天气已给出当日最高温和最低温，请在「起居护理·穿衣」与「健康·出行」中明确写出具体温度数值（如"今日 28℃/19℃，短袖即可"），不要只写"根据天气"。\n'
-    + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【早教】【喂养】【起居护理】【健康·出行】分块给出内容。';
+    + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【喂养】【起居护理】【健康·出行】【早教】顺序分块给出内容（早教在最后）。';
 }
 function splitPlan(full) {
   if (!full) return { summary: '', detail: '' };
@@ -277,12 +277,37 @@ function computeWage(task, trig, vacList) {
   return { dailyRate, totalDays, vacDays, workDays, wage, startStr, endStr: fmtDateLocal(new Date(end.getTime() - 86400000)) };
 }
 function wagePushContent(w) {
-  return `结算周期：${w.startStr} ~ ${w.endStr}（${w.totalDays} 天）\n`
-    + `周期总天数：${w.totalDays} 天\n`
-    + `休假天数：${w.vacDays} 天\n`
-    + `实际工作天数：${w.workDays} 天\n`
-    + `日工资标准：¥${w.dailyRate.toFixed(2)}（${NANNY_BASE_SALARY}÷${NANNY_PAY_DIVISOR}）\n`
-    + `应付工资：¥${w.wage}`;
+  // v3.6.1 固定默认格式（前端任务编辑不再填写内容）：「YYYY-MM：休假 X 天，工作 Y 天，应发工资 Z 元，请转账。」
+  const ym = (w.endStr || '').slice(0, 7);
+  return `${ym}：休假 ${w.vacDays} 天，工作 ${w.workDays} 天，应发工资 ${w.wage} 元，请转账。`;
+}
+// v3.6.1 月度归档：工资结算推送成功后，把当月休假日归档进备忘录已办事项、清空当月休假、切到下个月
+async function archiveNannyMonthCloud(fid, key, monthKey, nannyVac) {
+  const ym = monthKey;
+  const monthList = nannyVac.filter(d => typeof d === 'string' && d.slice(0, 7) === ym);
+  const rest = nannyVac.filter(d => !(typeof d === 'string' && d.slice(0, 7) === ym));
+  if (!monthList.length) return 0;
+  // ① 写备忘录已办事项（与前端 loadMemoCloud 合并策略一致：云端先入、服务端后入）
+  try {
+    const rows = await sbGet(`family_config?family_id=eq.${fid}&config_key=eq._memo&select=encrypted_data,iv`);
+    let arr = [];
+    if (rows.length && rows[0].encrypted_data && rows[0].iv) {
+      try { const p = JSON.parse(decrypt(key, rows[0].encrypted_data, rows[0].iv)); if (Array.isArray(p)) arr = p; } catch { /* ignore */ }
+    }
+    const maxId = arr.reduce((m, x) => Math.max(m, (x && x.id) || 0), 0);
+    arr.unshift({ id: maxId + 1, done: true, date: fmtDateLocal(new Date()),
+      text: '👩 育儿嫂休假 ' + ym + '：' + monthList.join('、') + '（共 ' + monthList.length + ' 天）' });
+    const enc = encrypt(key, JSON.stringify(arr));
+    await sbUpsert('family_config', { family_id: fid, config_key: '_memo', encrypted_data: enc.data, iv: enc.iv, last_modified: Date.now() });
+    console.log('[Nanny] 已归档当月休假日到备忘录已办事项', ym, monthList.length, '天');
+  } catch (e) { console.warn('[Nanny] 备忘录归档失败', e && e.message); }
+  // ② 清空当月休假并写回云端
+  try {
+    const enc2 = encrypt(key, JSON.stringify(rest));
+    await sbUpsert('family_config', { family_id: fid, config_key: NANNY_VACATION_CLOUD_KEY, encrypted_data: enc2.data, iv: enc2.iv, last_modified: Date.now() });
+    console.log('[Nanny] 已清空当月休假', ym, '剩余', rest.length, '天');
+  } catch (e) { console.warn('[Nanny] 休假回写失败', e && e.message); }
+  return monthList.length;
 }
 
 /* ==================== 天气（Open-Meteo） ==================== */
@@ -348,16 +373,16 @@ async function generatePlan(task, trig, ctx, fid, key) {
   if (DRY_RUN) { console.log('[DRY] 触发计划生成（跳过真实调用）', dateStr); return false; }
   let wText = '（未获取）';
   try { wText = await weatherText(ctx.weatherAddr, dateStr); } catch { /* ignore */ }
-  // v3.6.0 取"生成日当天"(今天)的早教/大便/辅食/户外统计 + 最近补剂，供 AI 排次日计划
+  // v3.6.1 统计「目标日期的前一天」的记录（如 10-14 的计划按 10-13 的记录）
   let stats = null, supRec = 'AD';
   if (key && fid) {
     try {
-      const genDay = new Date();
-      const genStr = genDay.getFullYear() + '-' + pad2(genDay.getMonth() + 1) + '-' + pad2(genDay.getDate());
-      const recs = await fetchDayRecords(fid, key, genStr);
+      const prev = new Date(trig.getTime() - 86400000);
+      const prevStr = prev.getFullYear() + '-' + pad2(prev.getMonth() + 1) + '-' + pad2(prev.getDate());
+      const recs = await fetchDayRecords(fid, key, prevStr);
       stats = collectPlanDayStats(recs);
       supRec = await recentSupplement(fid, key);
-      console.log('[计划] 生成日统计', genStr, '早教=', JSON.stringify(stats && stats.counts), '大便=', stats && stats.poop, '户外=', stats && stats.outdoorMin, '补剂=', supRec);
+      console.log('[计划] 前一日统计', prevStr, '早教=', JSON.stringify(stats && stats.counts), '大便=', stats && stats.poop, '户外=', stats && stats.outdoorMin, '补剂=', supRec);
     } catch (e) { console.warn('[计划] 统计读取失败', e && e.message); }
   }
   const r = await callAI(ctx.ai, [
@@ -482,7 +507,13 @@ async function main() {
     if (ok) {
       await cloudMark(fid, sig);
       task.pushPeriod = pk; task.pushTs = Date.now();
-      if (task.type === 'wage') { task.lastWageDate = fmtDateLocal(trig); }
+      if (task.type === 'wage') {
+        task.lastWageDate = fmtDateLocal(trig);
+        // v3.6.1 结算成功后归档：当月休假 → 备忘录已办，清空当月休假，前端切到下个月
+        const ym = fmtDateLocal(new Date(trig.getTime() - 86400000)).slice(0, 7);
+        try { nannyVac = (await fetchNannyVacation(fid, key)); await archiveNannyMonthCloud(fid, key, ym, nannyVac); }
+        catch (e) { console.warn('[Nanny] 归档失败', e && e.message); }
+      }
       if (task.freq === 'once') task.enabled = false;
       changed = true;
     } else {
