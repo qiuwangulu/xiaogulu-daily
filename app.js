@@ -232,6 +232,9 @@ function init() {
   loadMemoCloud().catch(() => {});   // v3.5.115 备忘录启动即从家庭云恢复（本地优先合并）
   loadMsOverrideCloud().catch(() => {}); // v3.6.0 里程碑类型/首次覆盖 启动即从家庭云恢复
   loadNannyVacationCloud().catch(() => {}); // v3.6.0 育儿嫂休假 启动即从家庭云恢复
+  loadAchLikesLocal();
+  loadAchLikesCloud().then(() => refreshAchLikeUI()).catch(() => {}); // v3.6.7 成就点赞启动即从家庭云恢复
+  setInterval(() => { if (!document.hidden) loadAchLikesCloud().then(() => refreshAchLikeUI()).catch(() => {}); }, 30000); // 家人点赞后本机及时可见
   loadEarlyEdu().then(() => { renderEarlyEduCard(); }).catch(() => {}); // v3.5.157 早教音频
   eeSetupMediaSession(); // v3.5.157 锁屏播放/停止
   bindVoiceTouch();
@@ -981,12 +984,15 @@ function updateOverview(skipPush) {
 
   const planHtml = renderTodayPlanCardHTML();
   const achArr = computeAchievements(records);
+  const _achDs = getTodayDateStr();
   let achHtml = '';
-  if (achArr.length > 0) {
-    achHtml = `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> ${achArr.join(' | ')}</span></div>`;
-  } else {
-    achHtml = `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> 无</span></div>`;
-  }
+  const achItems = achArr.length > 0
+    ? achArr.map(n => {
+        const _liked = isAchLiked(_achDs, n);
+        return `<span class="ov-ach-item">${escapeHtml(n)}<button class="ach-like-btn${_liked ? ' liked' : ''}" data-ds="${escapeHtml(_achDs)}" data-note="${escapeHtml(n)}" onclick="toggleAchLike(this.dataset.ds, this.dataset.note, event)" title="${_liked ? '取消点赞' : '点赞'}">👍</button></span>`;
+      }).join('')
+    : '无';
+  achHtml = `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> <span class="ov-ach-items">${achItems}</span></span></div>`;
 
   // v3.5.145 总览卡片内：今日计划（上）→ 今日成就（中）；日报胶囊已移至卡片下方独立渲染
   html += '<div class="ov-bottom-row">' + planHtml + achHtml + '</div>';
@@ -1386,7 +1392,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.6'; // v3.6.6: 根治 0 点档「今日计划不更新/不可编辑」第二层根因——定时任务云同步此前只有推送没有拉取：①服务端 0 点生成的当天计划手机端看不到；②_schedCloudLast 是内存变量、每次开 app 必把本地陈旧状态推上云覆盖服务端计划。新增 loadSchedCloud() 开 app 先拉取合并（按任务 id：云端 genDate 更新以云端为准/本地编辑优先/删除任务墓碑不复活），拉取完成前不推送；本地缺 AI密钥/天气地址/推送token 时用云端 ctx 兜底；页面常开时每 5 分钟+切回前台补拉云
+const APP_VERSION = 'v3.6.7'; // v3.6.7: 首页今日成就新增点赞/取消点赞（👍），点赞状态加密同步家庭云(_ach_like)所有家人可见；历史与成长里程碑只读展示点赞图标（不可取消）。点赞 key=记录日期::成就文本（首页用业务日/历史用所选日/里程碑用记录日，三处引用同一物理记录保持一致）
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2852,7 +2858,10 @@ function loadHistory() {
   const _hvc = document.body.classList.contains('theme-day') ? '#3d4852' : '#ffffff';
   const _hvVal = document.body.classList.contains('theme-day') ? '#d68910' : '#ffeaa7';
   let sHtml = `<div class="history-sum-row"><span class="hs-label" style="color:${_hvc}">🍼 水+奶量</span><span class="hs-value" style="color:${_hvVal};font-weight:400">${Math.round(totalMilk * 1.12)} ml</span></div>`;
-  sHtml += `<div class="history-sum-row"><span class="hs-label" style="color:${_hvc}">🏆 今日成就</span><span class="hs-value" style="color:${_hvVal};font-weight:400">${achArr.length > 0 ? achArr.join(' | ') : '无'}</span></div>`;
+  const _achVal = achArr.length > 0
+    ? achArr.map(n => `${escapeHtml(n)}${isAchLiked(ds, n) ? ' <span class="ach-like-icon" title="已点赞">👍</span>' : ''}`).join(' | ')
+    : '无';
+  sHtml += `<div class="history-sum-row"><span class="hs-label" style="color:${_hvc}">🏆 今日成就</span><span class="hs-value" style="color:${_hvVal};font-weight:400">${_achVal}</span></div>`;
   if (summary) { summary.innerHTML = sHtml; summary.style.display = 'flex'; }
   // 按活动开始时间正序排列
   const sorted = [...records].sort((a, b) => {
@@ -7261,6 +7270,67 @@ async function loadMsOverrideCloud() {
     }
   } catch (e) { console.warn('[里程碑] 云加载失败', e); }
 }
+
+/* ==================== 成就点赞（v3.6.7） ====================
+ * 首页「今日成就」每条可点赞 / 取消点赞；点赞状态加密同步家庭云，所有家人可见。
+ * 历史、成长里程碑只读展示点赞图标（👍），不可取消。
+ * 点赞 key = 记录日期::成就文本（achLikeKey）：首页用业务日(getTodayDateStr)、历史用所选日期、
+ * 里程碑用记录日期 it.date —— 三者都引用同一批物理记录(records_<日期>)的同一 key，保持一致。
+ */
+const LIKE_CLOUD_KEY = '_ach_like';
+let _achLikes = {};                 // { "ds::note": true }
+function achLikeKey(ds, note) { return ds + '::' + String(note == null ? '' : note); }
+function isAchLiked(ds, note) { return !!_achLikes[achLikeKey(ds, note)]; }
+function loadAchLikesLocal() {
+  try { _achLikes = JSON.parse(localStorage.getItem('ach_likes') || '{}') || {}; } catch (e) { _achLikes = {}; }
+}
+function saveAchLikesLocal() {
+  try { localStorage.setItem('ach_likes', JSON.stringify(_achLikes)); } catch (e) {}
+}
+// 从家庭云拉取点赞并与本地合并（并集）：云端新增的点赞补到本地，本地删除的（本机取消）以本地为准
+async function loadAchLikesCloud() {
+  if (typeof isSyncReady !== 'function' || !isSyncReady()) return false;
+  try {
+    const key = await getCryptoKey(); if (!key) return false;
+    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${LIKE_CLOUD_KEY}&select=encrypted_data,iv`);
+    if (!rows || !rows.length || !rows[0].encrypted_data || !rows[0].iv) return false;
+    const obj = JSON.parse(await decrypt(key, rows[0].encrypted_data, rows[0].iv));
+    const cloud = (obj && obj.likes) || {};
+    let changed = false;
+    for (const k in cloud) { if (cloud[k] && !_achLikes[k]) { _achLikes[k] = true; changed = true; } }
+    if (changed) saveAchLikesLocal();
+    return changed;
+  } catch (e) { console.warn('[点赞] 云端加载失败', e); return false; }
+}
+// 把本地点赞推送到家庭云（全量写入；本机取消掉的 key 不在 _achLikes 中即被移除）
+async function saveAchLikesCloud() {
+  if (typeof isSyncReady !== 'function' || !isSyncReady()) return;
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    const body = JSON.stringify({ likes: _achLikes, ts: Date.now() });
+    const { data, iv } = await encrypt(key, body);
+    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: LIKE_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
+  } catch (e) { console.warn('[点赞] 云端保存失败', e); }
+}
+// 切换点赞（仅首页可操作）：先拉云端合并，再翻转本地，再推送，最后刷新相关视图
+async function toggleAchLike(ds, note, evt) {
+  const k = achLikeKey(ds, note);
+  try { await loadAchLikesCloud(); } catch (e) {}
+  if (_achLikes[k]) delete _achLikes[k]; else _achLikes[k] = true;
+  saveAchLikesLocal();
+  try { await saveAchLikesCloud(); } catch (e) {}
+  refreshAchLikeUI(ds);
+  if (evt && evt.stopPropagation) evt.stopPropagation();
+}
+// 点赞状态变化后刷新三处视图（仅刷新当前可见者，避免无谓重绘）
+function refreshAchLikeUI() {
+  try { updateOverview(true); } catch (e) {}
+  const histModal = document.getElementById('historyModal');
+  if (histModal && histModal.classList.contains('show')) { try { loadHistory(); } catch (e) {} }
+  const tl = document.getElementById('milestoneTimeline');
+  if (tl) { try { tl.innerHTML = renderMilestoneInner(); } catch (e) {} }
+}
+
 let _milestoneItems = [];
 let _milestoneExpanded = false;
 const MILESTONE_PREVIEW = 5;
@@ -7371,6 +7441,7 @@ function renderMilestoneInner() {
         `<div class="ms-meta">` +
           `<span class="ms-tag" style="background:${d.color}22;color:${d.color}">${d.icon} ${d.name}</span>` +
           (it.isFirst ? `<span class="ms-first">首次</span>` : '') +
+          (isAchLiked(it.date, it.text) ? `<span class="ms-like-icon" title="已点赞">👍</span>` : '') +
         `</div>` +
         // v3.6.1 编辑图标与首页记录卡一致（SVG 铅笔，复用 .rec-edit 样式）
         `<span class="rec-edit ms-edit" onclick="openMsEdit(${gi})" title="修改类型/首次"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>` +

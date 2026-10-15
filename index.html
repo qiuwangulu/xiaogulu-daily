@@ -149,6 +149,14 @@
   .overview-achievement .ov-icon { font-size: 15px; flex-shrink: 0; }
   .overview-achievement .ov-text { flex: 1; color: #ffeaa7; font-size: 14px; }
   .overview-achievement .ov-text .ov-label { color: #fff; }
+  /* v3.6.7 今日成就逐条点赞 chip */
+  .overview-achievement .ov-ach-items { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+  .overview-achievement .ov-ach-item { display: inline-flex; align-items: center; gap: 2px; line-height: 1.6; }
+  .ach-like-btn { background: none; border: none; cursor: pointer; font-size: 13px; line-height: 1; padding: 1px 3px; margin: 0; opacity: .5; transition: transform .12s, opacity .12s; color: inherit; }
+  .ach-like-btn:hover { opacity: .8; }
+  .ach-like-btn.liked { opacity: 1; }
+  .ach-like-btn:active { transform: scale(1.35); }
+  .ach-like-icon, .ms-like-icon { font-size: 12px; opacity: .85; vertical-align: middle; }
   /* v3.5.106 总览内「日报」小组件（点击弹窗看完整日报） */
   /* v3.5.107 日报色号统一为「选中的分类标签字体色」(.cat-tag.active)：深色 #fff / 浅色 #0984e3 */
   /* v3.5.109 日报胶囊右移；v3.5.110 底色 = 首页「选中的分类标签」底色（深色 #24375c / 浅色 #d8e9fa） */
@@ -2827,6 +2835,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.6.6"></script>
+<script src="app.js?v=v3.6.7"></script>
 </body>
 </html>
