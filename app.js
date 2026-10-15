@@ -890,17 +890,18 @@ function doPush(achArr, totalMilk, newAchievements) {
     try {
       const ds = getTodayDateStr();
 
-      // v3.6.3 通知标题明确「本次新增」语义，不再罗列全天全部内容
-      const newN = newAchievements.length;
-      const displayTitle = newN > 3
-        ? `🏆 新增${newN}条：` + newAchievements.slice(0, 3).join(' · ') + ` 等${newN}条`
-        : `🏆 新增${newN}条：` + newAchievements.join(' · ');
+      // v3.6.12 通知标题 = 本次更新的内容本身（去掉「新增N条：」前缀）
+      const displayTitle = newAchievements.join(' · ');
 
-      // v3.6.3 详情只呈现「本次更新」的成就：标题写本次新增，列表不再含全天历史内容
+      // v3.6.12 详情：点开后呈现「今日成就」的全部内容，其中本次新增的条目高亮
       const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      const items = newAchievements.map(a =>
-        `<li><span style="background:#ffecb3;color:#c0392b;font-weight:bold;padding:1px 4px;border-radius:3px;">${esc(a)}</span></li>`
-      ).join('');
+      const newSet = new Set(newAchievements);
+      const items = achArr.map(a => {
+        const inner = newSet.has(a)
+          ? `<span style="background:#ffecb3;color:#c0392b;font-weight:bold;padding:1px 4px;border-radius:3px;">${esc(a)}</span>`
+          : esc(a);
+        return `<p style="margin:3px 0;">${inner}</p>`;
+      }).join('');
       // 当天统计（v3.5.79 统一走 getRecordsByDate 过滤脏记录）
       const recs = getRecordsByDate(ds);
       let poopCount = 0, outdoorMin = 0, sleepMin = 0;
@@ -910,9 +911,9 @@ function doPush(achArr, totalMilk, newAchievements) {
         else if (r.type === 'sleep' && r.duration) sleepMin += r.duration;
       });
       const fmtDur = min => { min = Math.round(min); const h = Math.floor(min / 60), m = min % 60; if (h > 0 && m > 0) return `${h}小时${m}分钟`; return h > 0 ? `${h}小时` : `${m}分钟`; };
-      const achBlock = items ? `<p><b>🏆 本次新增成就:</b></p><ul>${items}</ul>` : '';
-      const content = `<h3>小咕噜今日成就 · 本次新增 ${newN} 条 · ${ds}</h3>` + achBlock +
-        `<p><b>🍼 水+奶量:</b> ${Math.round(totalMilk * 1.12)} ml</p>` +
+      const content = `<h3>小咕噜的今日成就 ${ds}</h3>` +
+        `<p><b>🏆 今日成就（加亮为本次新增）：</b></p>` + items +
+        `<p><b>💧 水+奶量:</b> ${Math.round(totalMilk * 1.12)} ml</p>` +
         `<p><b>💩 大便次数:</b> ${poopCount} 次</p>` +
         `<p><b>☀️ 户外活动:</b> ${fmtDur(outdoorMin)}</p>` +
         `<p><b>😴 睡眠时长:</b> ${fmtDur(sleepMin)}</p>`;
@@ -990,9 +991,9 @@ function updateOverview(skipPush) {
     // v3.6.9 今日成就整体只保留一个赞（按天）：图标放大一倍、点赞/取消区分度明显
     const _liked = isAchLiked(_achDs);
     const _likeBtn = `<button class="ach-like-btn${_liked ? ' liked' : ''}" data-ds="${escapeHtml(_achDs)}" onclick="toggleAchLike(this.dataset.ds, event)" title="${_liked ? '取消点赞' : '点赞'}" aria-label="${_liked ? '取消点赞' : '点赞'}">👍</button>`;
-    achHtml = `<div class="overview-achievement">${_likeBtn}<span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> ${achArr.map(n => escapeHtml(n)).join(' | ')}</span></div>`;
+    achHtml = `<div class="overview-achievement"><span class="ov-text"><span class="ov-icon">🏆</span> <span class="ov-label">今日成就:</span> ${achArr.map(n => escapeHtml(n)).join(' | ')}</span>${_likeBtn}</div>`;
   } else {
-    achHtml = `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> 无</span></div>`;
+    achHtml = `<div class="overview-achievement"><span class="ov-text"><span class="ov-icon">🏆</span> <span class="ov-label">今日成就:</span> 无</span></div>`;
   }
 
   // v3.5.145 总览卡片内：今日计划（上）→ 今日成就（中）；日报胶囊已移至卡片下方独立渲染
@@ -1393,7 +1394,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.11'; // v3.6.11: 首页今日成就点赞按钮改为 float:right 上移至成就文字块右上、「今日成就」标签行的下一行最右侧（文字环绕其左侧，不再沉在整段文字最底部）。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
+const APP_VERSION = 'v3.6.12'; // v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
