@@ -990,7 +990,7 @@ function updateOverview(skipPush) {
     // v3.6.9 今日成就整体只保留一个赞（按天）：图标放大一倍、点赞/取消区分度明显
     const _liked = isAchLiked(_achDs);
     const _likeBtn = `<button class="ach-like-btn${_liked ? ' liked' : ''}" data-ds="${escapeHtml(_achDs)}" onclick="toggleAchLike(this.dataset.ds, event)" title="${_liked ? '取消点赞' : '点赞'}" aria-label="${_liked ? '取消点赞' : '点赞'}">👍</button>`;
-    achHtml = `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> ${achArr.map(n => escapeHtml(n)).join(' | ')}</span>${_likeBtn}</div>`;
+    achHtml = `<div class="overview-achievement"><div class="ov-ach-main"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> ${achArr.map(n => escapeHtml(n)).join(' | ')}</span></div>${_likeBtn}</div>`;
   } else {
     achHtml = `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> 无</span></div>`;
   }
@@ -1393,7 +1393,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.9'; // v3.6.9: ①首页今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
+const APP_VERSION = 'v3.6.10'; // v3.6.10: 首页今日成就点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
