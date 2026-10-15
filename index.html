@@ -149,13 +149,12 @@
   .overview-achievement .ov-icon { font-size: 15px; flex-shrink: 0; }
   .overview-achievement .ov-text { flex: 1; color: #ffeaa7; font-size: 14px; }
   .overview-achievement .ov-text .ov-label { color: #fff; }
-  /* v3.6.7 今日成就逐条点赞 chip */
-  .overview-achievement .ov-ach-items { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
-  .overview-achievement .ov-ach-item { display: inline-flex; align-items: center; gap: 2px; line-height: 1.6; }
-  .ach-like-btn { background: none; border: none; cursor: pointer; font-size: 13px; line-height: 1; padding: 1px 3px; margin: 0; opacity: .5; transition: transform .12s, opacity .12s; color: inherit; }
-  .ach-like-btn:hover { opacity: .8; }
-  .ach-like-btn.liked { opacity: 1; }
-  .ach-like-btn:active { transform: scale(1.35); }
+  /* v3.6.9 今日成就整体一个赞（按天）：图标放大一倍（13px→26px）、点赞/取消区分度明显
+     未赞 = 灰暗灰阶；已赞 = 高亮彩色 + 放大 */
+  .ach-like-btn { background: none; border: none; cursor: pointer; font-size: 26px; line-height: 1; padding: 0 2px; margin: 0 0 0 auto; flex-shrink: 0; align-self: flex-end; opacity: .45; filter: grayscale(1); transition: transform .12s, opacity .12s, filter .12s; color: inherit; }
+  .ach-like-btn:hover { opacity: .75; }
+  .ach-like-btn.liked { opacity: 1; filter: none; transform: scale(1.08); }
+  .ach-like-btn:active { transform: scale(1.3); }
   .ach-like-icon, .ms-like-icon { font-size: 12px; opacity: .85; vertical-align: middle; }
   /* v3.5.106 总览内「日报」小组件（点击弹窗看完整日报） */
   /* v3.5.107 日报色号统一为「选中的分类标签字体色」(.cat-tag.active)：深色 #fff / 浅色 #0984e3 */
@@ -1141,6 +1140,9 @@
     font-size: 14px; color: #fff; margin-top: 1px; transition: all .15s;
   }
   .memo-check.done { background: #667eea; border-color: #667eea; }
+  /* v3.6.9 待办勾选后延迟 3s 归入已办：期间视觉标记（划线+淡出）并禁止误操作 */
+  .memo-item.memo-done-pending .memo-content { opacity: .5; text-decoration: line-through; }
+  .memo-item.memo-done-pending .rec-edit, .memo-item.memo-done-pending .rec-delete { opacity: .35; pointer-events: none; }
   .memo-content { flex: 1; font-size: 15px; color: #dfe6e9; line-height: 1.45; word-break: break-word; overflow-wrap: anywhere; }
   /* v3.5.120 行内编辑改为多行 textarea：单行 input 长文本看不到后面，改为可换行、可自动增高的文本域 */
   .memo-edit-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -2835,6 +2837,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.6.8"></script>
+<script src="app.js?v=v3.6.9"></script>
 </body>
 </html>

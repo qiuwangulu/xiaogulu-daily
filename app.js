@@ -986,13 +986,14 @@ function updateOverview(skipPush) {
   const achArr = computeAchievements(records);
   const _achDs = getTodayDateStr();
   let achHtml = '';
-  const achItems = achArr.length > 0
-    ? achArr.map(n => {
-        const _liked = isAchLiked(_achDs, n);
-        return `<span class="ov-ach-item">${escapeHtml(n)}<button class="ach-like-btn${_liked ? ' liked' : ''}" data-ds="${escapeHtml(_achDs)}" data-note="${escapeHtml(n)}" onclick="toggleAchLike(this.dataset.ds, this.dataset.note, event)" title="${_liked ? '取消点赞' : '点赞'}">👍</button></span>`;
-      }).join('')
-    : '无';
-  achHtml = `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> <span class="ov-ach-items">${achItems}</span></span></div>`;
+  if (achArr.length > 0) {
+    // v3.6.9 今日成就整体只保留一个赞（按天）：图标放大一倍、点赞/取消区分度明显
+    const _liked = isAchLiked(_achDs);
+    const _likeBtn = `<button class="ach-like-btn${_liked ? ' liked' : ''}" data-ds="${escapeHtml(_achDs)}" onclick="toggleAchLike(this.dataset.ds, event)" title="${_liked ? '取消点赞' : '点赞'}" aria-label="${_liked ? '取消点赞' : '点赞'}">👍</button>`;
+    achHtml = `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> ${achArr.map(n => escapeHtml(n)).join(' | ')}</span>${_likeBtn}</div>`;
+  } else {
+    achHtml = `<div class="overview-achievement"><span class="ov-icon">🏆</span><span class="ov-text"><span class="ov-label">今日成就:</span> 无</span></div>`;
+  }
 
   // v3.5.145 总览卡片内：今日计划（上）→ 今日成就（中）；日报胶囊已移至卡片下方独立渲染
   html += '<div class="ov-bottom-row">' + planHtml + achHtml + '</div>';
@@ -1392,7 +1393,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.8'; // v3.6.8: AI今日计划prompt新增【风级换算与户外/防风】——将天气最大风速(km/h)换算风级，建议戴帽/避风/增减户外；PLAN_PROMPT_VERSION升9触发重新生成。v3.6.7: 首页今日成就新增点赞/取消点赞（👍）
+const APP_VERSION = 'v3.6.9'; // v3.6.9: ①首页今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -2859,7 +2860,7 @@ function loadHistory() {
   const _hvVal = document.body.classList.contains('theme-day') ? '#d68910' : '#ffeaa7';
   let sHtml = `<div class="history-sum-row"><span class="hs-label" style="color:${_hvc}">🍼 水+奶量</span><span class="hs-value" style="color:${_hvVal};font-weight:400">${Math.round(totalMilk * 1.12)} ml</span></div>`;
   const _achVal = achArr.length > 0
-    ? achArr.map(n => `${escapeHtml(n)}${isAchLiked(ds, n) ? ' <span class="ach-like-icon" title="已点赞">👍</span>' : ''}`).join(' | ')
+    ? achArr.map(n => escapeHtml(n)).join(' | ') + (isAchLiked(ds) ? ' <span class="ach-like-icon" title="已点赞">👍</span>' : '')
     : '无';
   sHtml += `<div class="history-sum-row"><span class="hs-label" style="color:${_hvc}">🏆 今日成就</span><span class="hs-value" style="color:${_hvVal};font-weight:400">${_achVal}</span></div>`;
   if (summary) { summary.innerHTML = sHtml; summary.style.display = 'flex'; }
@@ -3511,7 +3512,7 @@ function renderMemo() {
       </div>`;
     } else {
       tl.innerHTML += `<div class="memo-item">
-        <div class="memo-check" onclick="toggleMemoDone(${it.id})"></div>
+        <div class="memo-check" onclick="toggleMemoDone(${it.id}, this)"></div>
         <div class="memo-content">${_escHtml(it.text)}</div>
         <span class="rec-edit" onclick="startMemoEdit(${it.id})" title="编辑">${MEMO_EDIT_SVG}</span>
         <span class="rec-delete" onclick="deleteMemo(${it.id})" title="删除">${MEMO_DEL_SVG}</span>
@@ -3532,11 +3533,34 @@ function addMemo() {
   items.unshift({ id: _memoNextId(), text: v, done: false, date: '' });
   saveMemos(items); ta.value = ''; renderMemo();
 }
-function toggleMemoDone(id) {
+const _memoPendingDone = {};   // v3.6.9 待办勾选后延迟 3s 归入已办（id -> timer）
+function toggleMemoDone(id, el) {
   const items = getMemos(); const i = items.findIndex(x => x.id === id); if (i < 0) return;
-  if (!items[i].done) { const it = items[i]; it.done = true; it.date = getTodayDateStr(); items.splice(i, 1); items.unshift(it); }
-  else { items[i].done = false; items[i].date = ''; }
-  saveMemos(items); renderMemo();
+  if (!items[i].done) {
+    // 已挂起 → 二次点击视为取消勾选，撤销延迟
+    if (_memoPendingDone[id]) {
+      clearTimeout(_memoPendingDone[id]); delete _memoPendingDone[id];
+      const r0 = el && el.closest ? el.closest('.memo-item') : null;
+      if (r0) r0.classList.remove('memo-done-pending');
+      if (el) { el.classList.remove('done'); el.textContent = ''; }
+      return;
+    }
+    // v3.6.9 立即视觉标记 + 提示「已完成1件事」，停留 3s 后再真正归入已办
+    const row = el && el.closest ? el.closest('.memo-item') : null;
+    if (row) row.classList.add('memo-done-pending');
+    if (el) { el.classList.add('done'); el.textContent = '✓'; }
+    showToast('已完成1件事');
+    _memoPendingDone[id] = setTimeout(() => {
+      delete _memoPendingDone[id];
+      const its = getMemos(); const j = its.findIndex(x => x.id === id); if (j < 0) return;
+      if (its[j].done) return;
+      const it = its[j]; it.done = true; it.date = getTodayDateStr(); its.splice(j, 1); its.unshift(it);
+      saveMemos(its); renderMemo();
+    }, 3000);
+  } else {
+    items[i].done = false; items[i].date = '';
+    saveMemos(items); renderMemo();
+  }
 }
 // v3.5.120 多行编辑快捷键：回车=换行，Ctrl/Cmd+回车=保存，Esc=取消
 function _memoEditKey(e, id) {
@@ -5433,7 +5457,7 @@ const SCHED_GEN_LEAD = 12 * 3600000;     // v3.6.3 起不再使用：改为每�
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内才推送（避免补推历史）
 const SCHED_GEN_COOLDOWN = 30 * 60000;   // AI 生成失败重试冷却 30 分钟
 // AI 计划 prompt 版本：内容与分类结构变化时递增，可强制所有 AI 任务用最新 prompt 重新生成
-const PLAN_PROMPT_VERSION = '9'; // v3.6.8 计划prompt: 新增【风级换算与户外/防风】规则——把天气"最大风速(km/h)"换算风级(≤19风小/20-38风稍大/≥39风大)，据此建议戴帽、避风、减少/增加户外，并写入健康·出行与摘要；触发已生成计划重新生成
+const PLAN_PROMPT_VERSION = '10'; // v3.6.9 计划prompt: 新增【辅食试吃条件】——前一日无辅食记录时按辅食添加条件判断今日是否可试新食物并给出具体食物；穿衣要求精确到知识库具体衣物名称（如「熊猫系带长袖长裤」），不得只写泛称；触发已生成计划重新生成
 let SCHED_TASKS = [];
 const _pad2 = n => String(n).padStart(2, '0');
 
@@ -6509,7 +6533,7 @@ function buildPlanSystemPrompt(dateStr, wText, stats) {
       + '- 早教各项次数：' + eeLine + '\n'
       + '- 大便次数：' + stats.poop + ' 次\n'
       + '- 户外时长：' + stats.outdoorMin + ' 分钟\n'
-      + (stats.foods.length ? ('- 辅食记录：' + stats.foods.map(f => (f.names.join('/') || '辅食') + (f.note ? '（备注：' + f.note + '）' : '')).join('；') + '\n') : '')
+      + (stats.foods.length ? ('- 辅食记录：' + stats.foods.map(f => (f.names.join('/') || '辅食') + (f.note ? '（备注：' + f.note + '）' : '')).join('；') + '\n') : '- 前一日无辅食记录（今日是否试新辅食，需按下方「辅食试吃条件」判断）\n')
       + '- 营养补剂建议（与上次相反）：' + (supRec || '—') + '\n';
   }
   return '你是一位专业、贴心的婴幼儿育儿规划助手，服务对象是长辈（外婆）带小宝宝，目标是提前生成「今日计划」以减少带娃决策压力。\n'
@@ -6525,11 +6549,12 @@ function buildPlanSystemPrompt(dateStr, wText, stats) {
     + (targetIsMWF ? ('本计划日 ' + dateStr + ' 为' + PLAN_DOW[targetDow] + '（即任务触发当天；周一/三/五为补剂日），营养补剂请安排：' + (supRec || 'D3') + '（与上次相反）。')
                    : ('本计划日 ' + dateStr + ' 为' + PLAN_DOW[targetDow] + '（即任务触发当天；非周一/周三/周五），营养补剂项写明「今日无需补剂」。'))
     + '\n'
-    + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度，据此建议穿什么、几件多厚，参考知识库「穿衣」）；洗澡、剪指甲、睡眠、排便关注'
+    + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度，据此建议穿什么、几件多厚，参考知识库「穿衣」；穿衣必须精确到知识库里的具体衣物名称，如「熊猫系带长袖长裤」「蓝/黄背心厚睡袋」，不得只写「长袖长裤」「连体衣」这类泛称；知识库无对应款式时才给通用建议）；洗澡、剪指甲、睡眠、排便关注'
     + (stats && stats.poop === 0 ? '；昨日大便 0 次，需关注是否便秘：两餐间记得喂水、多顺时针揉腹'
        : (stats && stats.poop >= 3 ? '；昨日大便≥3 次，需关注拉肚子：注意保暖、防红屁屁' : '')) + '。\n'
     + '【健康·出行】户外活动时间与时长（结合天气与昨日户外时长，给出具体时段如"上午9-10点、下午4-5点"及总时长建议）、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物；结合知识库「穿衣」给出是否戴帽子、是否裹薄包被/纱巾。\n'
     + '【辅食提醒】若上方"辅食记录"备注含过敏/异常（如某品牌米粉过敏），在喂养或辅食处提醒今日更换品牌（具体到备注里的牌子）。\n'
+    + '【辅食试吃条件】若上方为「前一日无辅食记录」（或辅食很少），请在【喂养】的辅食项按辅食添加条件判断今日是否可试新辅食：月龄是否已达 6 月龄且已开始添加辅食、是否处于健康状态且非接种当日、每次只引入一种新食物并连续观察 2-3 天无过敏再加下一种、由稀到稠由少到多；据此明确写出「今日可试 XX（某种具体食物，如米粉/南瓜泥/蛋黄）」或「暂不添加，原因：…」。\n'
     + '【补剂判定】营养补剂是否为补剂日（周一/三/五），一律按本计划日（即上方"目标日期"、任务触发当天）的星期判断；不得按"第二天"或其他任何日期判断。\n'
     + '【统计口径】天气与营养补剂一律按「本计划日（上方目标日期、任务触发当天）」判断；大便次数与早教一律按「前一日」的记录判断。两者口径不得混用。\n'
     + '【早教】放在最后一段输出。结合上方"前一日早教数据"：次数<1 的项目必须纳入今日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。\n'
@@ -7272,16 +7297,17 @@ async function loadMsOverrideCloud() {
   } catch (e) { console.warn('[里程碑] 云加载失败', e); }
 }
 
-/* ==================== 成就点赞（v3.6.7） ====================
- * 首页「今日成就」每条可点赞 / 取消点赞；点赞状态加密同步家庭云，所有家人可见。
+/* ==================== 成就点赞（v3.6.7 / v3.6.9） ====================
+ * v3.6.9：首页「今日成就」只保留一个赞（代表当天成就整体，按天存储），图标放大一倍、点赞/取消区分度明显，
+ *         点赞后提示「已点赞，真棒！」，取消不提示；点赞状态加密同步家庭云，所有家人可见。
  * 历史、成长里程碑只读展示点赞图标（👍），不可取消。
- * 点赞 key = 记录日期::成就文本（achLikeKey）：首页用业务日(getTodayDateStr)、历史用所选日期、
- * 里程碑用记录日期 it.date —— 三者都引用同一批物理记录(records_<日期>)的同一 key，保持一致。
+ * 点赞 key = 记录日期（achLikeKey）：首页用业务日(getTodayDateStr)、历史用所选日期、
+ * 里程碑用记录日期 it.date —— 三者都指向同一天，保持一致。
  */
 const LIKE_CLOUD_KEY = '_ach_like';
-let _achLikes = {};                 // { "ds::note": true }
-function achLikeKey(ds, note) { return ds + '::' + String(note == null ? '' : note); }
-function isAchLiked(ds, note) { return !!_achLikes[achLikeKey(ds, note)]; }
+let _achLikes = {};                 // { "2026-10-15": true } 按天点赞
+function achLikeKey(ds) { return String(ds == null ? '' : ds); }
+function isAchLiked(ds) { return !!_achLikes[achLikeKey(ds)]; }
 function loadAchLikesLocal() {
   try { _achLikes = JSON.parse(localStorage.getItem('ach_likes') || '{}') || {}; } catch (e) { _achLikes = {}; }
 }
@@ -7313,12 +7339,14 @@ async function saveAchLikesCloud() {
     await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: LIKE_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
   } catch (e) { console.warn('[点赞] 云端保存失败', e); }
 }
-// 切换点赞（仅首页可操作）：先拉云端合并，再翻转本地，再推送，最后刷新相关视图
-async function toggleAchLike(ds, note, evt) {
-  const k = achLikeKey(ds, note);
+// 切换点赞（仅首页可操作，按天）：先拉云端合并，再翻转本地，再推送，最后刷新相关视图
+async function toggleAchLike(ds, evt) {
+  const k = achLikeKey(ds);
   try { await loadAchLikesCloud(); } catch (e) {}
-  if (_achLikes[k]) delete _achLikes[k]; else _achLikes[k] = true;
+  const was = !!_achLikes[k];
+  if (was) delete _achLikes[k]; else _achLikes[k] = true;
   saveAchLikesLocal();
+  if (!was) showToast('已点赞，真棒！');   // 取消点赞不提示
   try { await saveAchLikesCloud(); } catch (e) {}
   refreshAchLikeUI(ds);
   if (evt && evt.stopPropagation) evt.stopPropagation();
@@ -7442,7 +7470,7 @@ function renderMilestoneInner() {
         `<div class="ms-meta">` +
           `<span class="ms-tag" style="background:${d.color}22;color:${d.color}">${d.icon} ${d.name}</span>` +
           (it.isFirst ? `<span class="ms-first">首次</span>` : '') +
-          (isAchLiked(it.date, it.text) ? `<span class="ms-like-icon" title="已点赞">👍</span>` : '') +
+          (isAchLiked(it.date) ? `<span class="ms-like-icon" title="已点赞">👍</span>` : '') +
         `</div>` +
         // v3.6.1 编辑图标与首页记录卡一致（SVG 铅笔，复用 .rec-edit 样式）
         `<span class="rec-edit ms-edit" onclick="openMsEdit(${gi})" title="修改类型/首次"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>` +
