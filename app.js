@@ -1394,7 +1394,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.17'; // v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
+const APP_VERSION = 'v3.6.18'; // v3.6.18: ①音频支持 ogg 等非通用格式——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5873,9 +5873,94 @@ function eeFileKind(f) {
   return 'other';
 }
 // v3.6.0 上传仅音频：统一以 audio/* 声明 Content-Type，保证 <audio> 正常解码
+// v3.6.18 按扩展名精确判定 Content-Type（修复 m4a/wav/flac 等被误标 audio/mpeg 导致部分内核解码失败）
 function eeContentTypeFor(f, kind) {
+  const ext = eeFileExt(f && f.name);
+  const byExt = {
+    mp3: 'audio/mpeg', mpeg: 'audio/mpeg', mp2: 'audio/mpeg',
+    m4a: 'audio/mp4', m4b: 'audio/mp4', aac: 'audio/aac',
+    wav: 'audio/wav', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg',
+    flac: 'audio/flac', weba: 'audio/webm', webm: 'audio/webm', amr: 'audio/amr', mid: 'audio/midi', midi: 'audio/midi'
+  };
+  if (byExt[ext]) return byExt[ext];
   const t = String((f && f.type) || '').toLowerCase();
   return t && t.startsWith('audio/') ? t : 'audio/mpeg';
+}
+/* ==================== v3.6.18 非通用音频格式上传前转码为 MP3 ====================
+ * 背景：用户上传 .ogg 后在微信里报「Failed to load because no supported source was found」——
+ * ogg/oga/opus/flac/amr/wma 等容器并非所有浏览器/WebView 内核都能解码（iOS 全线不支持 ogg，
+ * 微信 X5 内核亦有部分格式缺失）。这些格式上传后无法播放，用户侧只能删除重来。
+ * 方案：上传前用 Web Audio（decodeAudioData）解码为 PCM，再经本地 lamejs 编码为 MP3
+ * （lame.min.js 为本仓库自带脚本，无外部 CDN 依赖；MP3 在所有设备均可播放，体积约 1MB/分钟）。
+ * mp3/m4a/aac/wav 为通用格式，保持原样上传（不损失音质、不增大体积）。 */
+const EE_TRANSCODE_EXT = ['ogg', 'oga', 'opus', 'flac', 'amr', 'awb', 'wma', 'caf', 'aif', 'aiff', 'mid', 'midi', 'weba', 'ac3', 'dts', 'ape', 'wv', 'mka', 'ra', 'rm', 'mp2'];
+const EE_MP3_RATES = [8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000];   // MP3 合法采样率
+function eeNeedTranscode(f) { return EE_TRANSCODE_EXT.includes(eeFileExt(f && f.name)); }
+function _eeReadArrayBuffer(file) {
+  if (file.arrayBuffer) return file.arrayBuffer();
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('文件读取失败'));
+    r.readAsArrayBuffer(file);
+  });
+}
+/** 采样率不在 MP3 合法列表时线性重采样（绝大多数文件为 44100，此分支极少触发） */
+function _eeResample(ch0, ch1, from, to) {
+  const ratio = from / to;
+  const n = Math.floor(ch0.length / ratio);
+  const out0 = new Float32Array(n);
+  const out1 = ch1 ? new Float32Array(n) : null;
+  for (let i = 0; i < n; i++) {
+    const pos = i * ratio, i0 = Math.floor(pos), i1 = Math.min(i0 + 1, ch0.length - 1), t = pos - i0;
+    out0[i] = ch0[i0] * (1 - t) + ch0[i1] * t;
+    if (out1) out1[i] = ch1[i0] * (1 - t) + ch1[i1] * t;
+  }
+  return { ch0: out0, ch1: out1 };
+}
+/** 把解码后的 AudioBuffer 编码为 MP3 File（失败抛错，由调用方提示用户） */
+async function eeEncodeMp3(file) {
+  if (typeof lamejs === 'undefined') throw new Error('格式转换组件未加载，请刷新页面后重试');
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) throw new Error('当前浏览器不支持音频解码');
+  const raw = await _eeReadArrayBuffer(file);
+  const actx = new AC();
+  let pcm;
+  try { pcm = await new Promise((res, rej) => { const p = actx.decodeAudioData(raw, res, rej); if (p && p.then) p.then(res, rej); }); }
+  catch (e) { throw new Error('该音频无法在此设备解码（如 iOS 不支持 ogg），请先在电脑上转为 mp3 再上传'); }
+  finally { try { actx.close && actx.close(); } catch (e) {} }
+  let rate = pcm.sampleRate;
+  if (EE_MP3_RATES.indexOf(rate) < 0) rate = 44100;   // 非合法采样率统一按 44.1k 输出
+  let ch0 = pcm.getChannelData(0);
+  let ch1 = pcm.numberOfChannels > 1 ? pcm.getChannelData(1) : null;
+  if (pcm.sampleRate !== rate) { const r = _eeResample(ch0, ch1, pcm.sampleRate, rate); ch0 = r.ch0; ch1 = r.ch1; }
+  const chans = ch1 ? 2 : 1;
+  const enc = new lamejs.Mp3Encoder(chans, rate, 128);
+  const toI16 = f => { const n = f.length, o = new Int16Array(n); for (let i = 0; i < n; i++) { const v = f[i] < -1 ? -1 : (f[i] > 1 ? 1 : f[i]); o[i] = v < 0 ? v * 0x8000 : v * 0x7FFF; } return o; };
+  const i16_0 = toI16(ch0), i16_1 = ch1 ? toI16(ch1) : null;
+  const blockSize = 1152, parts = [];
+  for (let i = 0; i < i16_0.length; i += blockSize) {
+    const a = i16_0.subarray(i, i + blockSize);
+    const buf = chans === 2 ? enc.encodeBuffer(a, i16_1.subarray(i, i + blockSize)) : enc.encodeBuffer(a);
+    if (buf.length) parts.push(new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength));
+  }
+  const end = enc.flush();
+  if (end.length) parts.push(new Uint8Array(end.buffer, end.byteOffset, end.byteLength));
+  const mp3 = new Blob(parts, { type: 'audio/mpeg' });
+  const base = (file.name || 'audio').replace(/\.[^.]+$/, '');
+  try { return new File([mp3], base + '.mp3', { type: 'audio/mpeg' }); }
+  catch (e) { const b = mp3; b.name = base + '.mp3'; return b; }
+}
+/** 需要时把文件转码为 MP3，返回 { file, transcoded }；不需要或失败按原样返回 */
+async function eeMaybeTranscode(file) {
+  if (!eeNeedTranscode(file)) return { file, transcoded: false };
+  showToast('正在转换音频格式（' + eeFileExt(file.name) + ' → mp3）…');
+  try { return { file: await eeEncodeMp3(file), transcoded: true }; }
+  catch (e) {
+    console.warn('[音频] 转码失败', e);
+    showToast((e && e.message ? e.message : '格式转换失败') + '，将按原格式上传（部分设备可能无法播放）');
+    return { file, transcoded: false };
+  }
 }
 // 探测某个 URL 的音轨能否被当前浏览器解码（用于视频/录屏文件，避免"传上去却播不出"）
 function eeProbePlayable(url, timeoutMs) {
@@ -5929,7 +6014,8 @@ async function eeOnFiles(input) {
     if (!q.ok) { showToast(q.msg); return; }
   }
 
-  showToast('上传中（' + list.length + ' 个）…');
+  const needTc = list.some(eeNeedTranscode);
+  showToast('上传中（' + list.length + ' 个）…' + (needTc ? '（ogg 等格式将自动转为 mp3）' : ''));
   let ok = 0, fail = 0;
   for (const f of list) {
     try { if (await eeUploadOne(f, type)) ok++; else fail++; }
@@ -5986,8 +6072,11 @@ async function eeUploadFile(file, path, kind) {
 }
 // v3.6.3 单个音频文件上传（本地上传 / 网页内录音共用）
 async function eeUploadOne(file, type) {
-  const kind = eeFileKind(file);
+  let kind = eeFileKind(file);
   if (kind !== 'audio') { showToast('不支持的文件类型，请选择音频文件或录音'); return false; }
+  // v3.6.18 非通用格式（ogg/flac/amr/wma 等）先转码为 MP3 再上传：这些容器在 iOS/微信 X5 等内核
+  // 无法解码，上传后也播不出（用户实测报 "Failed to load because no supported source was found"）
+  { const tc = await eeMaybeTranscode(file); file = tc.file; kind = eeFileKind(file); }
   // v3.6.15 容量闸门兜底（录音等单文件路径也受总容量限制）
   { const q = eeCheckQuota(file.size || 0); if (!q.ok) { showToast(q.msg); return false; } }
   const ext = eeFileExt(file.name) || 'webm';
@@ -6273,8 +6362,11 @@ function eePlayItem(it) {
     if (token !== eePlayToken) return;                    // 过期请求（典型：快速停止/切换）
     if (err && err.name === 'AbortError') return;         // play/pause 竞态：静默忽略，不弹错
     console.warn('[早教] 播放失败', err);
+    // v3.6.18 对已知「部分设备无法解码」的旧格式给出明确提示（新版上传已自动转 mp3）
+    const _badExt = eeFileExt(it.url || it.path || '');
+    const _fmtTip = EE_TRANSCODE_EXT.indexOf(_badExt) >= 0 ? ('（' + _badExt + ' 格式当前设备无法播放，重新上传时会自动转为 mp3）') : '';
     if (eeQueueIdx < eeQueue.length - 1) { eeAdvanceQueue(); return; } // 单曲失败自动跳下一首
-    showToast('播放失败：' + (err && err.message ? String(err.message).replace(/\s*https?:\/\/\S+$/, '') : '格式可能不支持') + '，可在「管理 → 音频」删除后重新上传音频文件');
+    showToast('播放失败：' + (err && err.message ? String(err.message).replace(/\s*https?:\/\/\S+$/, '') : '格式可能不支持') + '，可在「管理 → 音频」删除后重新上传音频文件' + _fmtTip);
     eeStop();
   });
 }
@@ -6748,7 +6840,8 @@ async function pushTask(task, trig, pk) {
     const nm = (task.name && String(task.name).trim()) ? String(task.name).trim() : '今日计划';
     title = '📅 ' + nm;
     const sum = sp.summary ? '<p style="font-size:16px;font-weight:600;">📌 ' + escapeHtml(sp.summary) + '</p>' : '';
-    content = '<h3>小咕噜 ' + escapeHtml(nm) + '</h3>' + sum + '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(sp.detail || task.content || '') + '</pre>';
+    // v3.6.18 详情标题只保留任务名称（用户要求去掉「小咕噜 」前缀，避免与任务名「咕噜今日计划」重复拗口）
+    content = '<h3>' + escapeHtml(nm) + '</h3>' + sum + '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(sp.detail || task.content || '') + '</pre>';
   } else {
     // v3.5.148 通知内容改为任务名称（如「⏰ 育儿嫂午餐费」），不再统一显示"定时提醒"
     const nm = (task.name && String(task.name).trim()) ? String(task.name).trim() : '定时提醒';

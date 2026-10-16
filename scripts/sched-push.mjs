@@ -606,7 +606,8 @@ async function main() {
       const sp = splitPlan(task.content);
       title = '📅 ' + name;
       const sum = sp.summary ? '<p style="font-size:16px;font-weight:600;">📌 ' + escapeHtml(sp.summary) + '</p>' : '';
-      content = '<h3>小咕噜 ' + escapeHtml(name) + '</h3>' + sum + '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(sp.detail || task.content || '') + '</pre>';
+      // v3.6.18 详情标题只保留任务名称（用户要求去掉「小咕噜 」前缀；与前端 app.js 同步）
+      content = '<h3>' + escapeHtml(name) + '</h3>' + sum + '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(sp.detail || task.content || '') + '</pre>';
     } else {
       title = '⏰ ' + name;
       content = '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(task.content || '') + '</pre>';

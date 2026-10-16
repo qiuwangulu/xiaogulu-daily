@@ -301,6 +301,26 @@ const CASES = {
     }
   },
 
+  /* D3. 今日计划推送详情标题：只保留任务名称，不带「小咕噜 」前缀（v3.6.18 用户要求） */
+  'push-plan-title': {
+    runs: 1,
+    seed(st) {
+      const key = deriveKey(st.mat.code, st.mat.salt);
+      const t = trigStr(2);
+      const cloud = { tasks: [Object.assign(aiTask({ id: 't1', genDate: todayStr(), planVer: '12', content: '摘要：今天晴\n计划：\n【喂养】正常喝奶', genTryTs: Date.now() - 2 * 3600000 }), { startDate: t.startDate, startTime: t.startTime })], ctx: baseCtx(st), ts: Date.now() };
+      st.store['_salt'] = { config_key: '_salt', encrypted_data: st.mat.salt, iv: '' };
+      const enc = encrypt(key, JSON.stringify(cloud));
+      st.store['_sched_cloud'] = { config_key: '_sched_cloud', encrypted_data: enc.data, iv: enc.iv };
+    },
+    assert(runs, st) {
+      eq(runs[0].delta.pushplus, 1, '应推送 1 次');
+      const body = st.lastPush || '';
+      ok(body.indexOf('<h3>今日计划</h3>') >= 0, '详情标题应为任务名称「今日计划」');
+      ok(body.indexOf('小咕噜') < 0, '详情标题不得再带「小咕噜」前缀');
+      ok(body.indexOf('今天晴') >= 0, '摘要行应保留');
+    }
+  },
+
   /* E1. 云端 _salt 被不一致的盐覆盖 → 解密失败：明确报错 + 退出码 1（不再静默无推送） */
   'decrypt-fail': {
     runs: 1,
@@ -419,7 +439,8 @@ async function runChild(caseName, stateFile) {
       }
       if (req.method === 'POST' && u.pathname === '/mock/pushplus') {
         counters.pushplus++;
-        await readBody(req);
+        const body = await readBody(req);
+        st.lastPush = body;   // 记录末次推送报文，供断言标题内容
         return send(200, { code: 200 });
       }
       return send(404, { error: 'mock: unknown route ' + u.pathname });
