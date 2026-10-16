@@ -1394,7 +1394,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.14'; // v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
+const APP_VERSION = 'v3.6.15'; // v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5774,6 +5774,7 @@ function eeUpdateAddButtons() {
 }
 function renderEarlyEduList() {
   const list = document.getElementById('eeList'); if (!list) return;
+  eeUpdateUsage();
   let items = EARLY_EDU.slice().sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
   if (eeFilterSet.size !== EE_TYPES.length) items = items.filter(x => eeFilterSet.has(x.type));
   if (eeSearchQuery) items = items.filter(x => (x.name || '').toLowerCase().includes(eeSearchQuery));
@@ -5796,11 +5797,37 @@ function renderEarlyEduList() {
   });
   list.innerHTML = h;
 }
+/* ---------- v3.6.15 云存储容量闸门（Supabase 免费版 Storage 1GB） ---------- */
+function eeUsedBytes() {
+  return EARLY_EDU.reduce((s, it) => {
+    if (it && it.src === 'wikimedia') return s;   // 免版权项只存直链，不占云存储
+    return s + ((it && it.size > 0) ? it.size : EE_EST_MB_PER_TRACK * 1048576);
+  }, 0);
+}
+function eeQuotaLeftBytes() { return Math.max(0, EE_MAX_TOTAL_MB * 1048576 - eeUsedBytes()); }
+function eeCheckQuota(incomingBytes) {
+  const left = eeQuotaLeftBytes();
+  if ((incomingBytes || 0) <= left) return { ok: true };
+  const usedMB = Math.round(eeUsedBytes() / 1048576);
+  const leftN = Math.floor(left / (EE_EST_MB_PER_TRACK * 1048576));
+  return { ok: false, msg: '云存储空间不足（已用约 ' + usedMB + 'MB / 上限 ' + EE_MAX_TOTAL_MB + 'MB，约还可放 ' + Math.max(0, leftN) + ' 首）。请先在下方列表删除一些音频，再上传' };
+}
+function eeUpdateUsage() {
+  const el = document.getElementById('eeUsage'); if (!el) return;
+  const usedMB = eeUsedBytes() / 1048576;
+  const leftN = Math.floor(eeQuotaLeftBytes() / (EE_EST_MB_PER_TRACK * 1048576));
+  const usedTxt = usedMB >= 10 ? String(Math.round(usedMB)) : usedMB.toFixed(1);
+  const near = usedMB >= EE_MAX_TOTAL_MB * 0.9;
+  if (el.classList) el.classList.toggle('ee-usage-warn', near);
+  el.innerHTML = '☁️ 云存储：已用约 ' + usedTxt + ' MB / 上限 ' + EE_MAX_TOTAL_MB + ' MB（约还可添加 ' + Math.max(0, leftN) + ' 首，超出需先删除旧音频）';
+}
 // v3.5.165 上传文件类型判定：audio / video / image / other
 const EE_AUDIO_EXT = ['mp3', 'm4a', 'm4b', 'aac', 'wav', 'ogg', 'oga', 'opus', 'flac', 'amr', 'awb', 'caf', 'aif', 'aiff', 'wma', 'mp2', 'weba', 'mid'];
 const EE_VIDEO_EXT = ['mp4', 'm4v', 'mov', '3gp', '3gpp', 'mkv', 'webm', 'avi', 'flv', 'wmv', 'mpeg', 'mpg', 'ts'];
 const EE_IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tif', 'tiff', 'svg'];
 const EE_MAX_UPLOAD_MB = 50;                      // Supabase Storage 免费版单文件上限
+const EE_MAX_TOTAL_MB = 800;                      // v3.6.15 云存储总容量上限（Supabase 免费版 Storage 1GB，预留余量给数据库/其他文件/系统）
+const EE_EST_MB_PER_TRACK = 4;                     // v3.6.15 单首音频估算 MB（128kbps 3-4 分钟儿歌约 3-4MB；历史无 size 记录时按此估算）
 function eeFileExt(name) { const m = String(name || '').toLowerCase().match(/\.([a-z0-9]{1,5})(\?|$)/); return m ? m[1] : ''; }
 // v3.6.0 上传仅支持音频（本地文件与录音，录音本质是音频文件）；视频/图片/文档一律归为 other 拦截
 function eeFileKind(f) {
@@ -5858,6 +5885,13 @@ async function eeOnFiles(input) {
     else if (bucket.big.length) showToast('文件超过 ' + EE_MAX_UPLOAD_MB + 'MB，请先裁剪或压缩后再上传');
     else showToast('不支持的文件类型，请选择音频文件或录音（不支持图片、视频、文档）');
     return;
+  }
+
+  // v3.6.15 容量闸门：已用 + 本次待传 超过云存储上限则整批拦截，提示删除旧音频
+  {
+    const incoming = list.reduce((s, f) => s + (f.size || 0), 0);
+    const q = eeCheckQuota(incoming);
+    if (!q.ok) { showToast(q.msg); return; }
   }
 
   showToast('上传中（' + list.length + ' 个）…');
@@ -5919,11 +5953,13 @@ async function eeUploadFile(file, path, kind) {
 async function eeUploadOne(file, type) {
   const kind = eeFileKind(file);
   if (kind !== 'audio') { showToast('不支持的文件类型，请选择音频文件或录音'); return false; }
+  // v3.6.15 容量闸门兜底（录音等单文件路径也受总容量限制）
+  { const q = eeCheckQuota(file.size || 0); if (!q.ok) { showToast(q.msg); return false; } }
   const ext = eeFileExt(file.name) || 'webm';
   const fid = getFamilyId() || 'default';
   const path = fid + '/ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '.' + ext;
   const url = await eeUploadFile(file, path, kind);
-  EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: (file.name || '录音').replace(/\.[^.]+$/, ''), type, src: 'upload', kind: 'audio', playable: true, url, path, addedAt: Date.now() });
+  EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: (file.name || '录音').replace(/\.[^.]+$/, ''), type, src: 'upload', kind: 'audio', playable: true, url, path, size: file.size || 0, addedAt: Date.now() });
   scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard();
   return true;
 }

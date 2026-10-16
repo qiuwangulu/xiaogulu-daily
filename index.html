@@ -1955,6 +1955,11 @@
   body.theme-day .ee-count-row .ee-count-unit { color: #7b8a94; }
   .ee-tip { font-size: 12px; color: #b2bec3; margin: 4px 0 10px; line-height: 1.55; }
   body.theme-day .ee-tip { color: #7b8a94; }
+  /* v3.6.15 云存储用量提示 */
+  .ee-usage { font-size: 12px; color: #74b9ff; margin: 0 0 10px; line-height: 1.55; }
+  body.theme-day .ee-usage { color: #0984e3; }
+  .ee-usage.ee-usage-warn { color: #ff7675; }
+  body.theme-day .ee-usage.ee-usage-warn { color: #d63031; }
   /* v3.6.3 本地音频录音弹窗（绕开手机系统「照片/视频」选择器） */
   .ee-rec-timer { font-size: 42px; text-align: center; font-weight: 700; color: #74b9ff;
     margin: 12px 0 4px; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
@@ -2535,6 +2540,7 @@
         </span>
       </div>
       <div class="ee-count-hint">首页点「播放」会随机连播这么多首</div>
+      <div class="ee-usage" id="eeUsage"></div>
       <div class="ee-filter-row">
         <div class="cat-dropdown" id="eeCatDropdown">
           <button class="cat-dropdown-btn" id="eeCatBtn" type="button" onclick="toggleEeCat()">📂 全部分类 ▾</button>
@@ -2843,6 +2849,6 @@
 
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
-<script src="app.js?v=v3.6.14"></script>
+<script src="app.js?v=v3.6.15"></script>
 </body>
 </html>
