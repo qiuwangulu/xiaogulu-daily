@@ -1394,7 +1394,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.15'; // v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
+const APP_VERSION = 'v3.6.16'; // v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -6454,24 +6454,68 @@ async function geoSearchOne(q) {
   } catch (e) { console.warn('[天气] 地理编码失败(', q, '):', e); }
   return null;
 }
-async function fetchWeather(addr, dateStr) {
+/* v3.6.16 天气缓存：按「地址|日期」缓存 3 小时，减少 Open-Meteo 调用、缓解每日配额限流 */
+const WEATHER_CACHE_KEY = 'weather_cache_v1';
+const WEATHER_CACHE_TTL = 3 * 3600 * 1000;
+async function _openMeteoWeather(addr, dateStr) {
   const geo = await geocodeAddr(addr); if (!geo) return null;
   try {
     const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + geo.lat + '&longitude=' + geo.lon
       + '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max'
+      + '&hourly=wind_speed_10m,temperature_2m'
       + '&timezone=Asia%2FShanghai&start_date=' + dateStr + '&end_date=' + dateStr;
     const res = await fetch(url);
     const j = await res.json();
+    if (j && j.error) return null;
     const d = j && j.daily;
     if (!d || !d.time || !d.time.length) return null;
-    return { code: d.weather_code[0], tmax: d.temperature_2m_max[0], tmin: d.temperature_2m_min[0],
-      pop: d.precipitation_probability_max[0], wind: d.wind_speed_10m_max[0], name: geo.name };
-  } catch (e) { console.warn('[天气] 获取失败', e); return null; }
+    let tmax = d.temperature_2m_max[0], tmin = d.temperature_2m_min[0], wind = d.wind_speed_10m_max[0];
+    const ws = ((j.hourly && j.hourly.wind_speed_10m) || []).filter(x => x != null);
+    if (wind == null && ws.length) wind = Math.max.apply(null, ws);
+    const ts = ((j.hourly && j.hourly.temperature_2m) || []).filter(x => x != null);
+    if ((tmax == null || tmin == null) && ts.length) { if (tmax == null) tmax = Math.max.apply(null, ts); if (tmin == null) tmin = Math.min.apply(null, ts); }
+    if (tmax == null && tmin == null) return null;
+    return { code: d.weather_code[0], tmax, tmin, pop: (d.precipitation_probability_max && d.precipitation_probability_max[0] != null ? d.precipitation_probability_max[0] : null), wind, name: geo.name };
+  } catch (e) { console.warn('[天气] Open-Meteo 获取失败', e); return null; }
+}
+async function _wttrWeather(addr, dateStr) {
+  const geo = await geocodeAddr(addr); if (!geo) return null;
+  try {
+    const res = await fetch('https://wttr.in/' + geo.lat + ',' + geo.lon + '?format=j1');
+    const j = await res.json();
+    const w = (j && j.weather || []).find(x => x.date === dateStr) || (j && j.weather && j.weather[0]);
+    if (!w) return null;
+    const tmax = parseFloat(w.maxtempC), tmin = parseFloat(w.mintempC);
+    if (isNaN(tmax) || isNaN(tmin)) return null;
+    const hs = (w.hourly || []).map(h => parseInt(h.windspeedKmph, 10)).filter(x => !isNaN(x));
+    const wind = hs.length ? Math.max.apply(null, hs) : null;
+    return { code: null, tmax, tmin, pop: null, wind, name: geo.name, backup: true };
+  } catch (e) { console.warn('[天气] wttr.in 备用源失败', e); return null; }
+}
+async function fetchWeather(addr, dateStr) {
+  try {
+    const c = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || '{}');
+    const hit = c[addr + '|' + dateStr];
+    if (hit && Date.now() - hit.ts < WEATHER_CACHE_TTL) return hit.w;
+  } catch (e) {}
+  let w = await _openMeteoWeather(addr, dateStr);
+  if (!w) w = await _wttrWeather(addr, dateStr);
+  if (w) {   // 只缓存成功结果，避免失败被缓存导致长时间不重试
+    try {
+      const c = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || '{}');
+      c[addr + '|' + dateStr] = { ts: Date.now(), w };
+      const ks = Object.keys(c);
+      if (ks.length > 10) ks.slice(0, ks.length - 10).forEach(k => delete c[k]);
+      localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(c));
+    } catch (e) {}
+  }
+  return w;
 }
 function weatherText(w) {
   if (!w) return '（天气获取失败，请手动参考天气预报）';
-  const desc = WMO_CODES[w.code] != null ? WMO_CODES[w.code] : ('天气代码' + w.code);
-  return w.name + ' ' + desc + '，最高' + Math.round(w.tmax) + '℃/最低' + Math.round(w.tmin) + '℃，降水概率' + (w.pop != null ? w.pop : '—') + '%，最大风速' + (w.wind != null ? Math.round(w.wind) : '—') + 'km/h';
+  const desc = (w.code != null && WMO_CODES[w.code] != null) ? WMO_CODES[w.code] : '';
+  const head = w.name + (desc ? ' ' + desc : '') + (w.backup ? '（备用天气源）' : '');
+  return head + '，最高' + Math.round(w.tmax) + '℃/最低' + Math.round(w.tmin) + '℃，降水概率' + (w.pop != null ? w.pop : '—') + '%，最大风速' + (w.wind != null ? Math.round(w.wind) : '—') + 'km/h';
 }
 
 /* ---------- 触发时间计算 ---------- */
@@ -7406,11 +7450,11 @@ const MILESTONE_PREVIEW = 5;
 // ============ v3.5.105 里程碑徽章刷新频率控制：每 14 天凌晨 1 点窗口才刷新，其他时间沿用缓存 ============
 const MS_BADGE_CACHE_KEY = 'ms_badge_cache';
 const MS_BADGE_LAST_KEY = 'ms_badge_last_update';
-// 是否到了「刷新徽章」的窗口：距上次刷新 >= 14 天，且当天已过凌晨 1 点（锚定刷新时刻，避免跨日午夜误触发）
+// 是否到了「刷新徽章」的窗口：距上次刷新 >= 15 天，且当天已过凌晨 1 点（锚定刷新时刻，避免跨日午夜误触发）
 function shouldRefreshMilestones(now) {
   now = now || Date.now();
   const last = Number(localStorage.getItem(MS_BADGE_LAST_KEY) || 0);
-  if (now - last < 14 * 86400000) return false;   // 未到 14 天
+  if (now - last < 15 * 86400000) return false;   // 未到 15 天
   if (new Date(now).getHours() < 1) return false;  // 当天凌晨 1 点前不触发
   return true;
 }
@@ -7453,7 +7497,9 @@ function renderMilestoneBadges(items) {
     const hit = items.find(i => i.isFirst && g.domains.indexOf(i.domain.id) !== -1);
     if (hit) {
       _msBadgeHits[idx] = hit;
-      const short = (hit.label && hit.label.trim()) ? hit.label.trim() : simplifyMilestone(hit.text, hit.domain);
+      let short = (hit.label && hit.label.trim()) ? hit.label.trim() : simplifyMilestone(hit.text, hit.domain);
+      short = short.replace(/\s+/g, ' ').trim();
+      if (short.length > 10) short = short.slice(0, 10) + '…';   // v3.6.16 徽章标题硬截断，避免甩长句
       html += `<div class="ms-badge" style="--msbd:${g.color};background:linear-gradient(160deg, ${g.color}2e, ${g.color}0d)" onclick="toggleMilestoneBadge(${idx})">` +
         `<span class="ms-badge-em">${g.icon}</span>` +
         `<div class="ms-badge-nm">${short.replace(/</g, '&lt;')}</div>` +
@@ -7930,7 +7976,11 @@ function openAnalysis() {
   showModal('analysisModal');
   // v3.5.105 仅在「刷新窗口」才调用 AI/规则回写并重算徽章；其他时间沿用缓存（不调 AI、不重算）
   if (_msRefresh) {
-    enrichMilestonesWithLLM(_milestoneItems).then(() => saveMilestoneBadgeCache(_milestoneItems));
+    // v3.6.16 无论是否配置 AI，都先锚定「上次刷新时间」并缓存当前规则结果；
+    // 否则未配 AI 时 last_update 不更新 → 每次打开都重算，徽章不足间隔就变
+    saveMilestoneBadgeCache(_milestoneItems);
+    const cfg = getAITagConfig();
+    if (cfg) enrichMilestonesWithLLM(_milestoneItems).then(() => saveMilestoneBadgeCache(_milestoneItems));
   }
   // v3.5.82 各分类面板统一高度，切换标签时弹窗不跳动
   requestAnimationFrame(() => equalizeAnalysisPanels());

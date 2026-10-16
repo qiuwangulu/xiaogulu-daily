@@ -337,19 +337,54 @@ async function geocode(addr) {
   } catch { /* ignore */ }
   return { lat: 31.2304, lon: 121.4737, name: '上海' };
 }
-async function weatherText(addr, dateStr) {
+// v3.6.16 主源 Open-Meteo（daily + hourly 兜底风速/气温）；失败/配额超限返回 null 交由备用源
+async function openMeteoText(addr, dateStr) {
   try {
     const geo = await geocode(addr);
     const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + geo.lat + '&longitude=' + geo.lon
       + '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max'
+      + '&hourly=wind_speed_10m,temperature_2m'
       + '&timezone=Asia%2FShanghai&start_date=' + dateStr + '&end_date=' + dateStr;
     const res = await fetch(url);
     const j = await res.json();
+    if (j && j.error) return null;                                   // 「Daily API request limit exceeded」等 → 触发备用源
     const d = j && j.daily;
-    if (!d || !d.time || !d.time.length) return '（天气获取失败，请手动参考天气预报）';
-    const desc = WMO_CODES[d.weather_code[0]] != null ? WMO_CODES[d.weather_code[0]] : ('天气代码' + d.weather_code[0]);
-    return geo.name + ' ' + desc + '，最高' + Math.round(d.temperature_2m_max[0]) + '℃/最低' + Math.round(d.temperature_2m_min[0]) + '℃，降水概率' + (d.precipitation_probability_max[0] != null ? d.precipitation_probability_max[0] : '—') + '%，最大风速' + (d.wind_speed_10m_max[0] != null ? Math.round(d.wind_speed_10m_max[0]) : '—') + 'km/h';
-  } catch { return '（天气获取失败，请手动参考天气预报）'; }
+    if (!d || !d.time || !d.time.length) return null;
+    let tmax = d.temperature_2m_max[0], tmin = d.temperature_2m_min[0], wind = d.wind_speed_10m_max[0];
+    // daily 缺风速/气温时，用 hourly 当日值兜底（修复「温度有、风速未知」的半失败）
+    const ws = ((j.hourly && j.hourly.wind_speed_10m) || []).filter(x => x != null);
+    if (wind == null && ws.length) wind = Math.max.apply(null, ws);
+    const ts = ((j.hourly && j.hourly.temperature_2m) || []).filter(x => x != null);
+    if ((tmax == null || tmin == null) && ts.length) {
+      if (tmax == null) tmax = Math.max.apply(null, ts);
+      if (tmin == null) tmin = Math.min.apply(null, ts);
+    }
+    if (tmax == null && tmin == null) return null;
+    const desc = (d.weather_code && WMO_CODES[d.weather_code[0]] != null) ? WMO_CODES[d.weather_code[0]] : '';
+    return geo.name + (desc ? ' ' + desc : '') + '，最高' + Math.round(tmax) + '℃/最低' + Math.round(tmin)
+      + '℃，降水概率' + ((d.precipitation_probability_max && d.precipitation_probability_max[0] != null) ? d.precipitation_probability_max[0] : '—')
+      + '%，最大风速' + (wind != null ? Math.round(wind) : '—') + 'km/h';
+  } catch { return null; }
+}
+// v3.6.16 备用源 wttr.in（独立服务/配额，用坐标查询，无需城市名）
+async function wttrText(addr, dateStr) {
+  try {
+    const geo = await geocode(addr);
+    const res = await fetch('https://wttr.in/' + geo.lat + ',' + geo.lon + '?format=j1');
+    const j = await res.json();
+    const w = (j && j.weather || []).find(x => x.date === dateStr) || (j && j.weather && j.weather[0]);
+    if (!w) return null;
+    const tmax = parseFloat(w.maxtempC), tmin = parseFloat(w.mintempC);
+    if (isNaN(tmax) || isNaN(tmin)) return null;
+    const hs = (w.hourly || []).map(h => parseInt(h.windspeedKmph, 10)).filter(x => !isNaN(x));
+    const wind = hs.length ? Math.max.apply(null, hs) : null;
+    return geo.name + '（备用天气源），最高' + Math.round(tmax) + '℃/最低' + Math.round(tmin)
+      + '℃，最大风速' + (wind != null ? wind : '—') + 'km/h';
+  } catch { return null; }
+}
+async function weatherText(addr, dateStr) {
+  const t = await openMeteoText(addr, dateStr) || await wttrText(addr, dateStr);
+  return t || '（天气获取失败，请手动参考天气预报）';
 }
 
 /* ==================== AI 调用 ==================== */
