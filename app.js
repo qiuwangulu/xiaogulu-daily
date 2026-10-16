@@ -1394,7 +1394,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.16'; // v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
+const APP_VERSION = 'v3.6.17'; // v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4919,6 +4919,19 @@ async function classifyMilestoneLLM(text, cfg) {
   try { localStorage.setItem(cacheKey, JSON.stringify(result)); } catch {}
   return result;
 }
+// v3.6.17 并发限流映射：避免里程碑首次刷新时上百条文本并行调用 LLM 触发 429 限流（计费照常发生）
+async function _mapPool(items, limit, fn) {
+  const ret = new Array(items.length);
+  let idx = 0;
+  const workers = [];
+  for (let i = 0; i < Math.min(limit, items.length); i++) {
+    workers.push((async () => {
+      while (idx < items.length) { const j = idx++; try { ret[j] = await fn(items[j], j); } catch (e) { ret[j] = null; } }
+    })());
+  }
+  await Promise.all(workers);
+  return ret;
+}
 // 规则先渲染，再异步用 LLM 回写分类/短标签；无配置或全失败则保持规则结果不动
 async function enrichMilestonesWithLLM(items) {
   const cfg = getAITagConfig();
@@ -4926,7 +4939,7 @@ async function enrichMilestonesWithLLM(items) {
   const unique = []; const seen = new Set();
   for (const it of items) { if (!seen.has(it.text)) { seen.add(it.text); unique.push(it); } }
   let changed = false;
-  await Promise.allSettled(unique.map(async it => {
+  await Promise.allSettled(_mapPool(unique, 4, async it => {   // v3.6.17 最多 4 条并行
     const r = await classifyMilestoneLLM(it.text, cfg);
     if (!r) return;
     const dom = msDomainById(r.domainId);
@@ -4955,6 +4968,8 @@ const AI_HIST_CLOUD_KEY = '_ai_hist';   // v3.5.137 已停用（历史对话不�
 const MEMO_CLOUD_KEY = '_memo';         // v3.5.115 备忘录同样加密同步家庭云（此前只存本机，清缓存后丢失）
 const AI_CHAT_KEY = 'ai_chat_v1';
 const AI_CHAT_CAP = 60;            // v3.5.155 单次对话本地保留上限提高到 60 条（≈30 轮），避免多轮对话被静默截断只显示最新几轮
+const AI_CHAT_SEND_CAP = 12;       // v3.6.17 每次请求最多携带最近 12 条历史（≈6 轮）上行：长对话每轮全量重发是 token 消耗主因（界面展示仍为全部 60 条）
+const KB_CHAT_BUDGET = 12000;      // v3.6.17 问答 system prompt 知识库预算（字符，权威条目优先）：默认全量发送，仅在知识库异常增大时截断，防止单轮输入无限膨胀
 const AI_HIST_KEY = 'ai_chat_history_v1';
 const AI_HIST_CAP = 10;            // v3.5.137 历史对话仅保留最近 10 段（此前 30）
 let KB = [];
@@ -5236,7 +5251,18 @@ function buildAISystemPrompt() {
   const daily = days.map(formatDayForAI).join('\n');
 
   let kbText = '';
-  if (KB.length) kbText = '\n\n【家庭知识库（我家宝宝的具体情况与偏好，回复时务必优先考虑）】\n' + KB.map(x => '- [' + x.cat + '] ' + x.text).join('\n');
+  if (KB.length) {
+    // v3.6.17 知识库预算截断（权威条目优先，其余按原顺序）：默认全量发送，
+    // 仅在知识库异常增大时截断，防止单轮输入无限膨胀（当前 KB 约 1 万汉字，每轮问答都会全量重发）。
+    const ordered = KB.filter(x => x.cat === KB_AUTH_CAT).concat(KB.filter(x => x.cat !== KB_AUTH_CAT));
+    const lines = []; let len = 0;
+    for (const x of ordered) {
+      const line = '- [' + x.cat + '] ' + x.text;
+      if (len + line.length > KB_CHAT_BUDGET && lines.length) break;
+      lines.push(line); len += line.length;
+    }
+    kbText = '\n\n【家庭知识库（我家宝宝的具体情况与偏好，回复时务必优先考虑）】\n' + lines.join('\n');
+  }
   // v3.5.131 方案A：标注「权威资料」的条目为权威育儿参考，冲突时优先采信并注明出处
   if (KB.some(x => x.cat === KB_AUTH_CAT)) {
     kbText += '\n（其中标注「' + KB_AUTH_CAT + '」的条目为权威育儿参考，如崔玉涛《育儿百科》等；当与一般性经验或网络说法冲突时，优先采信权威资料，并尽量注明出处。）';
@@ -5369,9 +5395,12 @@ async function runAIRequest() {
     if (!cfg) {
       reply = '（尚未配置 AI 密钥：请到「管理」页配置 DeepSeek 等大模型密钥后再使用本功能）';
     } else {
-      const msgs = [{ role: 'system', content: buildAISystemPrompt() }]
-        .concat(AI_CHAT.filter(m => (m.role === 'me' || m.role === 'ai') && !isAIFailMsg(m))
-          .map(m => ({ role: m.role === 'me' ? 'user' : 'assistant', content: m.text })));
+      // v3.6.17 只带最近 N 条历史上行（界面仍展示全部 60 条）：长对话每轮全量重发 full KB+7天记录+全部历史 是 token 消耗主因
+      let _hist = AI_CHAT.filter(m => (m.role === 'me' || m.role === 'ai') && !isAIFailMsg(m))
+        .map(m => ({ role: m.role === 'me' ? 'user' : 'assistant', content: m.text }))
+        .slice(-AI_CHAT_SEND_CAP);
+      if (_hist.length && _hist[0].role === 'assistant') _hist = _hist.slice(1);   // 首条须为用户提问
+      const msgs = [{ role: 'system', content: buildAISystemPrompt() }].concat(_hist);
       const r = await callAIChat(cfg, msgs);
       if (typeof r === 'string' && r.indexOf('__FAIL__:') === 0) {
         reason = r.slice(9); failed = true; reply = aiFailReasonText(reason);
@@ -5458,7 +5487,11 @@ const SCHED_GEN_LEAD = 12 * 3600000;     // v3.6.3 起不再使用：改为每�
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内才推送（避免补推历史）
 const SCHED_GEN_COOLDOWN = 30 * 60000;   // AI 生成失败重试冷却 30 分钟
 // AI 计划 prompt 版本：内容与分类结构变化时递增，可强制所有 AI 任务用最新 prompt 重新生成
-const PLAN_PROMPT_VERSION = '11'; // v3.6.14 计划prompt: ①风级换算改为「以家庭知识库为准」（新增户外风速风级换算种子，不再用通用气象推算）②穿衣要求列出同一厚薄档位所有合适的衣物（含多件），让长辈据当天实际选未洗的穿
+// v3.6.17 升 12：与服务端 scripts/sched-push.mjs 对齐（服务端 prompt 内容同步到 v3.6.14，
+// 并修复「服务端用旧 prompt 生成却标记前端版本号」导致部署后不更新的问题）。
+// 注意：prompt 内容变化时须前后端同步升级此版本号（服务端 PLAN_PROMPT_VERSION）。
+// 比较用数值单调语义（见 runScheduler staleVer）：云端版本更新时不本地回退重生成。
+const PLAN_PROMPT_VERSION = '12'; // v3.6.14 计划prompt: ①风级换算改为「以家庭知识库为准」（新增户外风速风级换算种子，不再用通用气象推算）②穿衣要求列出同一厚薄档位所有合适的衣物（含多件），让长辈据当天实际选未洗的穿
 let SCHED_TASKS = [];
 const _pad2 = n => String(n).padStart(2, '0');
 
@@ -5579,7 +5612,9 @@ function mergeSchedCloudTasks(cloudTasks) {
     const lt = localMap.get(ct.id);
     if (!lt) { SCHED_TASKS.push(ct); localMap.set(ct.id, ct); changed = true; continue; }
     const cg = ct.genDate || '', lg = lt.genDate || '';
-    if (cg > lg && ct.content) {
+    // v3.6.17 云端 genDate 更新 **或 prompt 版本更新**（如服务端用对齐后的新 prompt 重新生成）都采纳云端整任务
+    const cVer = Number(ct.planVer || 0), lVer = Number(lt.planVer || 0);
+    if (ct.content && (cg > lg || cVer > lVer)) {
       // 服务端 0 点生成了更新的当天计划 → 整任务以云端为准
       Object.assign(lt, ct);
       changed = true;
@@ -6777,7 +6812,8 @@ async function runScheduler(forceGen) {
       const todayStr = planTodayStr();   // v3.6.5 计划日用真实日历日（0 点翻页），不用业务日（1 点翻页）
       const cooling = (Date.now() - (task.genTryTs || 0)) <= SCHED_GEN_COOLDOWN;
       // 内容版本过期也重生成：已有内容但用的是旧 prompt 版本，用户主动查看(forceGen)时立即刷新
-      const staleVer = (task.planVer || '') !== PLAN_PROMPT_VERSION;
+      // v3.6.17 数值单调比较：云端版本 >= 本地时不重生成（防止服务端新 prompt 生成的内容被本地旧版本回退覆盖，高低版本乒乓）
+      const staleVer = Number(task.planVer || 0) < Number(PLAN_PROMPT_VERSION);
       if ((task.genDate !== todayStr || staleVer) && (!cooling || (forceGen && (!task.content || staleVer)))) {
         const _beforeGen = task.genDate;
         task.genTryTs = Date.now(); saveSchedTasks();
@@ -8108,12 +8144,13 @@ async function generateFamilyId(familyCode) {
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(familyCode));
   return Array.from(new Uint8Array(hash)).slice(0, 8).map(b => b.toString(16).padStart(2,'0')).join('');
 }
-async function deriveKey(familyCode, saltB64) {
-  if (_cryptoKey && _cryptoFamilyCode === familyCode) return _cryptoKey;
+async function deriveKey(familyCode, saltB64, noCache) {
+  if (!noCache && _cryptoKey && _cryptoFamilyCode === familyCode) return _cryptoKey;
   const salt = b64ToBuf(saltB64);
   const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(familyCode), {name:'PBKDF2'}, false, ['deriveKey']);
   const key = await crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations:310000, hash:'SHA-256'}, baseKey, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
-  _cryptoKey = key; _cryptoFamilyCode = familyCode; return key;
+  if (!noCache) { _cryptoKey = key; _cryptoFamilyCode = familyCode; }
+  return key;
 }
 async function encrypt(key, plaintext) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -8130,23 +8167,95 @@ async function getCryptoKey() {
   if (!salt) {
     // 本地没有 salt：先查云端是否已有（加入已有家庭），绝不自动生成覆盖
     if (isSyncReady()) {
+      let saltRows = null;
       try {
-        const saltRows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq._salt&select=encrypted_data`);
-        if (saltRows.length > 0 && saltRows[0].encrypted_data) {
-          salt = saltRows[0].encrypted_data;
-          localStorage.setItem('family_salt', salt);
-          console.log('[Crypto] 已拉取云端 salt，加入现有家庭');
-          return await deriveKey(fc, salt);
-        }
-      } catch (e) {}
+        saltRows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq._salt&select=encrypted_data`);
+      } catch (e) {
+        // v3.6.17 网络失败时绝不新建 salt 上传（旧逻辑会用随机盐覆盖家庭真实密钥，导致全家数据解密失败）
+        console.warn('[Crypto] 云端 salt 拉取失败，暂不新建（避免覆盖家庭密钥）', e);
+        return null;
+      }
+      if (saltRows && saltRows.length > 0 && saltRows[0].encrypted_data) {
+        salt = saltRows[0].encrypted_data;
+        localStorage.setItem('family_salt', salt);
+        console.log('[Crypto] 已拉取云端 salt，加入现有家庭');
+        return await deriveKey(fc, salt);
+      }
+      // 云端确认没有 salt 才新建（首次创建家庭）
+      salt = bufToB64(crypto.getRandomValues(new Uint8Array(16)));
+      localStorage.setItem('family_salt', salt);
+      await uploadSalt(salt);
+      console.log('[Crypto] 新建家庭 salt');
+    } else {
+      return null;   // v3.6.17 未配置同步且本地无 salt：不派生垃圾密钥
     }
-    // 云端也没有才新建（首次创建家庭）
-    salt = bufToB64(crypto.getRandomValues(new Uint8Array(16)));
-    localStorage.setItem('family_salt', salt);
-    await uploadSalt(salt);
-    console.log('[Crypto] 新建家庭 salt');
   }
   return await deriveKey(fc, salt);
+}
+/* v3.6.17 盐一致性判定：本地与云端 salt 不一致时，用多行云端数据分别试解，多数决。
+ * 返回 'local'（本地盐能解密家庭数据 → 用本地修复云端）/ 'cloud'（云端盐才是对的 → 采纳云端）/
+ * 'unknown'（没有可用验证数据 → 不覆盖任何一方）。
+ * 修复的漏洞：旧逻辑只验证「今天」的记录，当天无记录/网络抖动时两者都判失败 →
+ * 无条件上传本地盐覆盖云端，把家庭密钥打挂（服务端定时任务因此连续解密失败、今日计划停更）。 */
+async function _judgeSalt(fid, localSaltB64, cloudSaltB64) {
+  const fc = localStorage.getItem('family_code');
+  if (!fc || !localSaltB64 || !cloudSaltB64) return 'unknown';
+  let localKey = null, cloudKey = null;
+  try { localKey = await deriveKey(fc, localSaltB64, true); } catch { return 'unknown'; }
+  try { cloudKey = await deriveKey(fc, cloudSaltB64, true); } catch { return 'unknown'; }
+  // 候选行：最近 6 天记录（一次查询）+ 常用配置键
+  const cands = [];
+  cands.push(`family_records?family_id=eq.${fid}&select=encrypted_data,iv&order=record_date.desc&limit=6`);
+  for (const ck of ['_memo', '_ai_kb', '_ms_override', 'bodyHistory', 'babyHeight', 'babyWeight', 'milkDefaultAmount', '_early_edu', '_sched_cloud']) {
+    cands.push(`family_config?family_id=eq.${fid}&config_key=eq.${ck}&select=encrypted_data,iv`);
+  }
+  let localWins = 0, cloudWins = 0, tested = 0;
+  for (const q of cands) {
+    let rows = null;
+    try { rows = await supabaseGet(q); } catch { continue; }
+    if (!Array.isArray(rows)) continue;
+    for (const r0 of rows) {
+      if (!r0 || !r0.encrypted_data || !r0.iv) continue;
+      tested++;
+      let lok = false, cok = false;
+      try { await decrypt(localKey, r0.encrypted_data, r0.iv); lok = true; } catch {}
+      if (!lok) { try { await decrypt(cloudKey, r0.encrypted_data, r0.iv); cok = true; } catch {} }
+      if (lok && !cok) localWins++;
+      else if (cok && !lok) cloudWins++;
+    }
+  }
+  if (!tested) return 'unknown';          // 无验证数据：不覆盖
+  if (localWins > cloudWins) return 'local';
+  if (cloudWins > localWins) return 'cloud';
+  return 'unknown';                        // 平局也无法判定：不覆盖（保留云端，fail-safe）
+}
+/* v3.6.17 盐一致性巡检：本地与云端 salt 不一致时判定并修复；一致时仅 1 次轻量查询。
+ * 调用点：syncUpload（推送前）+ 开 App 后定期巡检（保证不做任何操作也能自愈）。 */
+async function checkSaltConsistency() {
+  if (typeof isSyncReady !== 'function' || !isSyncReady()) return;
+  const fid = getFamilyId(); if (!fid) return;
+  const localSalt = localStorage.getItem('family_salt');
+  if (!localSalt) return;   // 本地无 salt 由 getCryptoKey 处理（拉取/新建）
+  let saltRows = null;
+  try { saltRows = await supabaseGet(`family_config?family_id=eq.${fid}&config_key=eq._salt&select=encrypted_data`); }
+  catch (e) { return; }     // 网络问题：下次再查
+  if (!saltRows || !saltRows.length || !saltRows[0].encrypted_data) return;
+  const cloudSalt = saltRows[0].encrypted_data;
+  if (cloudSalt === localSalt) return;    // 一致，无需处理
+  console.warn('[Sync] 检测到云端 salt 与本地不一致，开始判定');
+  const verdict = await _judgeSalt(fid, localSalt, cloudSalt);
+  if (verdict === 'local') {
+    console.warn('[Sync] 本地 salt 可解密家庭数据，用本地 salt 修复云端');
+    await uploadSalt(localSalt);
+    showToast('检测到云端密钥不一致，已用本机密钥修复');
+  } else if (verdict === 'cloud') {
+    console.warn('[Sync] 云端 salt 可解密家庭数据，采纳云端 salt');
+    localStorage.setItem('family_salt', cloudSalt);
+    _cryptoKey = null;
+    showToast('已同步云端密钥，请重新操作');
+  } else {
+    console.warn('[Sync] 云端 salt 无法判定（无可用验证数据），保留云端 salt，不覆盖');
+  }
 }
 async function uploadSalt(saltB64) {
   if (!isSyncReady()) return;
@@ -8171,52 +8280,10 @@ async function syncUpload(category, dateStr) {
   if (!isSyncReady()) return;
   if (!navigator.onLine) { enqueueSync(category, dateStr); return; }
   try {
-    const key = await getCryptoKey(); if (!key) return;
-    // salt 一致性检查与自动修复：防止用错误的 salt 加密上传
-    const localSalt = localStorage.getItem('family_salt');
-    if (localSalt && isSyncReady()) {
-      try {
-        const saltRows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq._salt&select=encrypted_data`);
-        if (saltRows.length > 0 && saltRows[0].encrypted_data && saltRows[0].encrypted_data !== localSalt) {
-          // salt 不一致：尝试用本地 salt 解密云端一条数据，验证哪个 salt 正确
-          let localSaltValid = false, cloudSaltValid = false;
-          try {
-            const testRows = await supabaseGet(`family_records?family_id=eq.${getFamilyId()}&record_date=eq.${getTodayDateStr()}&select=encrypted_data,iv`);
-            if (testRows.length > 0) {
-              // 尝试用本地 salt 解密
-              try { await decrypt(key, testRows[0].encrypted_data, testRows[0].iv); localSaltValid = true; } catch {}
-              // 尝试用云端 salt 解密（需要临时派生密钥）
-              if (!localSaltValid) {
-                try {
-                  const cloudKey = await deriveKey(localStorage.getItem('family_code'), saltRows[0].encrypted_data);
-                  await decrypt(cloudKey, testRows[0].encrypted_data, testRows[0].iv);
-                  cloudSaltValid = true;
-                } catch {}
-              }
-            }
-          } catch {}
-          if (!localSaltValid && !cloudSaltValid) {
-            // 两者都无法解密：云端数据已损坏，用本地 salt 覆盖修复
-            console.warn('[Sync] 云端 salt 和数据均无法解密，用本地 salt 修复');
-            await uploadSalt(localSalt);
-            showToast('检测到云端密钥损坏，已自动修复，请重新点击同步');
-            return;
-          } else if (!localSaltValid && cloudSaltValid) {
-            // 云端 salt 能解密，本地不能：拉取云端 salt
-            console.warn('[Sync] 本地 salt 错误，拉取云端 salt');
-            localStorage.setItem('family_salt', saltRows[0].encrypted_data);
-            _cryptoKey = null;
-            showToast('已同步云端密钥，请重新操作');
-            return;
-          } else if (localSaltValid && !cloudSaltValid) {
-            // 本地 salt 能解密，云端不能：用本地覆盖云端
-            console.warn('[Sync] 云端 salt 错误，用本地 salt 修复');
-            await uploadSalt(localSalt);
-          }
-          // 两者都能解密（理论上不可能，但安全起见继续）
-        }
-      } catch (e) {}
-    }
+    // v3.6.17 先做盐一致性巡检/修复（可能改写本地 salt），再派生密钥；
+    // 旧逻辑在此处「只验证今天记录、验证不了就上传本地盐覆盖云端」，曾把家庭密钥打挂
+    const key = await (async () => { await checkSaltConsistency(); return await getCryptoKey(); })();
+    if (!key) return;
     const fid = getFamilyId();
     if (category === 'records') {
       // v3.5.79 上传前过滤脏记录，杜绝把无时间戳的非法数据推送到云端
@@ -8667,6 +8734,10 @@ async function initSync() {
     // 启动：近 3 天优先（首屏数据秒级到位），4 秒后后台静默补全全量 30 天（不阻塞首屏）
     try { await syncPullAll({ days: 3 }); } catch (e) { console.warn('启动同步(近3天)失败:', e); }
     try { setTimeout(() => { syncPullAll().catch(e => console.warn('后台补全同步失败:', e)); }, 4000); } catch (e) {}
+    // v3.6.17 云端密钥巡检：开 App 后 10 秒首次执行，之后每 10 分钟一次（仅前台）
+    // 目的：服务端若因盐不一致解密失败，App 打开即可多行试解自动判定并修复，无需等 syncUpload
+    try { setTimeout(() => { checkSaltConsistency().catch(() => {}); }, 10000); } catch (e) {}
+    try { setInterval(() => { if (!document.hidden) checkSaltConsistency().catch(() => {}); }, 10 * 60000); } catch (e) {}
     return;
   }
   showFamilySetup();

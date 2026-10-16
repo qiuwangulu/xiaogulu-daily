@@ -29,7 +29,23 @@ const SCHED_DEDUP_KEY = '_schedpushdedup';
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内推送
 const SCHED_GEN_LEAD = 12 * 3600000;     // v3.6.3 起不再使用：改为每天 0 点生成「当天」计划
 const DEDUP_MAX_AGE = 12 * 3600000;      // 去重有效期
-const PLAN_PROMPT_VERSION = '8'; // v3.6.3 计划prompt: 今日计划改为「每天0点生成当天计划」(天气/补剂按当天, 大便/早教按前一天)，新增【统计口径】明确行
+// v3.6.17 AI 生成冷却（与前端 SCHED_GEN_COOLDOWN 一致）。
+// 修复：本工作流由 Supabase pg_cron 每 5 分钟触发，此前「genDate 不更新/版本过期」时
+// 每次运行都会调 AI + 天气，最坏 288 次/天 → DeepSeek token 与 Open-Meteo 配额双重风暴。
+const SCHED_GEN_COOLDOWN = 30 * 60000;
+// v3.6.17 服务端天气缓存（云端 family_config._sched_weather，3 小时 TTL）：
+// Open-Meteo 免费额度按 IP 计，GitHub Actions 位于 Azure 共享 IP 段，易被他人的 CI 用量挤爆
+// （线上已实测 "Daily API request limit exceeded"），缓存可把重复调用收敛到 1 次/3 小时。
+const WEATHER_CACHE_KEY = '_sched_weather';
+const WEATHER_CACHE_TTL = 3 * 3600000;
+// v3.6.17 计划prompt 与前端 v3.6.14 内容对齐（风级换算以家庭知识库为准、穿衣列出同一厚薄档位
+// 全部衣物、辅食试吃条件、统计口径明确行），版本号前后端统一升 12。
+// 修复的根因：服务端 prompt 此前冻结在 v3.6.3(v8)，生成后却把 task.planVer 标记为
+// ctx.promptVer（前端版本号）——「用旧 prompt 生成的内容冒充最新版本」，前端 staleVer 判假，
+// 导致部署新 prompt 后今日计划永不刷新。现在改为标记服务端自己的版本号：服务端落后时，
+// 前端会按版本差重新生成，前后端任一边更新都能自愈。
+// 注意：prompt 内容变化时须前后端同步升级此版本号（前端 app.js PLAN_PROMPT_VERSION）。
+const PLAN_PROMPT_VERSION = '12';
 
 // v3.6.0 育儿嫂休假 / 工资结算常量（与前端一致）
 const NANNY_VACATION_CLOUD_KEY = '_nanny_vacation';
@@ -210,9 +226,10 @@ function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec) {
       + '- 早教各项次数：' + eeLine + '\n'
       + '- 大便次数：' + stats.poop + ' 次\n'
       + '- 户外时长：' + stats.outdoorMin + ' 分钟\n'
-      + (stats.foods.length ? ('- 辅食记录：' + stats.foods.map(f => (f.names.join('/') || '辅食') + (f.note ? '（备注：' + f.note + '）' : '')).join('；') + '\n') : '')
+      + (stats.foods.length ? ('- 辅食记录：' + stats.foods.map(f => (f.names.join('/') || '辅食') + (f.note ? '（备注：' + f.note + '）' : '')).join('；') + '\n') : '- 前一日无辅食记录（今日是否试新辅食，需按下方「辅食试吃条件」判断）\n')
       + '- 营养补剂建议（与上次相反）：' + (supRec || '—') + '\n';
   }
+  // v3.6.17 以下 prompt 正文与前端 app.js buildPlanSystemPrompt（v3.6.14）逐字对齐
   return '你是一位专业、贴心的婴幼儿育儿规划助手，服务对象是长辈（外婆）带小宝宝，目标是提前生成「今日计划」以减少带娃决策压力。\n'
     + '请用简体中文、具体可操作；不要使用 markdown 标记；分点请用「·」。内容精炼：每个分类 3 条以内、每条不超过 20 字。\n\n'
     + '【宝宝档案】\n- 姓名：' + ctx.babyName + '；出生：' + ctx.birthDate + '；当前 ' + ad.months + ' 月龄 ' + ad.days + ' 天\n'
@@ -226,14 +243,16 @@ function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec) {
     + (targetIsMWF ? ('本计划日 ' + dateStr + ' 为' + PLAN_DOW[targetDow] + '（即任务触发当天；周一/三/五为补剂日），营养补剂请安排：' + (supRec || 'D3') + '（与上次相反）。')
                    : ('本计划日 ' + dateStr + ' 为' + PLAN_DOW[targetDow] + '（即任务触发当天；非周一/周三/周五），营养补剂项写明「今日无需补剂」。'))
     + '\n'
-    + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度，据此建议穿什么、几件多厚，参考知识库「穿衣」）；洗澡、剪指甲、睡眠、排便关注'
+    + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度，据此建议穿什么、几件多厚，参考知识库「穿衣」；穿衣必须精确到知识库里的具体衣物名称，如「熊猫系带长袖长裤」「蓝/黄背心厚睡袋」，不得只写「长袖长裤」「连体衣」这类泛称；知识库无对应款式时才给通用建议）；若知识库中同一厚薄档位有多件衣物（如多件长袖长裤），请在该档位下**全部列出**这些厚薄合适的衣物名称（如「熊猫长袖长裤／黄边长袖长裤／条纹长袖长裤」），提示长辈当天任选一件未洗的穿，不要把多件只写一件、也不要只写泛称，让长辈据当天实际哪件未洗来选；洗澡、剪指甲、睡眠、排便关注'
     + (stats && stats.poop === 0 ? '；昨日大便 0 次，需关注是否便秘：两餐间记得喂水、多顺时针揉腹'
        : (stats && stats.poop >= 3 ? '；昨日大便≥3 次，需关注拉肚子：注意保暖、防红屁屁' : '')) + '。\n'
     + '【健康·出行】户外活动时间与时长（结合天气与昨日户外时长，给出具体时段如"上午9-10点、下午4-5点"及总时长建议）、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物；结合知识库「穿衣」给出是否戴帽子、是否裹薄包被/纱巾。\n'
     + '【辅食提醒】若上方"辅食记录"备注含过敏/异常（如某品牌米粉过敏），在喂养或辅食处提醒今日更换品牌（具体到备注里的牌子）。\n'
+    + '【辅食试吃条件】若上方为「前一日无辅食记录」（或辅食很少），请在【喂养】的辅食项按辅食添加条件判断今日是否可试新辅食：月龄是否已达 6 月龄且已开始添加辅食、是否处于健康状态且非接种当日、每次只引入一种新食物并连续观察 2-3 天无过敏再加下一种、由稀到稠由少到多；据此明确写出「今日可试 XX（某种具体食物，如米粉/南瓜泥/蛋黄）」或「暂不添加，原因：…」。\n'
     + '【补剂判定】营养补剂是否为补剂日（周一/三/五），一律按本计划日（即上方"目标日期"、任务触发当天）的星期判断；不得按"第二天"或其他任何日期判断。\n'
     + '【统计口径】天气与营养补剂一律按「本计划日（上方目标日期、任务触发当天）」判断；大便次数与早教一律按「前一日」的记录判断。两者口径不得混用。\n'
     + '【早教】放在最后一段输出。结合上方"前一日早教数据"：次数<1 的项目必须纳入今日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。\n'
+    + '【风级换算与户外/防风】天气中的「最大风速」(km/h)换算风大/风小，**必须以家庭知识库（尤其知识库「户外/综合」中关于风速风级的标准）为准，不要使用通用气象风级自行推算**。严格按照知识库给出的阈值执行；若知识库未提供明确标准，则采用兜底：≤19km/h（≤4级，风小）→ 正常户外、可不戴帽或只戴薄帽、鼓励适当增加户外时长；20-38km/h（5-6级，风稍大）→ 戴帽防风、婴儿车加防风罩、选避风时段与地点、适当缩短户外；≥39km/h（≥7级，风大）→ 减少户外活动或改室内、必须戴帽并防风、避开风口与广告牌（参考：上海大风蓝色预警≈平均风力6级≈39km/h）。该判断请写入【健康·出行】的户外时段、戴帽与避风建议中，并可在摘要点出"风大注意防风"或"风小宜多户外"。注意风有风寒效应、体感更冷，户外穿衣在气温档基础上：风稍大升半档、风大升一档。\n'
     + '【温度要求】上方天气已给出当日最高温和最低温，请在「起居护理·穿衣」与「健康·出行」中明确写出具体温度数值（如"今日 28℃/19℃，短袖即可"），不要只写"根据天气"。\n'
     + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【喂养】【起居护理】【健康·出行】【早教】顺序分块给出内容（早教在最后）。';
 }
@@ -382,8 +401,38 @@ async function wttrText(addr, dateStr) {
       + '℃，最大风速' + (wind != null ? wind : '—') + 'km/h';
   } catch { return null; }
 }
-async function weatherText(addr, dateStr) {
+/* v3.6.17 天气缓存（云端，3h TTL）：同一「地址|日期」在 TTL 内直接复用，
+ * 避免版本过期/生成重试期间反复打 Open-Meteo（免费额度按 IP 计，Actions 共享 IP 易超限）。
+ * 只缓存成功结果；缓存读写失败不影响主流程。 */
+async function readWeatherCache(fid, key, addr, dateStr) {
+  try {
+    const rows = await sbGet(`family_config?family_id=eq.${fid}&config_key=eq.${WEATHER_CACHE_KEY}&select=encrypted_data,iv`);
+    if (!rows.length || !rows[0].encrypted_data || !rows[0].iv) return null;
+    const c = JSON.parse(decrypt(key, rows[0].encrypted_data, rows[0].iv));
+    const hit = c && c[addr + '|' + dateStr];
+    if (hit && hit.text && Date.now() - (hit.ts || 0) < WEATHER_CACHE_TTL) return hit.text;
+  } catch (e) { console.warn('[天气] 缓存读取失败', e && e.message); }
+  return null;
+}
+async function writeWeatherCache(fid, key, addr, dateStr, text) {
+  try {
+    let c = {};
+    const rows = await sbGet(`family_config?family_id=eq.${fid}&config_key=eq.${WEATHER_CACHE_KEY}&select=encrypted_data,iv`);
+    if (rows.length && rows[0].encrypted_data && rows[0].iv) {
+      try { c = JSON.parse(decrypt(key, rows[0].encrypted_data, rows[0].iv)) || {}; } catch { c = {}; }
+    }
+    c[addr + '|' + dateStr] = { ts: Date.now(), text };
+    const ks = Object.keys(c);
+    if (ks.length > 8) ks.slice(0, ks.length - 8).forEach(k => delete c[k]);   // 只保留最近 8 条
+    const enc = encrypt(key, JSON.stringify(c));
+    await sbUpsert('family_config', { family_id: fid, config_key: WEATHER_CACHE_KEY, encrypted_data: enc.data, iv: enc.iv, last_modified: Date.now() });
+  } catch (e) { console.warn('[天气] 缓存写入失败', e && e.message); }
+}
+async function weatherText(addr, dateStr, fid, key) {
+  const cached = (fid && key) ? await readWeatherCache(fid, key, addr, dateStr) : null;
+  if (cached) { console.log('[天气] 命中云端缓存', addr + '|' + dateStr); return cached; }
   const t = await openMeteoText(addr, dateStr) || await wttrText(addr, dateStr);
+  if (t && fid && key) await writeWeatherCache(fid, key, addr, dateStr, t);   // 只缓存成功结果
   return t || '（天气获取失败，请手动参考天气预报）';
 }
 
@@ -410,7 +459,7 @@ async function generatePlan(task, trig, ctx, fid, key) {
   if (!ctx.ai || !ctx.ai.apiKey) { console.warn('[计划] 无 AI 密钥，跳过生成'); return false; }
   if (DRY_RUN) { console.log('[DRY] 触发计划生成（跳过真实调用）', dateStr); return false; }
   let wText = '（未获取）';
-  try { wText = await weatherText(ctx.weatherAddr, dateStr); } catch { /* ignore */ }
+  try { wText = await weatherText(ctx.weatherAddr, dateStr, fid, key); } catch { /* ignore */ }
   // v3.6.1 统计「目标日期的前一天」的记录（如 10-14 的计划按 10-13 的记录）
   let stats = null, supRec = 'AD';
   if (key && fid) {
@@ -431,7 +480,7 @@ async function generatePlan(task, trig, ctx, fid, key) {
   task.content = String(r).trim();
   task.genPeriod = periodKey(task, trig);
   task.genDate = dateStr;
-  task.planVer = ctx.promptVer || PLAN_PROMPT_VERSION;
+  task.planVer = PLAN_PROMPT_VERSION;   // v3.6.17 标记服务端自己的版本号（不再冒用 ctx.promptVer）：服务端落后时前端会按版本差重新生成，自愈
   return true;
 }
 
@@ -480,7 +529,14 @@ async function main() {
   if (!rows.length || !rows[0].encrypted_data || !rows[0].iv) { console.log('云端无定时任务数据（前端尚未同步）'); return; }
   let data;
   try { data = JSON.parse(decrypt(key, rows[0].encrypted_data, rows[0].iv)); }
-  catch (e) { console.error('解密失败（家庭码是否与前端一致？）', e && e.message); process.exit(1); }
+  catch (e) {
+    // v3.6.17 明确根因与恢复方法：某台设备/测试环境用不一致的盐覆盖了云端 _salt
+    // （前端 v3.6.17 已修复该「验证不了就覆盖」的自动修复漏洞）。
+    console.error('[Sched] 云端定时任务解密失败：', e && e.message);
+    console.error('[Sched] 根因通常是云端 _salt 被不一致的密钥覆盖（家庭数据密钥被打挂）。');
+    console.error('[Sched] 恢复方法：在存有真实数据的手机上打开 App，开 App 后 10 秒内的密钥巡检会自动判定并修复云端 salt；随后本工作流即可正常解密。');
+    process.exit(1);
+  }
 
   const tasks = Array.isArray(data.tasks) ? data.tasks : [];
   const ctx = data.ctx || {};
@@ -493,22 +549,29 @@ async function main() {
 
   const now = new Date();
   let changed = false;
+  const genAttempted = new Set();   // v3.6.17 本次运行已尝试过生成的任务（避免①失败后②在同一次运行内重复调 AI+天气）
 
   for (const task of tasks) {
     if (!task || !task.enabled) continue;
     const { prev, next } = computeTriggers(task, now);
     const name = (task.name && String(task.name).trim()) ? String(task.name).trim() : (task.mode === 'ai' ? '今日计划' : '定时提醒');
+    const taskKey = (task.id != null) ? String(task.id) : name;
 
-    // ① v3.6.3 AI 计划：每天 0 点生成「当天」计划（不再提前 12h 生成次日计划）
+    // ① v3.6.17 AI 计划：每天 0 点生成「当天」计划（不再提前 12h 生成次日计划）
     //    云端未生成当天计划(genDate !== 今天) 或 prompt 版本过期 → 用今天 00:00 生成；
     //    前端已生成/编辑当天计划并同步到云端时，此处不覆盖（保护用户编辑）。
-    if (task.mode === 'ai' && ctx.ai) {
+    //    v3.6.17 新增 30 分钟冷却（task.genTryTs 持久化到云端）：杜绝每 5 分钟重试风暴。
+    if (task.mode === 'ai' && ctx.ai && !genAttempted.has(taskKey)) {
       const todayStr = fmtDateLocal(now);
       const todayTrg = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const staleVer = (task.planVer || '') !== (ctx.promptVer || PLAN_PROMPT_VERSION);
-      if (task.genDate !== todayStr || staleVer || !task.content) {
+      const staleVer = Number(task.planVer || 0) < Number(PLAN_PROMPT_VERSION);   // v3.6.17 数值单调比较，防高低版本乒乓
+      const cooling = (now.getTime() - (task.genTryTs || 0)) <= SCHED_GEN_COOLDOWN;
+      if ((task.genDate !== todayStr || staleVer || !task.content) && !cooling) {
         console.log('[Sched] 生成今日计划:', name, 'for', todayStr);
+        task.genTryTs = now.getTime();   // 冷却起点（成功/失败都记，失败后 30 分钟内不重试）
+        genAttempted.add(taskKey);
         if (await generatePlan(task, todayTrg, ctx, fid, key)) changed = true;
+        else changed = true;             // genTryTs 变化也需要回写，让冷却跨运行生效
       }
     }
 
@@ -522,7 +585,16 @@ async function main() {
     const sig = 'task|' + (task.id || task.name || '') + '|' + pk;
     if (await cloudDup(fid, sig)) { console.log('[Sched] 云端已推过，跳过:', name, pk); task.pushPeriod = pk; changed = true; continue; }
 
-    if (task.mode === 'ai' && !task.content) { await generatePlan(task, trig, ctx, fid, key); }
+    // v3.6.17 ① 已尝试过生成（失败）则不再同运行内重复生成（此前会造成双份 AI+天气调用）；
+    // 同时受 30 分钟冷却保护：到点推送前几分钟刚失败过，不会立刻再调一次 AI+天气
+    if (task.mode === 'ai' && !task.content && !genAttempted.has(taskKey)
+        && (now.getTime() - (task.genTryTs || 0)) > SCHED_GEN_COOLDOWN) {
+      console.log('[Sched] 到点前补生成今日计划:', name);
+      task.genTryTs = now.getTime();
+      genAttempted.add(taskKey);
+      if (await generatePlan(task, trig, ctx, fid, key)) changed = true;
+      else changed = true;
+    }
 
     let title, content;
     // v3.6.0 育儿嫂工资任务：触发时按周期(上次结算日~本次触发)算工作天数与工资
