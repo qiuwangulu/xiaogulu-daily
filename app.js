@@ -960,6 +960,43 @@ function getLastMilkRecord() {
   return null;
 }
 
+/* v3.6.24 上一次睡眠记录（跨天查找最近的 sleep 记录，逻辑同 getLastMilkRecord：按开始时间取最晚） */
+function getLastSleepRecord() {
+  const today = new Date();
+  for (let d = 0; d <= 7; d++) {
+    const dt = new Date(today);
+    dt.setDate(dt.getDate() - d);
+    const ds = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+    const recs = getRecordsByDate(ds);   // v3.5.79 过滤脏记录
+    let best = null, bestMin = -1;
+    for (const r of recs) {
+      if (r.type === 'sleep' && (r.sleepStartTime || r.recTime)) {
+        const [hh, mm] = (r.sleepStartTime || r.recTime || '00:00').split(':').map(Number);
+        const minutes = hh * 60 + mm;
+        if (minutes > bestMin) { bestMin = minutes; best = r; }
+      }
+    }
+    if (best) return { rec: best, ds };
+  }
+  return null;
+}
+/* v3.6.24 预估下一次睡觉：起床时间（开始+时长）+ 2 小时清醒间隔；
+ * 跨夜记录的开始时间以记录所述日期为基准，若开始晚于记录时间则回退一天（如 0:30 补录的 20:00 入睡） */
+function getNextSleepInfo() {
+  const found = getLastSleepRecord();
+  if (!found) return null;
+  const { rec, ds } = found;
+  const [sh, sm] = (rec.sleepStartTime || rec.recTime || '00:00').split(':').map(Number);
+  const durMin = Math.max(0, Math.round(rec.duration || 0));
+  const [yy, mo, dd] = ds.split('-').map(Number);
+  const start = new Date(yy, mo - 1, dd, sh, sm, 0, 0);
+  const recTs = rec.timestamp || rec.updatedAt || 0;
+  if (recTs && start.getTime() > recTs + 30 * 60000) start.setDate(start.getDate() - 1);
+  const wake = new Date(start.getTime() + durMin * 60000);
+  const next = new Date(wake.getTime() + 2 * 3600000);   // 醒来后再玩 2 小时
+  return { rec, start, wake, next, durMin };
+}
+
 function updateOverview(skipPush) {
   const records = getTodayRecords();
   const bar = document.getElementById('overviewBar');
@@ -981,6 +1018,29 @@ function updateOverview(skipPush) {
     html += `<div class="overview-item"><span class="ov-icon">🍼</span><span class="ov-label">下次喝奶:</span><span class="ov-value">暂无记录</span></div>`;
   }
   html += `<div class="overview-item"><span class="ov-label">水+奶量:</span><span class="ov-value">${Math.round(totalMilk * 1.12)} ml</span></div>`;
+  html += '</div>';
+
+  // v3.6.24 下一次睡觉行：5-19 点按「上次睡眠开始+时长+2h」预估；19-凌晨5点显示「-」；右侧为上次睡眠时长（如 13.5 h）
+  const sleepInfo = getNextSleepInfo();
+  const nowH = new Date().getHours();
+  const dayTime = (nowH >= 5 && nowH < 19);
+  let sleepTimeVal, sleepDurVal;
+  if (sleepInfo) {
+    if (dayTime) {
+      const nh = String(sleepInfo.next.getHours()).padStart(2, '0'), nm = String(sleepInfo.next.getMinutes()).padStart(2, '0');
+      sleepTimeVal = `<span class="ov-time">${nh}:${nm}</span>`;
+    } else {
+      sleepTimeVal = `<span class="ov-value">-</span>`;
+    }
+    const durH = Math.round(sleepInfo.durMin / 6) / 10;   // 分钟→小时，保留 1 位小数
+    sleepDurVal = `<span class="ov-value">${durH} h</span>`;
+  } else {
+    sleepTimeVal = `<span class="ov-value">暂无记录</span>`;
+    sleepDurVal = `<span class="ov-value">暂无记录</span>`;
+  }
+  html += '<div class="overview-row">';
+  html += `<div class="overview-item"><span class="ov-icon">🌙</span><span class="ov-label">下一次睡觉:</span>${sleepTimeVal}</div>`;
+  html += `<div class="overview-item"><span class="ov-label">睡眠时长:</span>${sleepDurVal}</div>`;
   html += '</div>';
 
   const planHtml = renderTodayPlanCardHTML();
@@ -1024,9 +1084,17 @@ function checkMilkReminder(attempt) {
   const nh = String(nd.getHours()).padStart(2, '0'), nm = String(nd.getMinutes()).padStart(2, '0');
   const diff = nd - new Date();
   milkRemindShown = true;
+  // v3.6.24 合并倒计时提示：距下一次喝奶/睡觉：h min / h min（夜间无睡觉预估时只显示喝奶）
+  const fmtLeft = ms => { const dm = Math.floor(ms / 60000); return Math.floor(dm / 60) + 'h ' + (dm % 60) + 'min'; };
   if (diff > 0) {
-    const dm = Math.floor(diff / 60000);
-    showToast(`⏰ 距下次喝奶（${nh}:${nm}）还有 ${Math.floor(dm/60)}h ${dm%60}min`, 3000);
+    let txt = `⏰ 距下一次喝奶：${fmtLeft(diff)}`;
+    const si = getNextSleepInfo();
+    const nowH2 = new Date().getHours();
+    if (si && nowH2 >= 5 && nowH2 < 19) {
+      const sd = si.next - new Date();
+      if (sd > 0) txt = `⏰ 距下一次喝奶/睡觉：${fmtLeft(diff)} / ${fmtLeft(sd)}`;
+    }
+    showToast(txt, 3000);
   } else {
     showToast(`⏰ 下次喝奶时间到了（${nh}:${nm}）！`, 3000);
   }
@@ -1394,7 +1462,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.23'; // v3.6.23: 播放自动记录改为「每次播放新增去重后的记录」——v3.6.22 的「每类每天仅 1 条」不符合预期（用户反馈：点一次播放就应记一次，同一天可多次播放多次记录）；去重维度改为「同一次播放队列内」：多首故事（中文/英文/古诗）仍合并 1 条听故事、多首儿歌合并 1 条听歌；提示语改为「已添加1条听故事/听歌记录」；切换（eeSwitch）与连播自动接歌仍不记录。// v3.6.22: ①首页「放音乐」手指图标放大 12px→16px（与听歌/听故事图标同尺寸）②修复管理弹窗滚到底时最后一项音频被吸底「确定」条遮住（选项面板底部留白 72px）③播放自动记录去重——每类每天仅 1 条（中文/英文/古诗合并为 1 条听故事、儿歌 1 条听歌），今日已有同类型记录则只高亮已有记录并提示「已添加」，停止后再播放 / 切换不再重复添加 ④早教音频云同步改手动——只有点「立即同步」才加密上云共享（按钮改 .btn 样式置左、状态词与提示移至按钮下方），本地改动只存本机并标记「有改动未同步」，云端拉取仍自动（启动 + 切回前台），家人设备刷新 / 重开即可看到。// v3.6.21: ①修复首页连播「播了几首就莫名停止」——音频元素 error 事件此前无处理（加载失败即死停）、起播无看门狗（加载挂起会卡在「加载中」）、播放/停止按钮无防抖（连击/幽灵点击会误停）；现三路归一失败处理（error/play reject/10s 看门狗）：单曲失败自动跳下一首，连续 3 首失败才停止并明确 toast 原因，按钮加 400ms 防抖 ②修复「管理里删除/新增音频，家人手机不同步」——旧合并逻辑是并集且本地优先，删除直接 splice 导致他端把已删歌曲复活、改名/改分类也不传播；现改墓碑式删除（deleted 标记随云同步，30 天后压缩清理）+ 同 id 按 updatedAt 取新版冲突合并 + 云端保存失败不再静默（管理页早教页新增云同步状态行，失败 toast + 自动重试 + 手动「立即同步」）+ 切回前台节流补拉云端列表 ③首页音频卡新增「放音乐」指引——切换/播放上方左侧指向下手指（尺寸颜色同 AI育儿 图标）+ 右侧加粗黄色「放音乐」，按钮下方灰色小字提示连播与停止方式。// v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
+const APP_VERSION = 'v3.6.24'; // v3.6.24: ①首页总览「今日计划 / 今日成就」字号 14px→15px，与「下一次喝奶」行一致（水+奶量等同比例统一）②「放音乐」标题 14px→16px 与「🎵 听歌」标题同尺寸；连播提示语从按钮下方移到「放音乐」与按钮之间，且「几首」改为管理里的实际播放音频数（如 5 首，动态渲染）③总览「下次喝奶」下方新增「下一次睡觉 / 睡眠时长」行——5-19 点按「上一次睡眠开始时间+睡眠时长+2 小时」预估下次睡觉时间，19-凌晨 5 点显示「-」，右侧显示上一次睡眠时长（如 13.5 h）；刷新网页的「距下一次喝奶」toast 增加距睡觉倒计时，简化提示语为「距下一次喝奶/睡觉：h min / h min」。// v3.6.23: 播放自动记录改为「每次播放新增去重后的记录」——v3.6.22 的「每类每天仅 1 条」不符合预期（用户反馈：点一次播放就应记一次，同一天可多次播放多次记录）；去重维度改为「同一次播放队列内」：多首故事（中文/英文/古诗）仍合并 1 条听故事、多首儿歌合并 1 条听歌；提示语改为「已添加1条听故事/听歌记录」；切换（eeSwitch）与连播自动接歌仍不记录。// v3.6.22: ①首页「放音乐」手指图标放大 12px→16px（与听歌/听故事图标同尺寸）②修复管理弹窗滚到底时最后一项音频被吸底「确定」条遮住（选项面板底部留白 72px）③播放自动记录去重——每类每天仅 1 条（中文/英文/古诗合并为 1 条听故事、儿歌 1 条听歌），今日已有同类型记录则只高亮已有记录并提示「已添加」，停止后再播放 / 切换不再重复添加 ④早教音频云同步改手动——只有点「立即同步」才加密上云共享（按钮改 .btn 样式置左、状态词与提示移至按钮下方），本地改动只存本机并标记「有改动未同步」，云端拉取仍自动（启动 + 切回前台），家人设备刷新 / 重开即可看到。// v3.6.21: ①修复首页连播「播了几首就莫名停止」——音频元素 error 事件此前无处理（加载失败即死停）、起播无看门狗（加载挂起会卡在「加载中」）、播放/停止按钮无防抖（连击/幽灵点击会误停）；现三路归一失败处理（error/play reject/10s 看门狗）：单曲失败自动跳下一首，连续 3 首失败才停止并明确 toast 原因，按钮加 400ms 防抖 ②修复「管理里删除/新增音频，家人手机不同步」——旧合并逻辑是并集且本地优先，删除直接 splice 导致他端把已删歌曲复活、改名/改分类也不传播；现改墓碑式删除（deleted 标记随云同步，30 天后压缩清理）+ 同 id 按 updatedAt 取新版冲突合并 + 云端保存失败不再静默（管理页早教页新增云同步状态行，失败 toast + 自动重试 + 手动「立即同步」）+ 切回前台节流补拉云端列表 ③首页音频卡新增「放音乐」指引——切换/播放上方左侧指向下手指（尺寸颜色同 AI育儿 图标）+ 右侧加粗黄色「放音乐」，按钮下方灰色小字提示连播与停止方式。// v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5717,6 +5785,7 @@ function eeSavePlayCount(v) {
   localStorage.setItem(EE_PLAY_COUNT_KEY, String(v));
   const el = document.getElementById('eePlayCount'); if (el) el.value = v;
   showToast('播放音频数：' + v + ' 首');
+  eeRefreshPlayHint();   // v3.6.24 管理里改播放数 → 首页连播提示语同步
   eeSavePlayCountCloud(v);
 }
 async function eeSavePlayCountCloud(v) {
@@ -6507,6 +6576,12 @@ function renderEarlyEduCard() {
   if (eeCurrentId) return;
   now.textContent = eeActiveList().length ? '' : '暂未添加音频，去「管理 → 早教」添加';   // v3.6.21 按有效音频计数
   now.classList.remove('playing');
+  eeRefreshPlayHint();   // v3.6.24 连播提示语里的「几首」同步管理中的播放音频数
+}
+/* v3.6.24 连播提示语动态显示播放音频数（管理里可改，默认 5）：「点『播放 / 切换』会自动连播5首歌…」 */
+function eeRefreshPlayHint() {
+  const el = document.getElementById('eePlayHintCount'); if (!el) return;
+  el.textContent = String(getEePlayCount());
 }
 
 /* ---------- 首页合并卡片：放音频(固定) + 听歌 + 听故事（随分类筛选显隐） ---------- */

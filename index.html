@@ -142,14 +142,14 @@
   .overview-item { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
   .overview-item .ov-icon { font-size: 15px; }
   .overview-item .ov-label { color: #fff; }
-  .overview-item .ov-value { color: #ffeaa7; font-weight: 400; font-size: 14px; }
-  .overview-item .ov-time { color: #ffeaa7; font-weight: 400; font-size: 14px; }
+  .overview-item .ov-value { color: #ffeaa7; font-weight: 400; font-size: 15px; }   /* v3.6.24 14px→15px */
+  .overview-item .ov-time { color: #ffeaa7; font-weight: 400; font-size: 15px; }   /* v3.6.24 14px→15px */
   .overview-item .ov-countdown { color: #55efc4; }
   /* v3.6.12 今日成就：左右两栏 —— 左栏文字两端对齐(justify)，右栏为点赞按钮独占列；
      右栏下方留白，文字不侵入（即「点赞下方的文字右侧空出来」） */
   .overview-achievement { color: #fff; font-size: 15px; margin-top: 0; display: flex; align-items: flex-start; gap: 4px; }
   .overview-achievement .ov-icon { font-size: 15px; }
-  .overview-achievement .ov-text { flex: 1 1 auto; min-width: 0; color: #ffeaa7; font-size: 14px; line-height: 1.6; text-align: justify; text-align-last: left; }
+  .overview-achievement .ov-text { flex: 1 1 auto; min-width: 0; color: #ffeaa7; font-size: 15px; line-height: 1.6; text-align: justify; text-align-last: left; }   /* v3.6.24 14px→15px：与「下一次喝奶」行同字号 */
   .overview-achievement .ov-text .ov-label { color: #fff; }
   /* v3.6.9 今日成就整体一个赞（按天）：图标放大一倍（13px→26px）、点赞/取消区分度明显
      未赞 = 灰暗灰阶；已赞 = 高亮彩色 + 放大
@@ -1938,13 +1938,13 @@
   /* 放音频卡：按钮在最上、音频名居中、进度条在最下（v3.5.162 重排） */
   .ee-section-edu .ee-actions { margin-top: 4px; margin-bottom: 10px; }
   /* v3.6.21 首页音频卡「放音乐」指引：手指（尺寸/颜色同 AI育儿 胶囊图标）+ 加粗黄色文案（色号同今日成就文字 #ffeaa7/#d68910） */
-  /* v3.6.22 手指图标放大 12px→16px：与下方「🎵 听歌 / 🎧 听故事」标题图标同尺寸 */
+  /* v3.6.24 手指图标与「放音乐」标题均放大：手指 16px、标题 16px，与「🎵 听歌」标题（.ee-sub-head）同尺寸 */
   .ee-play-hint-top { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; }
   .ee-play-hint-top .ee-hand { font-size: 16px; line-height: 1; }
-  .ee-play-hint-top .ee-play-hint-title { font-size: 14px; font-weight: 700; color: #ffeaa7; }
+  .ee-play-hint-top .ee-play-hint-title { font-size: 16px; font-weight: 700; color: #ffeaa7; }
   body.theme-day .ee-play-hint-top .ee-play-hint-title { color: #d68910; }
-  /* v3.6.21 按钮下方灰色小字提示（连播方式与终止方式） */
-  .ee-play-hint-bottom { font-size: 12px; color: #b2bec3; text-align: center; line-height: 1.5; margin: 0 0 8px; }
+  /* v3.6.21 灰色小字提示（连播方式与终止方式）；v3.6.24 移至「放音乐」与按钮之间 */
+  .ee-play-hint-bottom { font-size: 12px; color: #b2bec3; text-align: center; line-height: 1.5; margin: 0 0 10px; }
   body.theme-day .ee-play-hint-bottom { color: #7b8a94; }
   /* v3.6.22 早教音频云同步改手动：按钮（.btn 样式同「☁️ 云端同步」）置左一行，状态词与提示移至按钮下方 */
   .ee-sync-row { margin: 0 0 8px; }
@@ -2106,9 +2106,9 @@
   /* v3.6.12 标题与摘要改同一行内流转（block 容器 + inline 子元素），使换行的第二行从最左侧开始，而非缩进到摘要列下 */
   .ov-plan-card { width: 100%; box-sizing: border-box; display: block; position: relative; padding: 0 50px 0 0; background: none; border: none; border-radius: 0; }
   body.theme-day .ov-plan-card { background: none; border: none; }
-  .ov-plan-title { font-size: 14px; color: #dfe6e9; font-weight: 400; line-height: 1.6; margin-right: 8px; }
+  .ov-plan-title { font-size: 15px; color: #dfe6e9; font-weight: 400; line-height: 1.6; margin-right: 8px; }   /* v3.6.24 14px→15px */
   body.theme-day .ov-plan-title { color: #2d3436; }
-  .ov-plan-summary { font-size: 14px; color: #ffeaa7; white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.6; }
+  .ov-plan-summary { font-size: 15px; color: #ffeaa7; white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.6; }   /* v3.6.24 14px→15px */
   body.theme-day .ov-plan-summary { color: #d68910; }
   /* v3.5.149 详情按钮：深色模式=白色，浅色模式=蓝色(#0984e3)不变；v3.6.4 起绝对定位于卡片右侧；v3.6.13 上移至标题行最右侧（top:0 right:0） */
   .ov-plan-detail-btn { position: absolute; right: 0; top: 0; font-size: 12px; color: #fff; cursor: pointer; padding: 2px 6px; border: 1px solid rgba(255,255,255,0.45); border-radius: 8px; }
@@ -2186,16 +2186,16 @@
   <!-- v3.5.160 合并卡片：放音频(固定) + 听歌 + 听故事（听歌/听故事随首页分类筛选显隐），置于分类筛选与活动列表之间 -->
   <div class="ee-card" id="audioMixerCard">
       <div class="ee-section ee-section-edu">
-      <!-- v3.6.21 「放音乐」指引行：手指图标（尺寸/颜色同 AI育儿 胶囊图标）+ 加粗黄色文案（色号同今日成就文字） -->
+      <!-- v3.6.21 「放音乐」指引行：手指图标（尺寸/颜色同 AI育儿 胶囊图标）+ 加粗黄色文案（色号同今日成就文字）；v3.6.24 标题放大到与听歌标题同尺寸 -->
       <div class="ee-play-hint-top">
         <span class="ee-hand">&#128071;</span><span class="ee-play-hint-title">放音乐</span>
       </div>
+      <!-- v3.6.24 连播提示语移到「放音乐」与按钮之间；「几首」动态取管理中的播放音频数（eeRefreshPlayHint 渲染） -->
+      <div class="ee-play-hint-bottom">点「播放 / 切换」会自动连播<span id="eePlayHintCount">5</span>首歌，播放中再点一次即停止</div>
       <div class="ee-actions">
         <button class="fab-btn" id="eeSwitchBtn" onclick="eeSwitch()"><span class="fab-icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>切换</button>
         <button class="fab-btn" id="eePlayBtn" onclick="eeToggle()"><span class="fab-icon" id="eeIco"><svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg></span><span id="eePlayLabel">播放</span></button>
       </div>
-      <!-- v3.6.21 按钮下方灰色小字：一句话说明连播与停止方式 -->
-      <div class="ee-play-hint-bottom">点「播放 / 切换」会自动连播几首歌，播放中再点一次即停止</div>
       <div class="ee-now" id="eeNowText">暂未添加音频，去「管理 → 音频」添加</div>
       <div class="ee-progress-row">
         <div class="ee-progress" id="eeProgress"><div class="ee-progress-fill" id="eeProgressFill"></div></div>
@@ -2893,6 +2893,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.23"></script>
+<script src="app.js?v=v3.6.24"></script>
 </body>
 </html>
