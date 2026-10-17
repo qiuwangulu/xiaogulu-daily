@@ -2666,6 +2666,30 @@
     <div class="ee-cat-pick-hint" id="eeCatPickHint" style="display:none;"></div>
   </div>
 </div>
+<!-- v3.6.19 编辑音频：名称 + 分类（原「编辑」只能改分类） -->
+<div class="modal-overlay" id="eeEditModal" onclick="if(event.target===this)hideModal('eeEditModal')">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:360px;">
+    <button class="modal-close" onclick="hideModal('eeEditModal')">&times;</button>
+    <div class="modal-title">✏️ 编辑音频</div>
+    <div class="te-field">
+      <div class="te-label">名称</div>
+      <input class="te-input" id="eeEditName" type="text" maxlength="60" placeholder="输入音频名称">
+    </div>
+    <div class="te-field">
+      <div class="te-label">分类</div>
+      <select class="ee-cat-select" id="eeEditType" style="width:100%;">
+        <option value="儿歌">🎶 儿歌</option>
+        <option value="古诗">📜 古诗</option>
+        <option value="故事(中文)">📚 故事(中文)</option>
+        <option value="故事(英文)">📖 故事(英文)</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="hideModal('eeEditModal')">取消</button>
+      <button class="btn btn-success" onclick="eeSaveEdit()">保存</button>
+    </div>
+  </div>
+</div>
 <!-- v3.6.3 本地音频：网页内录音弹窗（绕开手机系统「照片/视频」选择器） -->
 <div class="modal-overlay" id="eeRecordModal" onclick="closeModal(event,'eeRecordModal')">
   <div class="modal-box" onclick="event.stopPropagation()" style="max-width:340px;">
@@ -2850,6 +2874,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.18"></script>
+<script src="app.js?v=v3.6.19"></script>
 </body>
 </html>
