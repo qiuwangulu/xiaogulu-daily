@@ -146,11 +146,12 @@
   .overview-item .ov-time { color: #ffeaa7; font-weight: 400; font-size: 15px; }   /* v3.6.24 14px→15px */
   .overview-item .ov-countdown { color: #55efc4; }
   /* v3.6.25 总览右列（水+奶量 / 睡眠时长）对齐：item 固定宽度使两行第一个字左边界一致；
-     label 固定宽度 + 数值右对齐 + 单位左对齐，使「ml」与「h」起点一致 */
-  .overview-item.ov-unit-item { width: 156px; flex-shrink: 0; }
-  .overview-item.ov-unit-item .ov-label { width: 76px; flex-shrink: 0; }
-  .overview-item.ov-unit-item .ov-num { display: inline-block; width: 42px; text-align: right; }
-  .overview-item.ov-unit-item .ov-unit { display: inline-block; width: 26px; text-align: left; }
+     label 固定宽度 + 数值右对齐 + 单位左对齐，使「ml」与「h」起点一致。
+     v3.6.26 右列整体收紧往右移（item 156→132px），冒号与数值间隔减少（label 76→66px） */
+  .overview-item.ov-unit-item { width: 132px; flex-shrink: 0; gap: 4px; }
+  .overview-item.ov-unit-item .ov-label { width: 66px; flex-shrink: 0; }
+  .overview-item.ov-unit-item .ov-num { display: inline-block; width: 36px; text-align: right; }
+  .overview-item.ov-unit-item .ov-unit { display: inline-block; width: 20px; text-align: left; }
   /* v3.6.12 今日成就：左右两栏 —— 左栏文字两端对齐(justify)，右栏为点赞按钮独占列；
      右栏下方留白，文字不侵入（即「点赞下方的文字右侧空出来」） */
   .overview-achievement { color: #fff; font-size: 15px; margin-top: 0; display: flex; align-items: flex-start; gap: 4px; }
@@ -1943,11 +1944,12 @@
   .ee-now.playing { color: #55efc4; }
   /* 放音频卡：按钮在最上、音频名居中、进度条在最下（v3.5.162 重排） */
   .ee-section-edu .ee-actions { margin-top: 4px; margin-bottom: 10px; }
-  /* v3.6.21 首页音频卡「放音乐」指引：手指（尺寸/颜色同 AI育儿 胶囊图标）+ 加粗黄色文案（色号同今日成就文字 #ffeaa7/#d68910） */
+  /* v3.6.21 首页音频卡「放音乐」指引：手指（尺寸/颜色同 AI育儿 胶囊图标）+ 黄色文案（色号同今日成就文字 #ffeaa7/#d68910） */
   /* v3.6.24 手指图标与「放音乐」标题均放大：手指 16px、标题 16px，与「🎵 听歌」标题（.ee-sub-head）同尺寸 */
+  /* v3.6.26 标题字重 700→400：用户反馈「放音乐」观感偏大——与「🎵 听歌 / 🎧 听故事」及「🍼 喝奶」等卡片标题（.ee-sub-head / .card-name，均 16px/400）视觉一致 */
   .ee-play-hint-top { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; }
   .ee-play-hint-top .ee-hand { font-size: 16px; line-height: 1; }
-  .ee-play-hint-top .ee-play-hint-title { font-size: 16px; font-weight: 700; color: #ffeaa7; }
+  .ee-play-hint-top .ee-play-hint-title { font-size: 16px; font-weight: 400; color: #ffeaa7; }
   body.theme-day .ee-play-hint-top .ee-play-hint-title { color: #d68910; }
   /* v3.6.21 灰色小字提示（连播方式与终止方式）；v3.6.24 移至「放音乐」与按钮之间 */
   .ee-play-hint-bottom { font-size: 12px; color: #b2bec3; text-align: center; line-height: 1.5; margin: 0 0 10px; }
@@ -2899,6 +2901,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.25"></script>
+<script src="app.js?v=v3.6.26"></script>
 </body>
 </html>
