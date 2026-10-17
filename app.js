@@ -1394,7 +1394,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.20'; // v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
+const APP_VERSION = 'v3.6.21'; // v3.6.21: ①修复首页连播「播了几首就莫名停止」——音频元素 error 事件此前无处理（加载失败即死停）、起播无看门狗（加载挂起会卡在「加载中」）、播放/停止按钮无防抖（连击/幽灵点击会误停）；现三路归一失败处理（error/play reject/10s 看门狗）：单曲失败自动跳下一首，连续 3 首失败才停止并明确 toast 原因，按钮加 400ms 防抖 ②修复「管理里删除/新增音频，家人手机不同步」——旧合并逻辑是并集且本地优先，删除直接 splice 导致他端把已删歌曲复活、改名/改分类也不传播；现改墓碑式删除（deleted 标记随云同步，30 天后压缩清理）+ 同 id 按 updatedAt 取新版冲突合并 + 云端保存失败不再静默（管理页早教页新增云同步状态行，失败 toast + 自动重试 + 手动「立即同步」）+ 切回前台节流补拉云端列表 ③首页音频卡新增「放音乐」指引——切换/播放上方左侧指向下手指（尺寸颜色同 AI育儿 图标）+ 右侧加粗黄色「放音乐」，按钮下方灰色小字提示连播与停止方式。// v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5640,14 +5640,26 @@ function mergeSchedCloudTasks(cloudTasks) {
  * 首页：随机播放/停止（避开上一条）+ 进度条 + Media Session 锁屏控制。 */
 const EARLY_EDU_KEY = '_early_edu';
 const EARLY_EDU_BUCKET = 'early-edu';
+/* v3.6.21 墓碑保留时长：删除后标记 deleted/deletedAt 随家庭云同步到其他设备，
+ * 保留 30 天（确保各设备都拉到删除状态）后在保存时压缩清理，避免无限增长 */
+const EE_TOMBSTONE_KEEP_MS = 30 * 24 * 3600 * 1000;
 /* 旧字段兼容：历史存储的 type='故事' 统一归一化为 '故事(中文)' */
 function eeNormalizeTypes(arr) { if (!Array.isArray(arr)) return; arr.forEach(x => { if (x && x.type === '故事') x.type = '故事(中文)'; }); }
+/* v3.6.21 旧数据补 updatedAt（冲突合并按它取新版；缺省视为 addedAt） */
+function eeBackfillUpdated(arr) { if (!Array.isArray(arr)) return; arr.forEach(x => { if (x && !x.updatedAt) x.updatedAt = x.addedAt || 0; }); }
+/* v3.6.21 有效音频列表（过滤删除墓碑；墓碑仅用于跨设备删除同步，不参与渲染/播放/容量统计） */
+function eeActiveList() { return EARLY_EDU.filter(x => !x.deleted); }
 let EARLY_EDU = [];
 let eeCurrentId = null, eeLastId = null;
 let eeAudio = null;
 let _eeSaveTimer = null, _eeLast = '';
 /* v3.5.158 随机连播：播放队列 + 下标 + 播放令牌（令牌用于屏蔽 play/pause 竞态产生的过期回调） */
 let eeQueue = [], eeQueueIdx = 0, eePlayToken = 0;
+/* v3.6.21 连播健壮性：起播看门狗（加载挂起不死卡在「加载中」）+ 连续失败计数（失败自动跳下一首，
+ * 连续 EE_MAX_FAIL_STREAK 首失败才停止并明确提示，不再无声停止）+ 播放/停止按钮防抖（连击误停） */
+let EE_WATCHDOG_MS = 10000;
+const EE_MAX_FAIL_STREAK = 3;
+let _eeFailStreak = 0, _eeFailArmed = false, _eeFailTip = '', _eeWatchdog = null, _eeLastToggleTs = 0;
 /* v3.5.162 预取音频 / 管理分类筛选与搜索 / 上传待定分类 / 分类选择回调 */
 let eePrefetchAudio = null;
 const EE_TYPES = ['儿歌', '古诗', '故事(中文)', '故事(英文)'];
@@ -5666,17 +5678,19 @@ function eeStorageBase() { return (SYNC_CONFIG.supabaseUrl || '').replace(/\/+$/
 
 async function loadEarlyEdu() {
   try { const raw = localStorage.getItem('early_edu'); if (raw) EARLY_EDU = JSON.parse(raw) || []; } catch (e) {}
-  eeNormalizeTypes(EARLY_EDU);
+  eeNormalizeTypes(EARLY_EDU); eeBackfillUpdated(EARLY_EDU);
   if (isSyncReady()) {
     try {
-      const key = await getCryptoKey(); if (!key) return;
+      const key = await getCryptoKey(); if (!key) { eeSetSyncState('nokey'); return; }
       const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${EARLY_EDU_KEY}&select=encrypted_data,iv`);
       if (rows.length && rows[0].encrypted_data && rows[0].iv) {
         const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
         const cloud = JSON.parse(json || '[]');
-        if (Array.isArray(cloud) && cloud.length) { eeNormalizeTypes(cloud); EARLY_EDU = eeMergeEarlyEdu(EARLY_EDU, cloud); }
+        // v3.6.21 行存在即合并（不再要求 cloud.length>0：全删场景云端只含墓碑，空数组/墓碑都要合）
+        if (Array.isArray(cloud)) { eeNormalizeTypes(cloud); eeBackfillUpdated(cloud); EARLY_EDU = eeMergeEarlyEdu(EARLY_EDU, cloud); }
       }
-    } catch (e) { console.warn('[早教] 云端读取失败', e); }
+      eeSetSyncState('ok');
+    } catch (e) { console.warn('[早教] 云端读取失败', e); eeSetSyncState('fail'); }
     await loadEePlayCountCloud().catch(() => {});
   }
 }
@@ -5714,25 +5728,99 @@ async function loadEePlayCountCloud() {
     }
   } catch (e) { console.warn('[早教] 播放数读取失败', e); }
 }
+/* v3.6.21 合并：同 id 取 updatedAt 更新的一版（改名/改分类可跨设备传播，旧逻辑本地优先导致他端改名被吞）；
+ * 墓碑粘性——一端标记删除、另一端没有更新的改动时，删除结果传播（修复家人手机复活已删歌曲） */
 function eeMergeEarlyEdu(local, cloud) {
   const map = {};
-  local.forEach(x => { if (x && x.id) map[x.id] = x; });
-  cloud.forEach(x => { if (x && x.id && !map[x.id]) map[x.id] = x; });
+  const put = (x) => {
+    if (!x || !x.id) return;
+    const old = map[x.id];
+    if (!old) { map[x.id] = x; return; }
+    const a = old.updatedAt || 0, b = x.updatedAt || 0;
+    if (b > a) { map[x.id] = x; return; }
+    if (b === a && x.deleted && !old.deleted) map[x.id] = x;   // 同戳优先墓碑（删除传播）
+  };
+  local.forEach(put); cloud.forEach(put);
   return Object.values(map);
 }
-async function saveEarlyEdu() {
-  localStorage.setItem('early_edu', JSON.stringify(EARLY_EDU));
-  if (!isSyncReady()) return;
+/* v3.6.21 云同步状态行（管理 → 早教可见）：云端保存失败不再静默无感 */
+let _eeSyncState = '', _eeSaveRetry = 0;
+function eeSetSyncState(state) {
+  _eeSyncState = state;
+  const el = document.getElementById('eeSyncState'); if (!el) return;
+  const t = new Date();
+  const hhmm = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
+  let html = '';
+  if (state === 'ok') html = '☁️ 云端已同步 ' + hhmm;
+  else if (state === 'idle') html = '☁️ 音频列表随家庭云同步（新增 / 删除 / 改名会同步到家人设备）';
+  else if (state === 'off') html = '☁️ 未开启家庭云同步（仅存本机）';
+  else if (state === 'nokey') html = '⚠️ 云端密钥异常，同步已暂停（请重新打开 App 或联系家庭管理员）';
+  else html = '⚠️ 云端同步失败，请检查网络';
+  html += '<button type="button" class="ee-sync-retry" onclick="eeCloudSyncNow()">立即同步</button>';
+  el.innerHTML = html;
+  el.className = 'ee-sync-state' + (state === 'ok' || state === 'idle' ? ' is-ok' : (state === 'off' ? '' : ' is-warn'));
+}
+/* v3.6.21 手动/自动重试入口：先推送本地，再拉取云端合并 */
+function eeCloudSyncNow() {
+  if (!isSyncReady()) { showToast('请先在「管理 → 家庭云同步」开启同步'); return; }
+  showToast('正在同步音频列表…');
+  Promise.resolve(saveEarlyEdu()).catch(() => {}).then(() => eePullCloud());
+}
+/* v3.6.21 拉取云端列表并合并（墓碑 + updatedAt），只更新本地不反推，避免覆盖他端新数据 */
+async function eePullCloud() {
+  if (!isSyncReady()) { eeSetSyncState('off'); return; }
   try {
-    const key = await getCryptoKey(); if (!key) return;
+    const key = await getCryptoKey(); if (!key) { eeSetSyncState('nokey'); return; }
+    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${EARLY_EDU_KEY}&select=encrypted_data,iv`);
+    if (rows.length && rows[0].encrypted_data && rows[0].iv) {
+      const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
+      const cloud = JSON.parse(json || '[]');
+      if (Array.isArray(cloud)) {
+        const before = JSON.stringify(EARLY_EDU);
+        eeNormalizeTypes(cloud); eeBackfillUpdated(cloud);
+        EARLY_EDU = eeMergeEarlyEdu(EARLY_EDU, cloud);
+        if (JSON.stringify(EARLY_EDU) !== before) {
+          try { localStorage.setItem('early_edu', JSON.stringify(EARLY_EDU)); } catch (e) {}
+          renderEarlyEduList(); renderEarlyEduCard();
+          showToast('☁️ 音频列表已更新（来自其他设备）');
+        }
+      }
+    }
+    eeSetSyncState('ok');
+  } catch (e) { console.warn('[早教] 云端拉取失败', e); eeSetSyncState('fail'); }
+}
+/* v3.6.21 切回前台补拉云端列表（家人手机不刷新网页也能收到新增/删除，节流 60s） */
+let _eeLastPullTs = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  const now = Date.now();
+  if (now - _eeLastPullTs < 60000) return;
+  _eeLastPullTs = now;
+  if (isSyncReady()) eePullCloud().catch(() => {});
+});
+async function saveEarlyEdu() {
+  // v3.6.21 压缩过期墓碑（30 天前的删除标记，各设备应已同步到）
+  const cutoff = Date.now() - EE_TOMBSTONE_KEEP_MS;
+  const compacted = EARLY_EDU.filter(x => !(x.deleted && (x.deletedAt || 0) < cutoff));
+  if (compacted.length !== EARLY_EDU.length) { EARLY_EDU = compacted; try { renderEarlyEduList(); } catch (e) {} }
+  try { localStorage.setItem('early_edu', JSON.stringify(EARLY_EDU)); } catch (e) {}
+  if (!isSyncReady()) { eeSetSyncState('off'); return; }
+  try {
+    const key = await getCryptoKey(); if (!key) { eeSetSyncState('nokey'); return; }
     const body = JSON.stringify(EARLY_EDU);
-    if (body === _eeLast) return;
+    if (body === _eeLast) { eeSetSyncState('ok'); return; }
     const { data, iv } = await encrypt(key, body);
     await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: EARLY_EDU_KEY, encrypted_data: data, iv, last_modified: Date.now() });
-    _eeLast = body;
-  } catch (e) { console.warn('[早教] 云端保存失败', e); }
+    _eeLast = body; _eeSaveRetry = 0;
+    eeSetSyncState('ok');
+  } catch (e) {
+    console.warn('[早教] 云端保存失败', e);
+    eeSetSyncState('fail');
+    showToast('☁️ 音频列表云端同步失败，请检查网络（将自动重试）');
+    if (_eeSaveRetry < 2) { _eeSaveRetry++; setTimeout(() => { saveEarlyEdu().catch(() => {}); }, 3000); }   // v3.6.21 失败自动重试（上限 2 次）
+  }
 }
-function scheduleEarlyEduSave() { if (_eeSaveTimer) clearTimeout(_eeSaveTimer); _eeSaveTimer = setTimeout(() => { _eeSaveTimer = null; saveEarlyEdu().catch(() => {}); }, 800); }
+function scheduleEarlyEduSave() { _eeSaveRetry = 0; if (_eeSaveTimer) clearTimeout(_eeSaveTimer); _eeSaveTimer = setTimeout(() => { _eeSaveTimer = null; saveEarlyEdu().catch(() => {}); }, 800); }
 
 /* ---------- 管理：渲染 / 筛选 / 上传 / 添加 / 删除 ---------- */
 function renderEarlyEduTab() {
@@ -5740,6 +5828,7 @@ function renderEarlyEduTab() {
   const pc = document.getElementById('eePlayCount'); if (pc) pc.value = getEePlayCount();
   const s = document.getElementById('eeSearch'); if (s) s.value = '';
   eeSearchQuery = '';
+  eeSetSyncState(_eeSyncState || 'idle');   // v3.6.21 云同步状态行
 }
 // v3.5.162 管理分类下拉面板（多选 + 搜索框，交互同首页分类筛选）
 function renderEeCatPanel() {
@@ -5761,7 +5850,7 @@ function onEeSearch() { const el = document.getElementById('eeSearch'); eeSearch
 function renderEarlyEduList() {
   const list = document.getElementById('eeList'); if (!list) return;
   eeUpdateUsage();
-  let items = EARLY_EDU.slice().sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+  let items = eeActiveList().slice().sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));   // v3.6.21 过滤删除墓碑
   if (eeFilterSet.size !== EE_TYPES.length) items = items.filter(x => eeFilterSet.has(x.type));
   if (eeSearchQuery) items = items.filter(x => (x.name || '').toLowerCase().includes(eeSearchQuery));
   if (!items.length) { list.innerHTML = '<div class="ee-empty">暂无音频，点上方按钮添加</div>'; return; }
@@ -5788,7 +5877,7 @@ function renderEarlyEduList() {
 }
 /* ---------- v3.6.15 云存储容量闸门（Supabase 免费版 Storage 1GB） ---------- */
 function eeUsedBytes() {
-  return EARLY_EDU.reduce((s, it) => {
+  return eeActiveList().reduce((s, it) => {   // v3.6.21 墓碑不计入容量（文件已在删除时清掉）
     if (it && it.src === 'wikimedia') return s;   // 免版权项只存直链，不占云存储
     return s + ((it && it.size > 0) ? it.size : EE_EST_MB_PER_TRACK * 1048576);
   }, 0);
@@ -6025,6 +6114,7 @@ function eeSaveEdit() {
   const tp = (tpEl && tpEl.value) || it.type || '儿歌';
   const nameChanged = nm !== it.name;
   it.name = nm; it.type = tp;
+  it.updatedAt = Date.now();   // v3.6.21 改名/改分类按 updatedAt 跨设备传播
   eeEditingId = null;
   hideModal('eeEditModal');
   scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard();
@@ -6059,7 +6149,7 @@ async function eeUploadOne(file, type) {
   const fid = getFamilyId() || 'default';
   const path = fid + '/ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '.' + ext;
   const url = await eeUploadFile(file, path, kind);
-  EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: (file.name || '录音').replace(/\.[^.]+$/, ''), type, src: 'upload', kind: 'audio', playable: true, url, path, size: file.size || 0, addedAt: Date.now() });
+  EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: (file.name || '录音').replace(/\.[^.]+$/, ''), type, src: 'upload', kind: 'audio', playable: true, url, path, size: file.size || 0, addedAt: Date.now(), updatedAt: Date.now() });   // v3.6.21 updatedAt 供跨设备冲突合并
   scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard();
   return true;
 }
@@ -6135,8 +6225,10 @@ function eePickFileFromRecord() {
 function eeDelete(id) {
   const it = EARLY_EDU.find(x => x.id === id); if (!it) return;
   showConfirm('删除音频', '确定删除「' + (it.name || '该音频') + '」？删除后从早教列表移除' + (it.src === 'upload' ? '，云端文件也会一并删除' : '') + '。', () => {
-    const idx = EARLY_EDU.findIndex(x => x.id === id);
-    if (idx >= 0) EARLY_EDU.splice(idx, 1);
+    // v3.6.21 墓碑式删除：标记 deleted/deletedAt/updatedAt 而非直接移除。
+    // 旧逻辑直接 splice：其他设备合并时以本地为准，会把已删除的条目复活（家人手机看不到删除）。
+    // 墓碑随家庭云同步（30 天后压缩清理），存储文件仍立即删除。
+    it.deleted = true; it.deletedAt = Date.now(); it.updatedAt = Date.now();
     if (it.src === 'upload' && it.path) eeDeleteFile(it.path).catch(() => {});
     if (eeCurrentId === id) eeStop();
     if (eeAuditionId === id) eeStopAudition();   // v3.6.20 删除试听中的条目 → 停止试听
@@ -6186,6 +6278,26 @@ function eeStopAudition() {
 }
 
 /* ---------- 首页：随机连播 n 首 / 停止 / 切换 / 进度 / 锁屏 ---------- */
+/* v3.6.21 连播失败统一处理：error 事件 / play() reject / 看门狗超时 三路归一（_eeFailArmed 防重复触发）。
+ * 单曲失败自动跳下一首；连续 EE_MAX_FAIL_STREAK 首失败才停止，并明确 toast 原因（不再无声停止）。 */
+function eeDisarmWatchdog() { if (_eeWatchdog) { clearTimeout(_eeWatchdog); _eeWatchdog = null; } }
+function eeArmWatchdog() {
+  eeDisarmWatchdog();
+  _eeWatchdog = setTimeout(() => { if (_eeFailArmed) eeFailAdvance('加载超时'); }, EE_WATCHDOG_MS);
+}
+function eeFailAdvance(reason) {
+  if (!_eeFailArmed) return;               // 已被 playing / 停止 复位：忽略过期回调
+  _eeFailArmed = false; eeDisarmWatchdog();
+  _eeFailStreak++;
+  console.warn('[早教] 连播第 ' + (eeQueueIdx + 1) + ' 首失败：' + reason + '（连续 ' + _eeFailStreak + ' 次）');
+  if (_eeFailStreak >= EE_MAX_FAIL_STREAK) {
+    showToast('连播已停止：' + reason + _eeFailTip + '（连续 ' + _eeFailStreak + ' 首无法播放，请检查网络，或删除后重新上传）');
+    eeStop(); return;
+  }
+  if (eeQueueIdx < eeQueue.length - 1) { eeAdvanceQueue(); return; }   // 单曲失败自动跳下一首
+  showToast('播放失败：' + reason + _eeFailTip + '，可删除后重新上传');
+  eeStop();
+}
 function eeEnsureAudio() {
   if (eeAudio) return eeAudio;
   eeAudio = new Audio();
@@ -6196,6 +6308,12 @@ function eeEnsureAudio() {
     const t = document.getElementById('eeTime'); if (t) t.textContent = eeFmtTime(eeAudio.currentTime) + ' / ' + eeFmtTime(eeAudio.duration);
   });
   eeAudio.addEventListener('ended', () => { eeAdvanceQueue(); }); // 播完自动接下一首，队列播完则停止
+  // v3.6.21 真正出声才算起播成功：复位失败计数并撤看门狗；
+  // error 事件（src 加载失败）此前无处理——会死停在本首、后续队列全部作废（「播了 2 首就停」根因之一）
+  eeAudio.addEventListener('playing', () => { _eeFailStreak = 0; _eeFailArmed = false; eeDisarmWatchdog(); });
+  eeAudio.addEventListener('error', () => {
+    if (_eeFailArmed) { console.warn('[早教] 音频元素 error', eeAudio.error && eeAudio.error.code); eeFailAdvance('音频加载失败'); }
+  });
   eeAudio.addEventListener('pause', () => { if ('mediaSession' in navigator) { try { navigator.mediaSession.playbackState = 'paused'; } catch (e) {} } });
   eeAudio.addEventListener('play', () => { if ('mediaSession' in navigator) { try { navigator.mediaSession.playbackState = 'playing'; } catch (e) {} } });
   return eeAudio;
@@ -6219,17 +6337,24 @@ function eePrefetchNext() {
     eePrefetchAudio.src = nx.url;   // 浏览器开始在后台缓冲，下一首几乎可瞬时起播
   } catch (e) {}
 }
-function eeToggle() { if (eeAudio && !eeAudio.paused && !eeAudio.ended) eeStop(); else eePlayN(); }
+function eeToggle() {
+  // v3.6.21 防抖：连击/幽灵点击会在 transition 期间误触停止（「播了 2 首就停」根因之一）
+  const nowTs = Date.now();
+  if (nowTs - _eeLastToggleTs < 400) return;
+  _eeLastToggleTs = nowTs;
+  if (eeAudio && !eeAudio.paused && !eeAudio.ended) eeStop(); else eePlayN();
+}
 /* 随机挑 n 首（n = 管理里「播放音频数」，默认 5），依次播放；不足则全放 */
 function eeShufflePick(n) {
-  const pool = EARLY_EDU.slice();
+  const pool = eeActiveList().slice();   // v3.6.21 只从有效（未删除）音频里挑
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
   return pool.slice(0, Math.max(1, Math.min(n, pool.length)));
 }
 function eePlayN() {
-  if (!EARLY_EDU.length) { showToast('请先在「管理 → 早教」添加音频'); return; }
+  if (!eeActiveList().length) { showToast('请先在「管理 → 早教」添加音频'); return; }
   eeQueue = eeShufflePick(getEePlayCount()).map(x => x.id);
   eeQueueIdx = 0;
+  _eeFailStreak = 0;   // v3.6.21 新队列重置连续失败计数
   eeAutoRecordOnPlay();   // v3.5.160 按本次播放队列的类别，自动记听歌/听故事（每种最多 1 条）
   eePlayQueueItem();
 }
@@ -6280,8 +6405,8 @@ function eeAdvanceQueue() {
 }
 /* 切换：随机换一首（替换当前队列位，剩余连播数不变） */
 function eeSwitch() {
-  if (!EARLY_EDU.length) { showToast('请先在「管理 → 早教」添加音频'); return; }
-  let pool = EARLY_EDU.slice();
+  if (!eeActiveList().length) { showToast('请先在「管理 → 早教」添加音频'); return; }
+  let pool = eeActiveList().slice();   // v3.6.21 只从有效（未删除）音频里挑
   if (eeCurrentId && pool.length > 1) pool = pool.filter(x => x.id !== eeCurrentId);
   const it = pool[Math.floor(Math.random() * pool.length)];
   if (!eeQueue.length) { eeQueue = [it.id]; eeQueueIdx = 0; }
@@ -6299,6 +6424,11 @@ function eePlayItem(it) {
   a.src = it.url;
   try { a.currentTime = 0; } catch (e) {}
   eePrefetchNext();                        // v3.5.162 提前缓冲下一首，加速自动连播切换
+  // v3.6.21 起播看门狗 + 失败提示：加载挂起不再死卡在「加载中」；10s 未出声按失败处理（跳下一首/超限停止）
+  const _badExt = eeFileExt(it.url || it.path || '');
+  _eeFailTip = EE_TRANSCODE_EXT.indexOf(_badExt) >= 0 ? ('（' + _badExt + ' 格式当前设备无法播放，重新上传时会自动转为 mp3）') : '';
+  _eeFailArmed = true;
+  eeArmWatchdog();
   const p = a.play();
   if (!p || !p.then) return;
   p.then(() => {
@@ -6310,16 +6440,13 @@ function eePlayItem(it) {
     if (token !== eePlayToken) return;                    // 过期请求（典型：快速停止/切换）
     if (err && err.name === 'AbortError') return;         // play/pause 竞态：静默忽略，不弹错
     console.warn('[早教] 播放失败', err);
-    // v3.6.18 对已知「部分设备无法解码」的旧格式给出明确提示（新版上传已自动转 mp3）
-    const _badExt = eeFileExt(it.url || it.path || '');
-    const _fmtTip = EE_TRANSCODE_EXT.indexOf(_badExt) >= 0 ? ('（' + _badExt + ' 格式当前设备无法播放，重新上传时会自动转为 mp3）') : '';
-    if (eeQueueIdx < eeQueue.length - 1) { eeAdvanceQueue(); return; } // 单曲失败自动跳下一首
-    showToast('播放失败：' + (err && err.message ? String(err.message).replace(/\s*https?:\/\/\S+$/, '') : '格式可能不支持') + '，可在「管理 → 音频」删除后重新上传音频文件' + _fmtTip);
-    eeStop();
+    // v3.6.21 统一走失败处理（与 error 事件/看门狗归一，_eeFailArmed 防重复）：跳下一首或超限停止+提示
+    eeFailAdvance('播放失败' + (err && err.message ? '：' + String(err.message).replace(/\s*https?:\/\/\S+$/, '') : ''));
   });
 }
 function eeStop() {
   eePlayToken++;                             // 令牌自增，使未完成的 play() 回调全部失效
+  _eeFailArmed = false; _eeFailStreak = 0; eeDisarmWatchdog();   // v3.6.21 复位连播失败状态
   eeQueue = []; eeQueueIdx = 0;
   if (eeAudio) { try { eeAudio.pause(); } catch (e) {} try { eeAudio.currentTime = 0; } catch (e) {} }
   eeCurrentId = null;
@@ -6341,7 +6468,7 @@ function eeSetupMediaSession() {
 function renderEarlyEduCard() {
   const now = document.getElementById('eeNowText'); if (!now) return;
   if (eeCurrentId) return;
-  now.textContent = EARLY_EDU.length ? '' : '暂未添加音频，去「管理 → 早教」添加';
+  now.textContent = eeActiveList().length ? '' : '暂未添加音频，去「管理 → 早教」添加';   // v3.6.21 按有效音频计数
   now.classList.remove('playing');
 }
 

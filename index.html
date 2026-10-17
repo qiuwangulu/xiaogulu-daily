@@ -1937,6 +1937,23 @@
   .ee-now.playing { color: #55efc4; }
   /* 放音频卡：按钮在最上、音频名居中、进度条在最下（v3.5.162 重排） */
   .ee-section-edu .ee-actions { margin-top: 4px; margin-bottom: 10px; }
+  /* v3.6.21 首页音频卡「放音乐」指引：手指（尺寸/颜色同 AI育儿 胶囊图标）+ 加粗黄色文案（色号同今日成就文字 #ffeaa7/#d68910） */
+  .ee-play-hint-top { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; }
+  .ee-play-hint-top .ee-hand { font-size: 12px; line-height: 1; }
+  .ee-play-hint-top .ee-play-hint-title { font-size: 14px; font-weight: 700; color: #ffeaa7; }
+  body.theme-day .ee-play-hint-top .ee-play-hint-title { color: #d68910; }
+  /* v3.6.21 按钮下方灰色小字提示（连播方式与终止方式） */
+  .ee-play-hint-bottom { font-size: 12px; color: #b2bec3; text-align: center; line-height: 1.5; margin: 0 0 8px; }
+  body.theme-day .ee-play-hint-bottom { color: #7b8a94; }
+  /* v3.6.21 早教音频云同步状态行（管理页可见：失败不再静默） */
+  .ee-sync-state { font-size: 12px; line-height: 1.5; margin: 0 0 10px; color: #b2bec3; }
+  body.theme-day .ee-sync-state { color: #7b8a94; }
+  .ee-sync-state.is-ok { color: #55efc4; }
+  body.theme-day .ee-sync-state.is-ok { color: #00a381; }
+  .ee-sync-state.is-warn { color: #ff7675; }
+  body.theme-day .ee-sync-state.is-warn { color: #d63031; }
+  .ee-sync-state .ee-sync-retry { margin-left: 8px; font-size: 12px; padding: 2px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer; }
+  body.theme-day .ee-sync-state .ee-sync-retry { border-color: rgba(9,132,227,0.35); background: #fff; }
   .ee-progress-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .ee-progress { flex: 1; height: 6px; background: rgba(255,255,255,0.12); border-radius: 3px; overflow: hidden; }
   body.theme-day .ee-progress { background: rgba(9,132,227,0.12); }
@@ -2166,10 +2183,16 @@
   <!-- v3.5.160 合并卡片：放音频(固定) + 听歌 + 听故事（听歌/听故事随首页分类筛选显隐），置于分类筛选与活动列表之间 -->
   <div class="ee-card" id="audioMixerCard">
       <div class="ee-section ee-section-edu">
+      <!-- v3.6.21 「放音乐」指引行：手指图标（尺寸/颜色同 AI育儿 胶囊图标）+ 加粗黄色文案（色号同今日成就文字） -->
+      <div class="ee-play-hint-top">
+        <span class="ee-hand">&#128071;</span><span class="ee-play-hint-title">放音乐</span>
+      </div>
       <div class="ee-actions">
         <button class="fab-btn" id="eeSwitchBtn" onclick="eeSwitch()"><span class="fab-icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>切换</button>
         <button class="fab-btn" id="eePlayBtn" onclick="eeToggle()"><span class="fab-icon" id="eeIco"><svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg></span><span id="eePlayLabel">播放</span></button>
       </div>
+      <!-- v3.6.21 按钮下方灰色小字：一句话说明连播与停止方式 -->
+      <div class="ee-play-hint-bottom">点「播放 / 切换」会自动连播几首歌，播放中再点一次即停止</div>
       <div class="ee-now" id="eeNowText">暂未添加音频，去「管理 → 音频」添加</div>
       <div class="ee-progress-row">
         <div class="ee-progress" id="eeProgress"><div class="ee-progress-fill" id="eeProgressFill"></div></div>
@@ -2540,6 +2563,8 @@
       </div>
       <div class="ee-count-hint">首页点「播放」会随机连播这么多首</div>
       <div class="ee-usage" id="eeUsage"></div>
+      <!-- v3.6.21 云同步状态行（新增/删除/改名随家庭云同步；失败可手动重试） -->
+      <div class="ee-sync-state" id="eeSyncState"></div>
       <div class="ee-filter-row">
         <div class="cat-dropdown" id="eeCatDropdown">
           <button class="cat-dropdown-btn" id="eeCatBtn" type="button" onclick="toggleEeCat()">📂 全部分类 ▾</button>
@@ -2861,6 +2886,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.20"></script>
+<script src="app.js?v=v3.6.21"></script>
 </body>
 </html>
