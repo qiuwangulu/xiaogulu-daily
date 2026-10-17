@@ -2017,9 +2017,6 @@
   .ee-cat-pick-hint { margin-top: 10px; font-size: 12px; line-height: 1.6; color: #b2bec3; }
   body.theme-day .ee-cat-pick-hint { color: #7b8a94; }
   /* v3.5.160 选免版权分组 */
-  .ee-wiki-group { margin-bottom: 8px; }
-  .ee-wiki-group-title { font-size: 13px; color: #74b9ff; font-weight: 600; margin: 4px 0 2px; }
-  body.theme-day .ee-wiki-group-title { color: #0984e3; }
   .ee-filter-pills { display: flex; gap: 8px; margin: 6px 0 10px; flex-wrap: wrap; }
   .ee-pill { padding: 4px 12px; border-radius: 13px; background: rgba(255,255,255,0.08); color: #b2bec3; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
   .ee-pill.active { background: rgba(9,132,227,0.25); color: #74b9ff; border-color: rgba(9,132,227,0.4); }
@@ -2039,15 +2036,17 @@
   .ee-item .ee-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
   .ee-item .ee-play { width: 24px; height: 24px; cursor: pointer; padding: 2px; background: transparent; border: none; display: inline-flex; align-items: center; justify-content: center; opacity: 0.85; }
   .ee-item .ee-play svg { width: 100%; height: 100%; stroke: #0984e3; fill: #0984e3; stroke-width: 0; }
+  /* v3.6.20 试听中：按钮变红=再点一次停止 */
+  .ee-item .ee-play.ee-aud-ing { opacity: 1; }
+  .ee-item .ee-play.ee-aud-ing svg { stroke: #e74c3c; fill: #e74c3c; }
+  .ee-item .ee-aud-tag { color: #e17055; }
+  body.theme-day .ee-item .ee-aud-tag { color: #d63031; }
   .ee-item .rec-del { width: 24px; height: 24px; cursor: pointer; padding: 2px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; opacity: 0.75; transition: opacity 0.2s; background: transparent; border: none; }
   .ee-item .rec-del svg { width: 100%; height: 100%; display: block; stroke: #fff; stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
   .ee-item .rec-del:active { opacity: 1; }
   body.theme-day .ee-item .rec-del svg { stroke: #3d4852; }
   .ee-empty { font-size: 13px; color: #b2bec3; padding: 12px 0; text-align: center; }
   body.theme-day .ee-empty { color: #7b8a94; }
-  .ee-wiki-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 14px; color: #fff; }
-  body.theme-day .ee-wiki-item { color: #23303a; }
-  .ee-wiki-item button:disabled { opacity: 0.5; cursor: default; }
   /* 编辑弹窗字段 */
   .te-field { margin: 12px 0; }
   .te-label { font-size: 14px; color: #dfe6e9; margin-bottom: 6px; }
@@ -2550,10 +2549,10 @@
       </div>
       <div class="ee-add-row" id="eeAddRow">
         <span id="eeUploadBtnWrap"><button class="fab-btn" onclick="eeTriggerUpload()"><span class="fab-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg></span> 本地音频</button></span>
-        <button class="fab-btn" id="eeWikiBtn" onclick="eeShowWiki()"><span class="fab-icon ee-globe-svg"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z"/><path d="M12 3c2.5 2.5 4 5.7 4 9s-1.5 6.5-4 9c-2.5-2.5-4-5.7-4-9s1.5-6.5 4-9Z"/></svg></span> 选免版权</button>
       </div>
-      <!-- v3.6.1 accept 收紧为纯 audio/*（不带扩展名列表），避免系统文件选择器把「照片和视频」等非音频入口列出来 -->
-      <input type="file" id="eeFileInput" accept="audio/*" multiple style="display:none;" onchange="eeOnFiles(this)">
+      <!-- v3.6.20 去掉 accept="audio/*"：该过滤会让 Android 系统选择器先扫描媒体库（实测慢好几秒才弹窗），
+           且并未挡住「照片和视频」入口；文件类型由前端 eeFileKind 校验拦截，不过滤则选择器秒开 -->
+      <input type="file" id="eeFileInput" multiple style="display:none;" onchange="eeOnFiles(this)">
       <div class="ee-list" id="eeList"></div>
     </div>
     <!-- v3.5.69 底部固定操作条：选项区很长，滚到最底下也能一键关闭（选项为即时保存，无需"保存"按钮） -->
@@ -2636,18 +2635,6 @@
     </div>
   </div>
 </div>
-<!-- v3.5.160 选免版权音频弹窗 -->
-<div class="modal-overlay" id="eeWikiModal" onclick="if(event.target===this)hideModal('eeWikiModal')">
-  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:420px;">
-    <button class="modal-close" onclick="hideModal('eeWikiModal')">&times;</button>
-    <div class="modal-title">🌐 选免版权音频（Wikimedia · CC）</div>
-    <div class="ee-tip">以下为公版/CC 授权音频（共 20+ 首，已按中文 / 英文分组）。点击「添加」即实时解析真实直链并加入音频列表，按分类自动归入古诗 / 儿歌 / 故事(中文/英文)。说明：Commons 上<b>中文儿歌/古诗资源极少</b>，中文项以搜索兜底为主，命中不佳请到「儿歌/古诗」分类点<b>本地音频</b>上传 MP3；英文童谣/故事资源丰富、命中率高。iOS 可能不支持 OGG，建议安卓/电脑试听。</div>
-    <div id="eeWikiList"></div>
-    <div class="modal-actions" style="justify-content:flex-end;">
-      <button class="btn btn-success" onclick="hideModal('eeWikiModal')">完成</button>
-    </div>
-  </div>
-</div>
 <!-- v3.5.162 音频分类选择弹窗（本地上传 / 修改分类 共用） -->
 <div class="modal-overlay" id="eeCatPickModal" onclick="if(event.target===this)hideModal('eeCatPickModal')">
   <div class="modal-box" onclick="event.stopPropagation()" style="max-width:360px;">
@@ -2702,9 +2689,9 @@
     </div>
     <div class="ee-rec-actions">
       <button class="btn btn-primary" id="eeRecStartBtn" onclick="eeStartRecord()">🎙 开始录音</button>
-      <button class="btn" onclick="eePickFileFromRecord()">📁 选择音频文件</button>
+      <button class="btn" onclick="eePickFileFromRecord()">📁 选文件</button>
     </div>
-    <div class="ee-tip">网页内录音不会弹出手机系统的「照片 / 视频」选择器；若改用「选择音频文件」时系统列出「照片和视频」等入口，请切换到「录音机」或从中选择音频文件（MP3/M4A/WAV 等）。</div>
+    <div class="ee-tip">网页内录音不会弹出手机系统的「照片 / 视频」选择器；点「选文件」会弹出系统选择器（可能列出「录音机」「照片和视频」等入口），秒开无需等待，从中选音频文件即可（MP3/M4A/WAV 等；ogg 等格式上传时会自动转 mp3）。</div>
   </div>
 </div>
 <!-- v3.5.141 今日计划详情弹窗 -->
@@ -2874,6 +2861,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.19"></script>
+<script src="app.js?v=v3.6.20"></script>
 </body>
 </html>

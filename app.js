@@ -1394,7 +1394,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.19'; // v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——新增编辑弹窗（名称必填、分类下拉保留），保存后随家庭云同步；正在播放该音频时同步刷新「当前播放」文案与锁屏媒体信息。// v3.6.18: ①音频支持 ogg 等非通用格式——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
+const APP_VERSION = 'v3.6.20'; // v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5640,43 +5640,6 @@ function mergeSchedCloudTasks(cloudTasks) {
  * 首页：随机播放/停止（避开上一条）+ 进度条 + Media Session 锁屏控制。 */
 const EARLY_EDU_KEY = '_early_edu';
 const EARLY_EDU_BUCKET = 'early-edu';
-/* v3.5.161 免版权音频预设（Wikimedia Commons · CC 授权）。
- * 解析策略（见 eeResolveWiki）：先试 title 直链；失败则用 query 在 Commons 实时搜索真实音频（filetype:audio）。
- * 故即便部分精确文件名不存在，也能搜到真实存在的文件，避免「解析失败」。
- * 说明：Commons 上的中文儿歌/古诗音频资源极少，中文项以搜索兜底为主，命中不佳时请在「儿歌/古诗」分类本地上传 MP3；
- *       英文童谣/故事在 Commons 上资源丰富，命中率高。 */
-const WIKIMEDIA_FREE = [
-  // ===== 中文 · 古诗朗读（Commons 仅少量；梦游天姥经核实存在，其余走搜索兜底） =====
-  { name: '《梦游天姥吟留别》· 李白', title: 'File:梦游天姥吟留别.ogg', query: '梦游天姥吟留别 朗读', type: '古诗' },
-  { name: '《静夜思》· 李白', query: '静夜思 古诗 朗读', type: '古诗' },
-  { name: '《春晓》· 孟浩然', query: '春晓 孟浩然 朗读', type: '古诗' },
-  { name: '《登鹳雀楼》· 王之涣', query: '登鹳雀楼 朗读', type: '古诗' },
-  { name: '《悯农》· 李绅', query: '悯农 李绅 朗读', type: '古诗' },
-  { name: '《咏鹅》· 骆宾王', query: '咏鹅 骆宾王 朗读', type: '古诗' },
-  // ===== 中文 · 儿歌（Commons 资源稀少，建议本地上传 MP3；此处提供搜索兜底） =====
-  { name: '《摇篮曲》· 中文儿歌', query: '摇篮曲 儿歌 音频', type: '儿歌' },
-  { name: '《小星星》· 中文儿歌', query: '小星星 儿歌 音频', type: '儿歌' },
-  { name: '《两只老虎》· 中文儿歌', query: '两只老虎 儿歌 音频', type: '儿歌' },
-  { name: '《数鸭子》· 中文儿歌', query: '数鸭子 儿歌 音频', type: '儿歌' },
-  // ===== 英文 · 童谣 / 故事（Commons 资源丰富，高命中） =====
-  { name: 'Twinkle Twinkle Little Star', title: 'File:Twinkle Twinkle Little Star.ogg', query: 'Twinkle Twinkle Little Star', type: '故事(英文)' },
-  { name: 'Twinkle Twinkle (vocal)', title: 'File:Twinkle twinkle little star (vocal).ogg', query: 'Twinkle twinkle little star vocal', type: '故事(英文)' },
-  { name: 'Twinkle Twinkle (plain)', title: 'File:Twinkle Twinkle Little Star plain.ogg', query: 'Twinkle Twinkle Little Star plain', type: '故事(英文)' },
-  { name: 'Mary Had a Little Lamb', query: 'Mary Had a Little Lamb', type: '故事(英文)' },
-  { name: 'Old MacDonald Had a Farm', query: 'Old MacDonald Had a Farm', type: '故事(英文)' },
-  { name: 'London Bridge Is Falling Down', query: 'London Bridge Is Falling Down', type: '故事(英文)' },
-  { name: 'Baa Baa Black Sheep', query: 'Baa Baa Black Sheep', type: '故事(英文)' },
-  { name: 'The Wheels on the Bus', query: 'The Wheels on the Bus', type: '故事(英文)' },
-  { name: 'Five Little Ducks', query: 'Five Little Ducks', type: '故事(英文)' },
-  { name: 'If You Are Happy and You Know It', query: 'If You Are Happy and You Know It', type: '故事(英文)' },
-  { name: 'Head Shoulders Knees and Toes', query: 'Head Shoulders Knees and Toes', type: '故事(英文)' },
-  { name: 'Row Row Row Your Boat', query: 'Row Row Row Your Boat', type: '故事(英文)' },
-  { name: 'Itsy Bitsy Spider', query: 'Itsy Bitsy Spider', type: '故事(英文)' },
-  { name: 'The Three Little Pigs', query: 'Three Little Pigs', type: '故事(英文)' },
-  { name: 'Little Red Riding Hood', query: 'Little Red Riding Hood', type: '故事(英文)' },
-  { name: 'Jack and the Beanstalk', query: 'Jack and the Beanstalk', type: '故事(英文)' },
-  { name: 'Goldilocks and the Three Bears', query: 'Goldilocks and the Three Bears', type: '故事(英文)' }
-];
 /* 旧字段兼容：历史存储的 type='故事' 统一归一化为 '故事(中文)' */
 function eeNormalizeTypes(arr) { if (!Array.isArray(arr)) return; arr.forEach(x => { if (x && x.type === '故事') x.type = '故事(中文)'; }); }
 let EARLY_EDU = [];
@@ -5773,7 +5736,7 @@ function scheduleEarlyEduSave() { if (_eeSaveTimer) clearTimeout(_eeSaveTimer); 
 
 /* ---------- 管理：渲染 / 筛选 / 上传 / 添加 / 删除 ---------- */
 function renderEarlyEduTab() {
-  renderEeCatPanel(); eeUpdateAddButtons(); renderEarlyEduList();
+  renderEeCatPanel(); renderEarlyEduList();
   const pc = document.getElementById('eePlayCount'); if (pc) pc.value = getEePlayCount();
   const s = document.getElementById('eeSearch'); if (s) s.value = '';
   eeSearchQuery = '';
@@ -5792,21 +5755,9 @@ function renderEeCatPanel() {
   if (btn) btn.innerHTML = (allOn ? '📂 全部分类' : '📂 已选 ' + eeFilterSet.size + ' 类') + ' <span class="cat-arrow">&#9662;</span>';
 }
 function toggleEeCat() { const p = document.getElementById('eeCatPanel'); if (p) p.classList.toggle('open'); }
-function eeCatToggleAll(cb) { eeFilterSet = cb.checked ? new Set(EE_TYPES) : new Set(); renderEeCatPanel(); eeUpdateAddButtons(); renderEarlyEduList(); }
-function eeCatToggleOne(t, cb) { if (cb.checked) eeFilterSet.add(t); else eeFilterSet.delete(t); renderEeCatPanel(); eeUpdateAddButtons(); renderEarlyEduList(); }
+function eeCatToggleAll(cb) { eeFilterSet = cb.checked ? new Set(EE_TYPES) : new Set(); renderEeCatPanel(); renderEarlyEduList(); }
+function eeCatToggleOne(t, cb) { if (cb.checked) eeFilterSet.add(t); else eeFilterSet.delete(t); renderEeCatPanel(); renderEarlyEduList(); }
 function onEeSearch() { const el = document.getElementById('eeSearch'); eeSearchQuery = el ? el.value.trim().toLowerCase() : ''; renderEarlyEduList(); }
-function eeUpdateAddButtons() {
-  const up = document.getElementById('eeUploadBtnWrap');
-  const wiki = document.getElementById('eeWikiBtn');
-  if (!up || !wiki) return;
-  // 仅筛某一种时：故事(中文/英文)只显「选免版权」；儿歌/古詩只显「本地上传」；其它（含全选/多选）两者皆显
-  const onlyCn = eeFilterSet.size === 1 && eeFilterSet.has('故事(中文)');
-  const onlyEn = eeFilterSet.size === 1 && eeFilterSet.has('故事(英文)');
-  const onlyUpload = eeFilterSet.size === 1 && (eeFilterSet.has('儿歌') || eeFilterSet.has('古诗'));
-  if (onlyCn || onlyEn) { up.style.display = 'none'; wiki.style.display = ''; }
-  else if (onlyUpload) { up.style.display = ''; wiki.style.display = 'none'; }
-  else { up.style.display = ''; wiki.style.display = ''; }
-}
 function renderEarlyEduList() {
   const list = document.getElementById('eeList'); if (!list) return;
   eeUpdateUsage();
@@ -5817,16 +5768,19 @@ function renderEarlyEduList() {
   let h = '';
   items.forEach(it => {
     const tag = it.src === 'wikimedia' ? '免版权' : '本地';
-    h += '<div class="ee-item" data-id="' + it.id + '">'
+    // v3.6.20 试听状态：管理页独立播放器（与首页播放器不共用），试听中的项按钮变「停止」并标红
+    const auditioning = eeAuditionId === it.id;
+    h += '<div class="ee-item' + (auditioning ? ' ee-item-aud' : '') + '" data-id="' + it.id + '">'
       + '<div class="ee-info"><div class="ee-name">' + escapeHtml(it.name) + '</div>'
       + '<div class="ee-meta"><span class="ee-tag">' + it.type + '</span>' + tag
       + (it.src === 'wikimedia' ? ' · Wikimedia' : '')
+      + (auditioning ? ' · <span class="ee-aud-tag">🔊 试听中</span>' : '')
       + (eeIsVideoItem(it) ? ' · 视频(仅声音)' : '')
       + (it.playable === false ? ' · <span class="ee-warn">⚠️ 可能无法播放</span>' : '')
       + '</div></div>'
       + '<div class="ee-actions">'
       + '<button class="ee-edit" onclick="eeEdit(\'' + it.id + '\')" title="编辑名称/分类"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>'
-      + '<button class="ee-play" onclick="eePreview(\'' + it.id + '\')" title="试听"><svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg></button>'
+      + '<button class="ee-play' + (auditioning ? ' ee-aud-ing' : '') + '" onclick="eePreview(\'' + it.id + '\')" title="' + (auditioning ? '停止试听' : '试听') + '">' + (auditioning ? '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></svg>' : '<svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg>') + '</button>'
       + '<button class="rec-del" onclick="eeDelete(\'' + it.id + '\')" title="删除"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v6"/><path d="M14 10v6"/></svg></button>'
       + '</div></div>';
   });
@@ -5951,15 +5905,17 @@ async function eeEncodeMp3(file) {
   try { return new File([mp3], base + '.mp3', { type: 'audio/mpeg' }); }
   catch (e) { const b = mp3; b.name = base + '.mp3'; return b; }
 }
-/** 需要时把文件转码为 MP3，返回 { file, transcoded }；不需要或失败按原样返回 */
+/** 需要时把文件转码为 MP3，返回 { file, transcoded, failed }；不需要或失败按原样返回。
+ * v3.6.20 failed=true 表示该文件在当前设备无法解码（转码失败）——调用方应保留提示并跳过上传，
+ * 不再按原格式上传（原格式在 iOS/微信 X5 等内核播不了，传上去也是坏条目）。 */
 async function eeMaybeTranscode(file) {
-  if (!eeNeedTranscode(file)) return { file, transcoded: false };
+  if (!eeNeedTranscode(file)) return { file, transcoded: false, failed: false };
   showToast('正在转换音频格式（' + eeFileExt(file.name) + ' → mp3）…');
-  try { return { file: await eeEncodeMp3(file), transcoded: true }; }
+  try { return { file: await eeEncodeMp3(file), transcoded: true, failed: false }; }
   catch (e) {
     console.warn('[音频] 转码失败', e);
-    showToast((e && e.message ? e.message : '格式转换失败') + '，将按原格式上传（部分设备可能无法播放）');
-    return { file, transcoded: false };
+    showToast((e && e.message ? e.message : '格式转换失败') + '，该文件未加入音频列表');
+    return { file, transcoded: false, failed: true };
   }
 }
 // 探测某个 URL 的音轨能否被当前浏览器解码（用于视频/录屏文件，避免"传上去却播不出"）
@@ -5981,7 +5937,7 @@ function eeIsVideoItem(it) { if (!it) return false; if (it.kind) return it.kind 
 // v3.5.162 本地上传：先弹分类选择，确定后再选文件（本地上传需指定分类）
 // v3.6.0 仅支持音频：本地音频文件与录音；图片/视频/文档一律拦截
 function eeTriggerUpload() {
-  eeOpenCatPick('选择音频分类', (t) => { eeShowRecord(t); }, '✅ 支持：网页内录音与本地音频文件 / 录音（mp3 / m4a / wav / amr…）<br>🚫 不支持：照片、视频、文档等无法播放的文件<br>💡 选「开始录音」不会弹出手机系统选择器；选「选择音频文件」时若系统列出「照片和视频」入口，请切换到「录音机」或从中选音频文件');
+  eeOpenCatPick('选择音频分类', (t) => { eeShowRecord(t); }, '✅ 支持：网页内录音与本地音频文件 / 录音（mp3 / m4a / wav / amr…）<br>🚫 不支持：照片、视频、文档等无法播放的文件<br>💡 选「开始录音」不会弹出手机系统选择器；点「选文件」会弹出系统选择器（可能列出「录音机」「照片和视频」入口），从中选音频即可');
 }
 async function eeOnFiles(input) {
   const files = Array.from(input.files || []);
@@ -6096,7 +6052,7 @@ async function eeUploadOne(file, type) {
   if (kind !== 'audio') { showToast('不支持的文件类型，请选择音频文件或录音'); return false; }
   // v3.6.18 非通用格式（ogg/flac/amr/wma 等）先转码为 MP3 再上传：这些容器在 iOS/微信 X5 等内核
   // 无法解码，上传后也播不出（用户实测报 "Failed to load because no supported source was found"）
-  { const tc = await eeMaybeTranscode(file); file = tc.file; kind = eeFileKind(file); }
+  { const tc = await eeMaybeTranscode(file); if (tc.failed) return false; file = tc.file; kind = eeFileKind(file); }   // v3.6.20 转码失败→保留提示并跳过，不入列表
   // v3.6.15 容量闸门兜底（录音等单文件路径也受总容量限制）
   { const q = eeCheckQuota(file.size || 0); if (!q.ok) { showToast(q.msg); return false; } }
   const ext = eeFileExt(file.name) || 'webm';
@@ -6124,7 +6080,7 @@ function _eeRecCleanup() {
   _eeRecRec = null;
 }
 async function eeStartRecord() {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showToast('当前浏览器不支持录音，请改用「选择音频文件」'); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showToast('当前浏览器不支持录音，请改用「选文件」'); return; }
   try { _eeRecStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
   catch (e) { showToast('无法获取麦克风权限：' + (e && e.message || e)); return; }
   let mime = '';
@@ -6176,69 +6132,6 @@ function eePickFileFromRecord() {
   eePendingUploadType = _eeRecType;
   const inp = document.getElementById('eeFileInput'); if (inp) inp.click();
 }
-async function eeShowWiki() {
-  const list = document.getElementById('eeWikiList');
-  if (list) {
-    const groups = [
-      { label: '🀄 中文（古诗 / 儿歌 / 故事）', types: ['古诗', '儿歌', '故事(中文)'] },
-      { label: '🌍 英文（故事 / 童谣）', types: ['故事(英文)'] }
-    ];
-    let h = '';
-    groups.forEach(g => {
-      const items = WIKIMEDIA_FREE.map((s, i) => ({ s, i })).filter(o => g.types.includes(o.s.type));
-      if (!items.length) return;
-      h += '<div class="ee-wiki-group"><div class="ee-wiki-group-title">' + g.label + '</div>';
-      items.forEach(({ s, i }) => {
-        const key = s.title || s.query;
-        const exists = EARLY_EDU.some(x => x.wikiTitle === key);
-        h += '<div class="ee-wiki-item"><span>' + escapeHtml(s.name) + '</span><button class="btn ' + (exists ? '' : 'btn-primary') + '" ' + (exists ? 'disabled' : '') + ' onclick="eeAddWiki(' + i + ')">' + (exists ? '已添加' : '添加') + '</button></div>';
-      });
-      h += '</div>';
-    });
-    list.innerHTML = h;
-  }
-  showModal('eeWikiModal');
-}
-async function eeAddWiki(i) {
-  const s = WIKIMEDIA_FREE[i]; if (!s) return;
-  const key = s.title || s.query;
-  if (EARLY_EDU.some(x => x.wikiTitle === key)) { showToast('已在列表中'); return; }
-  showToast('解析音频中…');
-  try {
-    const url = await eeResolveWiki(s);
-    EARLY_EDU.push({ id: 'ee_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: s.name, type: s.type, src: 'wikimedia', url, wikiTitle: key, addedAt: Date.now() });
-    scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard(); eeShowWiki();
-    showToast('已添加：' + s.name);
-  } catch (e) { console.warn(e); showToast('解析失败，请稍后重试或本地上传'); }
-}
-/* v3.5.161 解析策略：先试 title 精确直链；不存在则用 query 在 Commons 实时搜索真实音频（filetype:audio），避免硬编码文件名失效 */
-async function eeResolveWiki(item) {
-  const api = 'https://commons.wikimedia.org/w/api.php';
-  if (item.title) {
-    try {
-      const u = await eeApiFirstUrl(api + '?action=query&prop=imageinfo&iiprop=url&format=json&origin=*&titles=' + encodeURIComponent(item.title));
-      if (u) return u;
-    } catch (e) {}
-  }
-  const q = (item.query || item.name) + ' filetype:audio';
-  const u = await eeApiFirstUrl(api + '?action=query&generator=search&gsrsearch=' + encodeURIComponent(q) + '&gsrnamespace=6&gsrlimit=10&prop=imageinfo&iiprop=url%7Cmime&format=json&origin=*', true);
-  if (u) return u;
-  throw new Error('no url');
-}
-async function eeApiFirstUrl(url, onlyAudio) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('api ' + res.status);
-  const d = await res.json();
-  const pages = d.query && d.query.pages;
-  if (!pages) return null;
-  for (const k in pages) {
-    const ii = pages[k].imageinfo && pages[k].imageinfo[0];
-    if (!ii || !ii.url) continue;
-    if (onlyAudio && ii.mime && !/audio|ogg|flac|mpeg|mp3|wav|webm/i.test(ii.mime)) continue;
-    return ii.url;
-  }
-  return null;
-}
 function eeDelete(id) {
   const it = EARLY_EDU.find(x => x.id === id); if (!it) return;
   showConfirm('删除音频', '确定删除「' + (it.name || '该音频') + '」？删除后从早教列表移除' + (it.src === 'upload' ? '，云端文件也会一并删除' : '') + '。', () => {
@@ -6246,6 +6139,7 @@ function eeDelete(id) {
     if (idx >= 0) EARLY_EDU.splice(idx, 1);
     if (it.src === 'upload' && it.path) eeDeleteFile(it.path).catch(() => {});
     if (eeCurrentId === id) eeStop();
+    if (eeAuditionId === id) eeStopAudition();   // v3.6.20 删除试听中的条目 → 停止试听
     scheduleEarlyEduSave(); renderEarlyEduList(); renderEarlyEduCard();
     showToast('已删除');
   });
@@ -6255,7 +6149,41 @@ async function eeDeleteFile(path) {
   try { await fetch(eeStorageBase() + '/object/' + EARLY_EDU_BUCKET + '/' + encodeURIComponent(path), { method: 'DELETE', headers: { 'apikey': SYNC_CONFIG.supabaseKey, 'Authorization': 'Bearer ' + SYNC_CONFIG.supabaseKey } }); }
   catch (e) { console.warn('[早教] 删除文件失败', e); }
 }
-function eePreview(id) { const it = EARLY_EDU.find(x => x.id === id); if (it) { eeQueue = [it.id]; eeQueueIdx = 0; eePlayItem(it); } }
+/* ---------- v3.6.20 管理页独立试听播放器（与首页播放器完全隔离） ----------
+ * 用户要求：管理里点试听，停止就在管理当前页点；首页音频卡片不能播试听的音频——
+ * 两者不是同一功能、不能共用播放器。首页用 eeAudio/eeQueue/eeCurrentId（随机连播+首页UI+锁屏），
+ * 试听用独立的 _eeAudAudio 单例：一次只试听一条；同项再点一次=停止；播完/失败自动复位；
+ * 删除试听中的条目或关闭管理弹窗时自动停止。 */
+let _eeAudAudio = null, eeAuditionId = null;
+function eeAuditionAudio() {
+  if (!_eeAudAudio) {
+    _eeAudAudio = new Audio();
+    _eeAudAudio.addEventListener('ended', () => eeStopAudition());
+  }
+  return _eeAudAudio;
+}
+function eePreview(id) {
+  if (eeAuditionId === id) { eeStopAudition(); return; }      // 试听中再点一次 = 停止（就在当前页停）
+  const it = EARLY_EDU.find(x => x.id === id); if (!it) return;
+  const a = eeAuditionAudio();
+  try { a.pause(); } catch (e) {}                              // 顶掉上一条试听
+  eeAuditionId = id;
+  a.src = it.url;
+  try { a.currentTime = 0; } catch (e) {}
+  renderEarlyEduList();                                        // 按钮切「停止」+「试听中」标记
+  const p = a.play();
+  if (p && p.then) p.catch(err => {
+    if (eeAuditionId !== id) return;                           // 已被停止/切走，忽略过期回调
+    console.warn('[早教] 试听失败', err);
+    showToast('试听失败：' + (err && err.message ? String(err.message).replace(/\s*https?:\/\/\S+$/, '') : '格式可能不支持') + '，可删除后重新上传（新上传会自动转 mp3）');
+    eeStopAudition();
+  });
+}
+function eeStopAudition() {
+  eeAuditionId = null;
+  if (_eeAudAudio) { try { _eeAudAudio.pause(); } catch (e) {} }
+  renderEarlyEduList();
+}
 
 /* ---------- 首页：随机连播 n 首 / 停止 / 切换 / 进度 / 锁屏 ---------- */
 function eeEnsureAudio() {
@@ -8200,7 +8128,7 @@ function showModal(id) {
   }
   el.classList.add('show'); document.body.style.overflow = 'hidden';
 }
-function hideModal(id) { const el = document.getElementById(id); if (!el) return; resetModalFullscreen(el); el.classList.remove('show'); document.body.style.overflow = ''; }
+function hideModal(id) { const el = document.getElementById(id); if (!el) return; resetModalFullscreen(el); el.classList.remove('show'); document.body.style.overflow = ''; if (id === 'manageModal' && eeAuditionId) eeStopAudition(); }
 function closeModal(e, id) { if (e.target.id === id) hideModal(id); }
 function showToast(msg, ms) { const toast = document.getElementById('toast'); toast.textContent = msg; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), ms || 1800); }
 // v3.5.155 通用二次确认弹窗（替代原生 confirm，风格统一且不会被 webview 拦截）
