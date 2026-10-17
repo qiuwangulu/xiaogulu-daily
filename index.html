@@ -247,7 +247,7 @@
   }
   #manageTabBar .cat-tag .cat-icon { font-size: 16px; }
   #manageTabBar .cat-tag .cat-label { font-size: 14px; }
-  .manage-tab-panel { display: block; }
+  .manage-tab-panel { display: block; padding-bottom: 72px; }   /* v3.6.22 底部留白：避免滚到底时最后一项被吸底「确定」条遮住 */
   /* v3.5.94 选项区插槽：内缩 + 左侧细线，视觉上从属于上方的活动开关 */
   .manage-opt-slot {
     margin: 2px 0 8px 0;
@@ -1938,22 +1938,25 @@
   /* 放音频卡：按钮在最上、音频名居中、进度条在最下（v3.5.162 重排） */
   .ee-section-edu .ee-actions { margin-top: 4px; margin-bottom: 10px; }
   /* v3.6.21 首页音频卡「放音乐」指引：手指（尺寸/颜色同 AI育儿 胶囊图标）+ 加粗黄色文案（色号同今日成就文字 #ffeaa7/#d68910） */
+  /* v3.6.22 手指图标放大 12px→16px：与下方「🎵 听歌 / 🎧 听故事」标题图标同尺寸 */
   .ee-play-hint-top { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; }
-  .ee-play-hint-top .ee-hand { font-size: 12px; line-height: 1; }
+  .ee-play-hint-top .ee-hand { font-size: 16px; line-height: 1; }
   .ee-play-hint-top .ee-play-hint-title { font-size: 14px; font-weight: 700; color: #ffeaa7; }
   body.theme-day .ee-play-hint-top .ee-play-hint-title { color: #d68910; }
   /* v3.6.21 按钮下方灰色小字提示（连播方式与终止方式） */
   .ee-play-hint-bottom { font-size: 12px; color: #b2bec3; text-align: center; line-height: 1.5; margin: 0 0 8px; }
   body.theme-day .ee-play-hint-bottom { color: #7b8a94; }
-  /* v3.6.21 早教音频云同步状态行（管理页可见：失败不再静默） */
-  .ee-sync-state { font-size: 12px; line-height: 1.5; margin: 0 0 10px; color: #b2bec3; }
+  /* v3.6.22 早教音频云同步改手动：按钮（.btn 样式同「☁️ 云端同步」）置左一行，状态词与提示移至按钮下方 */
+  .ee-sync-row { margin: 0 0 8px; }
+  .ee-sync-row .btn { width: auto; min-width: 96px; justify-content: center; }
+  .ee-sync-state { font-size: 12px; line-height: 1.5; margin: 0 0 6px; color: #b2bec3; }
   body.theme-day .ee-sync-state { color: #7b8a94; }
   .ee-sync-state.is-ok { color: #55efc4; }
   body.theme-day .ee-sync-state.is-ok { color: #00a381; }
   .ee-sync-state.is-warn { color: #ff7675; }
   body.theme-day .ee-sync-state.is-warn { color: #d63031; }
-  .ee-sync-state .ee-sync-retry { margin-left: 8px; font-size: 12px; padding: 2px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.08); color: inherit; cursor: pointer; }
-  body.theme-day .ee-sync-state .ee-sync-retry { border-color: rgba(9,132,227,0.35); background: #fff; }
+  .ee-sync-hint { font-size: 12px; line-height: 1.5; margin: 0 0 12px; color: #b2bec3; }
+  body.theme-day .ee-sync-hint { color: #7b8a94; }
   .ee-progress-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .ee-progress { flex: 1; height: 6px; background: rgba(255,255,255,0.12); border-radius: 3px; overflow: hidden; }
   body.theme-day .ee-progress { background: rgba(9,132,227,0.12); }
@@ -2563,8 +2566,12 @@
       </div>
       <div class="ee-count-hint">首页点「播放」会随机连播这么多首</div>
       <div class="ee-usage" id="eeUsage"></div>
-      <!-- v3.6.21 云同步状态行（新增/删除/改名随家庭云同步；失败可手动重试） -->
+      <!-- v3.6.22 云同步改手动：「立即同步」按钮（.btn 样式同「☁️ 云端同步」）置左一行，状态词与提示移至按钮下方 -->
+      <div class="ee-sync-row">
+        <button class="btn" type="button" onclick="eeCloudSyncNow()">立即同步</button>
+      </div>
       <div class="ee-sync-state" id="eeSyncState"></div>
+      <div class="ee-sync-hint">只有点击「立即同步」才会上云共享，家人设备刷新 / 重开即可看到</div>
       <div class="ee-filter-row">
         <div class="cat-dropdown" id="eeCatDropdown">
           <button class="cat-dropdown-btn" id="eeCatBtn" type="button" onclick="toggleEeCat()">📂 全部分类 ▾</button>
@@ -2886,6 +2893,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.21"></script>
+<script src="app.js?v=v3.6.22"></script>
 </body>
 </html>

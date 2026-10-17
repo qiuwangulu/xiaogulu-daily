@@ -1394,7 +1394,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.21'; // v3.6.21: ①修复首页连播「播了几首就莫名停止」——音频元素 error 事件此前无处理（加载失败即死停）、起播无看门狗（加载挂起会卡在「加载中」）、播放/停止按钮无防抖（连击/幽灵点击会误停）；现三路归一失败处理（error/play reject/10s 看门狗）：单曲失败自动跳下一首，连续 3 首失败才停止并明确 toast 原因，按钮加 400ms 防抖 ②修复「管理里删除/新增音频，家人手机不同步」——旧合并逻辑是并集且本地优先，删除直接 splice 导致他端把已删歌曲复活、改名/改分类也不传播；现改墓碑式删除（deleted 标记随云同步，30 天后压缩清理）+ 同 id 按 updatedAt 取新版冲突合并 + 云端保存失败不再静默（管理页早教页新增云同步状态行，失败 toast + 自动重试 + 手动「立即同步」）+ 切回前台节流补拉云端列表 ③首页音频卡新增「放音乐」指引——切换/播放上方左侧指向下手指（尺寸颜色同 AI育儿 图标）+ 右侧加粗黄色「放音乐」，按钮下方灰色小字提示连播与停止方式。// v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
+const APP_VERSION = 'v3.6.22'; // v3.6.22: ①首页「放音乐」手指图标放大 12px→16px（与听歌/听故事图标同尺寸）②修复管理弹窗滚到底时最后一项音频被吸底「确定」条遮住（选项面板底部留白 72px）③播放自动记录去重——每类每天仅 1 条（中文/英文/古诗合并为 1 条听故事、儿歌 1 条听歌），今日已有同类型记录则只高亮已有记录并提示「已添加」，停止后再播放 / 切换不再重复添加 ④早教音频云同步改手动——只有点「立即同步」才加密上云共享（按钮改 .btn 样式置左、状态词与提示移至按钮下方），本地改动只存本机并标记「有改动未同步」，云端拉取仍自动（启动 + 切回前台），家人设备刷新 / 重开即可看到。// v3.6.21: ①修复首页连播「播了几首就莫名停止」——音频元素 error 事件此前无处理（加载失败即死停）、起播无看门狗（加载挂起会卡在「加载中」）、播放/停止按钮无防抖（连击/幽灵点击会误停）；现三路归一失败处理（error/play reject/10s 看门狗）：单曲失败自动跳下一首，连续 3 首失败才停止并明确 toast 原因，按钮加 400ms 防抖 ②修复「管理里删除/新增音频，家人手机不同步」——旧合并逻辑是并集且本地优先，删除直接 splice 导致他端把已删歌曲复活、改名/改分类也不传播；现改墓碑式删除（deleted 标记随云同步，30 天后压缩清理）+ 同 id 按 updatedAt 取新版冲突合并 + 云端保存失败不再静默（管理页早教页新增云同步状态行，失败 toast + 自动重试 + 手动「立即同步」）+ 切回前台节流补拉云端列表 ③首页音频卡新增「放音乐」指引——切换/播放上方左侧指向下手指（尺寸颜色同 AI育儿 图标）+ 右侧加粗黄色「放音乐」，按钮下方灰色小字提示连播与停止方式。// v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5677,22 +5677,33 @@ const EE_PLAY_COUNT_DEFAULT = 5;
 function eeStorageBase() { return (SYNC_CONFIG.supabaseUrl || '').replace(/\/+$/, '') + '/storage/v1'; }
 
 async function loadEarlyEdu() {
+  eeLoadSyncTs();
   try { const raw = localStorage.getItem('early_edu'); if (raw) EARLY_EDU = JSON.parse(raw) || []; } catch (e) {}
   eeNormalizeTypes(EARLY_EDU); eeBackfillUpdated(EARLY_EDU);
   if (isSyncReady()) {
     try {
       const key = await getCryptoKey(); if (!key) { eeSetSyncState('nokey'); return; }
       const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${EARLY_EDU_KEY}&select=encrypted_data,iv`);
+      let rowFound = false;
       if (rows.length && rows[0].encrypted_data && rows[0].iv) {
+        rowFound = true;
         const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
         const cloud = JSON.parse(json || '[]');
         // v3.6.21 行存在即合并（不再要求 cloud.length>0：全删场景云端只含墓碑，空数组/墓碑都要合）
-        if (Array.isArray(cloud)) { eeNormalizeTypes(cloud); eeBackfillUpdated(cloud); EARLY_EDU = eeMergeEarlyEdu(EARLY_EDU, cloud); }
+        if (Array.isArray(cloud)) {
+          const before = JSON.stringify(EARLY_EDU);
+          eeNormalizeTypes(cloud); eeBackfillUpdated(cloud);
+          EARLY_EDU = eeMergeEarlyEdu(EARLY_EDU, cloud);
+          const after = JSON.stringify(EARLY_EDU);
+          if (after !== before) { try { localStorage.setItem('early_edu', after); } catch (e) {} _eeDirty = true; }
+          if (eeSameList(EARLY_EDU, cloud)) { _eeLast = after; _eeDirty = false; }   // 内容与云端一致：无需再推
+        }
       }
-      eeSetSyncState('ok');
+      // v3.6.22 启动不自动上云，仅按需提示：从未同步过显示 idle，有改动显示 pending
+      eeSetSyncState(_eeDirty ? 'pending' : (rowFound ? 'ok' : 'idle'));
     } catch (e) { console.warn('[早教] 云端读取失败', e); eeSetSyncState('fail'); }
     await loadEePlayCountCloud().catch(() => {});
-  }
+  } else { eeSetSyncState('off'); }
 }
 /* ---------- 播放音频数（默认 5，可改，随家庭云同步） ---------- */
 function getEePlayCount() {
@@ -5743,50 +5754,86 @@ function eeMergeEarlyEdu(local, cloud) {
   local.forEach(put); cloud.forEach(put);
   return Object.values(map);
 }
-/* v3.6.21 云同步状态行（管理 → 早教可见）：云端保存失败不再静默无感 */
-let _eeSyncState = '', _eeSaveRetry = 0;
+/* v3.6.22 早教音频云同步改手动：本地改动只存本机并标记「有改动未同步」；只有点「立即同步」才加密上云共享；
+ * 云端拉取仍自动（启动 + 切回前台节流补拉），保证家人设备刷新 / 重开即可收到新增 / 删除 / 改名 */
+let _eeSyncState = '', _eeSaveRetry = 0, _eeDirty = false;
+let _eeLastSyncTs = 0;   // 最近一次成功上云时间戳（持久化，重启后仍显示「已同步 HH:MM」）
+function eeLoadSyncTs() { try { _eeLastSyncTs = parseInt(localStorage.getItem('ee_last_sync_ts') || '0', 10) || 0; } catch (e) { _eeLastSyncTs = 0; } }
 function eeSetSyncState(state) {
   _eeSyncState = state;
   const el = document.getElementById('eeSyncState'); if (!el) return;
-  const t = new Date();
-  const hhmm = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
-  let html = '';
-  if (state === 'ok') html = '☁️ 云端已同步 ' + hhmm;
-  else if (state === 'idle') html = '☁️ 音频列表随家庭云同步（新增 / 删除 / 改名会同步到家人设备）';
-  else if (state === 'off') html = '☁️ 未开启家庭云同步（仅存本机）';
-  else if (state === 'nokey') html = '⚠️ 云端密钥异常，同步已暂停（请重新打开 App 或联系家庭管理员）';
-  else html = '⚠️ 云端同步失败，请检查网络';
-  html += '<button type="button" class="ee-sync-retry" onclick="eeCloudSyncNow()">立即同步</button>';
+  const hhmm = ts => { const t = new Date(ts); return String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0'); };
+  let html = '', cls = 'ee-sync-state';
+  if (state === 'ok') { html = '☁️ 云端已同步' + (_eeLastSyncTs ? ' ' + hhmm(_eeLastSyncTs) : ''); cls += ' is-ok'; }
+  else if (state === 'pending') { html = '☁️ 有改动未同步（点左侧「立即同步」上云共享）'; cls += ' is-warn'; }
+  else if (state === 'idle') { html = '☁️ 音频列表尚未同步到云端'; }
+  else if (state === 'off') { html = '☁️ 未开启家庭云同步（仅存本机）'; }
+  else if (state === 'nokey') { html = '⚠️ 云端密钥异常，同步已暂停（请重新打开 App 或联系家庭管理员）'; cls += ' is-warn'; }
+  else { html = '⚠️ 云端同步失败，请检查网络'; cls += ' is-warn'; }
   el.innerHTML = html;
-  el.className = 'ee-sync-state' + (state === 'ok' || state === 'idle' ? ' is-ok' : (state === 'off' ? '' : ' is-warn'));
+  el.className = cls;
 }
-/* v3.6.21 手动/自动重试入口：先推送本地，再拉取云端合并 */
+/* v3.6.22 立即同步（管理 → 早教页唯一上云入口）：先推送本地改动，再拉取云端合并 */
 function eeCloudSyncNow() {
   if (!isSyncReady()) { showToast('请先在「管理 → 家庭云同步」开启同步'); return; }
   showToast('正在同步音频列表…');
-  Promise.resolve(saveEarlyEdu()).catch(() => {}).then(() => eePullCloud());
+  Promise.resolve(eePushEarlyEdu()).catch(() => {}).then(() => eePullCloud());
 }
-/* v3.6.21 拉取云端列表并合并（墓碑 + updatedAt），只更新本地不反推，避免覆盖他端新数据 */
+/* v3.6.22 推送本地音频列表上云（加密 upsert；失败 toast + 自动重试上限 2 次；成功记录同步时间戳） */
+async function eePushEarlyEdu() {
+  if (!isSyncReady()) { eeSetSyncState('off'); return; }
+  try {
+    const key = await getCryptoKey(); if (!key) { eeSetSyncState('nokey'); return; }
+    const body = JSON.stringify(EARLY_EDU);
+    if (body === _eeLast) { _eeDirty = false; eeSetSyncState('ok'); return; }
+    const { data, iv } = await encrypt(key, body);
+    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: EARLY_EDU_KEY, encrypted_data: data, iv, last_modified: Date.now() });
+    _eeLast = body; _eeSaveRetry = 0; _eeDirty = false;
+    _eeLastSyncTs = Date.now();
+    try { localStorage.setItem('ee_last_sync_ts', String(_eeLastSyncTs)); } catch (e) {}
+    eeSetSyncState('ok');
+    showToast('☁️ 音频列表已同步到云端');
+  } catch (e) {
+    console.warn('[早教] 云端推送失败', e);
+    eeSetSyncState('fail');
+    showToast('☁️ 音频列表云端同步失败，请检查网络（将自动重试）');
+    if (_eeSaveRetry < 2) { _eeSaveRetry++; setTimeout(() => { eePushEarlyEdu().catch(() => {}); }, 3000); }   // v3.6.22 失败自动重试（上限 2 次）
+  }
+}
+/* v3.6.22 列表内容比对（忽略键顺序/条目顺序）：判定本地与云端是否一致，避免误报「有改动未同步」 */
+function eeSameList(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  const canon = arr => arr.slice().sort((x, y) => String(x.id).localeCompare(String(y.id)))
+    .map(x => JSON.stringify(x, Object.keys(x).sort())).join('\u0000');
+  return canon(a) === canon(b);
+}
+/* v3.6.22 拉取云端列表并合并（墓碑 + updatedAt），只更新本地不反推，避免覆盖他端新数据；
+ * 合并产生了本地独有改动（如本机墓碑/新增）时标记待同步，提示用户点「立即同步」传播 */
 async function eePullCloud() {
   if (!isSyncReady()) { eeSetSyncState('off'); return; }
   try {
     const key = await getCryptoKey(); if (!key) { eeSetSyncState('nokey'); return; }
     const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${EARLY_EDU_KEY}&select=encrypted_data,iv`);
+    let rowFound = false;
     if (rows.length && rows[0].encrypted_data && rows[0].iv) {
+      rowFound = true;
       const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
       const cloud = JSON.parse(json || '[]');
       if (Array.isArray(cloud)) {
         const before = JSON.stringify(EARLY_EDU);
         eeNormalizeTypes(cloud); eeBackfillUpdated(cloud);
         EARLY_EDU = eeMergeEarlyEdu(EARLY_EDU, cloud);
-        if (JSON.stringify(EARLY_EDU) !== before) {
-          try { localStorage.setItem('early_edu', JSON.stringify(EARLY_EDU)); } catch (e) {}
+        const after = JSON.stringify(EARLY_EDU);
+        if (after !== before) {
+          try { localStorage.setItem('early_edu', after); } catch (e) {}
+          _eeDirty = true;   // 拉到了他端改动，本地与上次推送快照不一致，待下次立即同步
           renderEarlyEduList(); renderEarlyEduCard();
           showToast('☁️ 音频列表已更新（来自其他设备）');
         }
+        if (eeSameList(EARLY_EDU, cloud)) { _eeLast = after; _eeDirty = false; }   // 内容与云端一致：无需再推
       }
     }
-    eeSetSyncState('ok');
+    eeSetSyncState(_eeDirty ? 'pending' : (rowFound ? 'ok' : 'idle'));
   } catch (e) { console.warn('[早教] 云端拉取失败', e); eeSetSyncState('fail'); }
 }
 /* v3.6.21 切回前台补拉云端列表（家人手机不刷新网页也能收到新增/删除，节流 60s） */
@@ -5798,27 +5845,15 @@ document.addEventListener('visibilitychange', () => {
   _eeLastPullTs = now;
   if (isSyncReady()) eePullCloud().catch(() => {});
 });
+/* v3.6.22 本地保存：只写本机 + 标记「有改动未同步」——不再自动上云，上云只能点「立即同步」 */
 async function saveEarlyEdu() {
-  // v3.6.21 压缩过期墓碑（30 天前的删除标记，各设备应已同步到）
+  // 压缩过期墓碑（30 天前的删除标记，各设备应已同步到）
   const cutoff = Date.now() - EE_TOMBSTONE_KEEP_MS;
   const compacted = EARLY_EDU.filter(x => !(x.deleted && (x.deletedAt || 0) < cutoff));
   if (compacted.length !== EARLY_EDU.length) { EARLY_EDU = compacted; try { renderEarlyEduList(); } catch (e) {} }
   try { localStorage.setItem('early_edu', JSON.stringify(EARLY_EDU)); } catch (e) {}
-  if (!isSyncReady()) { eeSetSyncState('off'); return; }
-  try {
-    const key = await getCryptoKey(); if (!key) { eeSetSyncState('nokey'); return; }
-    const body = JSON.stringify(EARLY_EDU);
-    if (body === _eeLast) { eeSetSyncState('ok'); return; }
-    const { data, iv } = await encrypt(key, body);
-    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: EARLY_EDU_KEY, encrypted_data: data, iv, last_modified: Date.now() });
-    _eeLast = body; _eeSaveRetry = 0;
-    eeSetSyncState('ok');
-  } catch (e) {
-    console.warn('[早教] 云端保存失败', e);
-    eeSetSyncState('fail');
-    showToast('☁️ 音频列表云端同步失败，请检查网络（将自动重试）');
-    if (_eeSaveRetry < 2) { _eeSaveRetry++; setTimeout(() => { saveEarlyEdu().catch(() => {}); }, 3000); }   // v3.6.21 失败自动重试（上限 2 次）
-  }
+  _eeDirty = true;
+  eeSetSyncState(isSyncReady() ? 'pending' : 'off');
 }
 function scheduleEarlyEduSave() { _eeSaveRetry = 0; if (_eeSaveTimer) clearTimeout(_eeSaveTimer); _eeSaveTimer = setTimeout(() => { _eeSaveTimer = null; saveEarlyEdu().catch(() => {}); }, 800); }
 
@@ -6358,40 +6393,45 @@ function eePlayN() {
   eeAutoRecordOnPlay();   // v3.5.160 按本次播放队列的类别，自动记听歌/听故事（每种最多 1 条）
   eePlayQueueItem();
 }
-/* v3.5.160 自动记录：本次播放(连播 n 首)开始时，按音频类别记 1 条听故事(中文/英文) 和/或 1 条听歌，记录时间=开始时间 */
+/* v3.6.22 自动记录去重：每类每天仅 1 条——队列含故事（中文/英文/古诗）只加 1 条听故事、含儿歌只加 1 条听歌；
+ * 今日已有同类型记录（手动或自动添加过）则不再新增，只高亮已有记录并提示「已添加」；
+ * 停止后再播放 / 切换都不会重复添加（切换本就不调用本函数） */
 function eeAutoRecordOnPlay() {
   if (!eeQueue.length) return;
   const items = eeQueue.map(id => EARLY_EDU.find(x => x.id === id)).filter(Boolean);
   if (!items.length) return;
-  const hasCn = items.some(x => x.type === '古诗' || x.type === '故事(中文)');
-  const hasEn = items.some(x => x.type === '故事(英文)');
+  const storyLangs = [];
+  if (items.some(x => x.type === '古诗' || x.type === '故事(中文)')) storyLangs.push('中文');
+  if (items.some(x => x.type === '故事(英文)')) storyLangs.push('英文');
   const hasSong = items.some(x => x.type === '儿歌');
-  if (!(hasCn || hasEn || hasSong)) return;
+  if (!storyLangs.length && !hasSong) return;
   const now = new Date();
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
   const recTime = hh + ':' + mm;
   const ts = Date.now();
   const records = getTodayRecords();
-  // v3.5.161 按语言分别生成独立记录：中文 / 英文 各一条（避免一条记录里中英都被勾选），歌曲记一条听歌
-  if (hasCn) {
-    records.push({ type: 'listenStory', name: '听故事', time: recTime, recTime, timestamp: ts, storyLangs: ['中文'], storyTime: recTime, updatedAt: Date.now() });
-  }
-  if (hasEn) {
-    records.push({ type: 'listenStory', name: '听故事', time: recTime, recTime, timestamp: ts + 1, storyLangs: ['英文'], storyTime: recTime, updatedAt: Date.now() });
+  const added = [], existed = [];
+  if (storyLangs.length) {
+    if (records.some(r => r.type === 'listenStory')) existed.push('听故事');
+    else { records.push({ type: 'listenStory', name: '听故事', time: recTime, recTime, timestamp: ts, storyLangs, storyTime: recTime, updatedAt: Date.now() }); added.push('听故事'); }
   }
   if (hasSong) {
-    records.push({ type: 'listenMusic', name: '听歌', time: recTime, recTime, timestamp: ts + 2, simpleTime: recTime, updatedAt: Date.now() });
+    if (records.some(r => r.type === 'listenMusic')) existed.push('听歌');
+    else { records.push({ type: 'listenMusic', name: '听歌', time: recTime, recTime, timestamp: ts + 1, simpleTime: recTime, updatedAt: Date.now() }); added.push('听歌'); }
   }
-  persistRecords(records);
-  afterRecordChange(getTodayDateStr());
-  // v3.5.162 播放后自动记录：高亮对应子区块 + 提示已添加几条
+  // 高亮：新增的与已存在的都高亮对应子区块（已存在时用户能看到是哪条）
   const flashIds = [];
-  if (hasCn || hasEn) flashIds.push('listenStory');
+  if (storyLangs.length) flashIds.push('listenStory');
   if (hasSong) flashIds.push('listenMusic');
   if (flashIds.length) eeFlashMixer(flashIds);
-  const n = (hasCn ? 1 : 0) + (hasEn ? 1 : 0) + (hasSong ? 1 : 0);
-  showToast('🎵 已自动添加 ' + n + ' 条记录（听故事 / 听歌）');
+  if (added.length) {
+    persistRecords(records);
+    afterRecordChange(getTodayDateStr());
+    showToast('🎵 已自动添加 ' + added.length + ' 条记录（' + added.join(' / ') + '）');
+  } else {
+    showToast('今日已添加过「' + existed.join(' / ') + '」记录，已为你高亮');
+  }
 }
 function eePlayQueueItem() {
   const it = EARLY_EDU.find(x => x.id === eeQueue[eeQueueIdx]);
