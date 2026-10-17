@@ -145,6 +145,12 @@
   .overview-item .ov-value { color: #ffeaa7; font-weight: 400; font-size: 15px; }   /* v3.6.24 14px→15px */
   .overview-item .ov-time { color: #ffeaa7; font-weight: 400; font-size: 15px; }   /* v3.6.24 14px→15px */
   .overview-item .ov-countdown { color: #55efc4; }
+  /* v3.6.25 总览右列（水+奶量 / 睡眠时长）对齐：item 固定宽度使两行第一个字左边界一致；
+     label 固定宽度 + 数值右对齐 + 单位左对齐，使「ml」与「h」起点一致 */
+  .overview-item.ov-unit-item { width: 156px; flex-shrink: 0; }
+  .overview-item.ov-unit-item .ov-label { width: 76px; flex-shrink: 0; }
+  .overview-item.ov-unit-item .ov-num { display: inline-block; width: 42px; text-align: right; }
+  .overview-item.ov-unit-item .ov-unit { display: inline-block; width: 26px; text-align: left; }
   /* v3.6.12 今日成就：左右两栏 —— 左栏文字两端对齐(justify)，右栏为点赞按钮独占列；
      右栏下方留白，文字不侵入（即「点赞下方的文字右侧空出来」） */
   .overview-achievement { color: #fff; font-size: 15px; margin-top: 0; display: flex; align-items: flex-start; gap: 4px; }
@@ -2893,6 +2899,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.24"></script>
+<script src="app.js?v=v3.6.25"></script>
 </body>
 </html>
