@@ -1049,7 +1049,7 @@ function updateOverview(skipPush) {
   const sleepTotalMin = getTodaySleepTotal();
   if (sleepTotalMin !== null) {
     const durH = Math.round(sleepTotalMin / 6) / 10;   // 分钟→小时，保留 1 位小数
-    sleepDurVal = `<span class="ov-value ov-num">${durH}</span><span class="ov-value ov-unit unit-h">h</span>`;
+    sleepDurVal = `<span class="ov-value ov-num">${durH}</span><span class="ov-value ov-unit">h</span>`;
   } else {
     sleepDurVal = `<span class="ov-value">暂无记录</span>`;
   }
@@ -1477,7 +1477,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.28'; // v3.6.28: ①总览「下次睡觉」图标 🌙→😴（与 ACTIVITY_TYPES/日报/图表的睡眠图标体系统一）②睡眠时长单位「h」右移约一个字符宽与上一行「ml」的「l」对齐（.ov-unit.unit-h padding-left:0.83em，unit 框 20→22px，item 总宽 132 不变）；「睡」与「水」第一个字对齐、数值右端对齐保持不变（两端对齐）。// v3.6.27: 总览「下一次睡觉」→「下次睡觉」，与「下次喝奶」口径统一（toast 早已是「距下次喝奶/睡觉」）。// v3.6.26: ①toast 与总览口径统一「距下一次喝奶」→「距下次喝奶」（总览 label 早已是「下次喝奶:」）②总览右列（水+奶量/睡眠时长）整体收紧往右移——item 156→132px、label 76→66px（冒号与数值间隔减少）、数值 42→36px、单位 26→20px、gap 5→4px，第一个字与单位仍保持对齐③「放音乐」标题字重 700→400——与「🎵 听歌/🎧 听故事」（.ee-sub-head）及「🍼 喝奶」等卡片标题（.card-name，均 16px/400）视觉一致（用户反馈 700 观感偏大）。// v3.6.24: ①首页总览「今日计划 / 今日成就」字号 14px→15px，与「下一次喝奶」行一致（水+奶量等同比例统一）②「放音乐」标题 14px→16px 与「🎵 听歌」标题同尺寸；连播提示语从按钮下方移到「放音乐」与按钮之间，且「几首」改为管理里的实际播放音频数（如 5 首，动态渲染）③总览「下次喝奶」下方新增「下一次睡觉 / 睡眠时长」行——5-19 点按「上一次睡眠开始时间+睡眠时长+2 小时」预估下次睡觉时间，19-凌晨 5 点显示「-」，右侧显示上一次睡眠时长（如 13.5 h）；刷新网页的「距下一次喝奶」toast 增加距睡觉倒计时，简化提示语为「距下一次喝奶/睡觉：h min / h min」。// v3.6.23: 播放自动记录改为「每次播放新增去重后的记录」——v3.6.22 的「每类每天仅 1 条」不符合预期（用户反馈：点一次播放就应记一次，同一天可多次播放多次记录）；去重维度改为「同一次播放队列内」：多首故事（中文/英文/古诗）仍合并 1 条听故事、多首儿歌合并 1 条听歌；提示语改为「已添加1条听故事/听歌记录」；切换（eeSwitch）与连播自动接歌仍不记录。// v3.6.22: ①首页「放音乐」手指图标放大 12px→16px（与听歌/听故事图标同尺寸）②修复管理弹窗滚到底时最后一项音频被吸底「确定」条遮住（选项面板底部留白 72px）③播放自动记录去重——每类每天仅 1 条（中文/英文/古诗合并为 1 条听故事、儿歌 1 条听歌），今日已有同类型记录则只高亮已有记录并提示「已添加」，停止后再播放 / 切换不再重复添加 ④早教音频云同步改手动——只有点「立即同步」才加密上云共享（按钮改 .btn 样式置左、状态词与提示移至按钮下方），本地改动只存本机并标记「有改动未同步」，云端拉取仍自动（启动 + 切回前台），家人设备刷新 / 重开即可看到。// v3.6.21: ①修复首页连播「播了几首就莫名停止」——音频元素 error 事件此前无处理（加载失败即死停）、起播无看门狗（加载挂起会卡在「加载中」）、播放/停止按钮无防抖（连击/幽灵点击会误停）；现三路归一失败处理（error/play reject/10s 看门狗）：单曲失败自动跳下一首，连续 3 首失败才停止并明确 toast 原因，按钮加 400ms 防抖 ②修复「管理里删除/新增音频，家人手机不同步」——旧合并逻辑是并集且本地优先，删除直接 splice 导致他端把已删歌曲复活、改名/改分类也不传播；现改墓碑式删除（deleted 标记随云同步，30 天后压缩清理）+ 同 id 按 updatedAt 取新版冲突合并 + 云端保存失败不再静默（管理页早教页新增云同步状态行，失败 toast + 自动重试 + 手动「立即同步」）+ 切回前台节流补拉云端列表 ③首页音频卡新增「放音乐」指引——切换/播放上方左侧指向下手指（尺寸颜色同 AI育儿 图标）+ 右侧加粗黄色「放音乐」，按钮下方灰色小字提示连播与停止方式。// v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
+const APP_VERSION = 'v3.6.29'; // v3.6.29: ①成长里程碑徽章固化——双根因导致徽章「突然改乱」：(a) v3.6.17 起 enrichMilestonesWithLLM 内 Promise.allSettled(_mapPool(...)) 包住 async 函数的 Promise，每次必抛 "object is not iterable" → AI label 从未落盘；(b) 徽章每 15 天周期重算且刷新时先把无 AI 标签的规则结果存缓存（AI 异步返回前离开即被污染）→ 徽章标题从 AI 概括退化为规则截断。现徽章一经确定即永久固化（缓存新增 badges 快照，renderMilestoneBadges 优先用固化徽章；刷新窗口只补未解锁组，AI label 仅美化本次新固化组一次；旧格式缓存首次打开即时推导固化；手动编辑里程碑属用户显式意图，重推并固化）②总览右列冒号与数值间隔改为与「下次喝奶: 02:25」一致（4px）——label/数值/单位均 auto 宽、数值紧跟冒号，item 132→120px（右移右缘不变）；v3.6.28 的 h 与 l 对齐因与冒号紧凑互斥移除。// v3.6.28: ①总览「下次睡觉」图标 🌙→😴（与 ACTIVITY_TYPES/日报/图表的睡眠图标体系统一）②睡眠时长单位「h」右移约一个字符宽与上一行「ml」的「l」对齐（.ov-unit.unit-h padding-left:0.83em，unit 框 20→22px，item 总宽 132 不变）；「睡」与「水」第一个字对齐、数值右端对齐保持不变（两端对齐）。// v3.6.27: 总览「下一次睡觉」→「下次睡觉」，与「下次喝奶」口径统一（toast 早已是「距下次喝奶/睡觉」）。// v3.6.26: ①toast 与总览口径统一「距下一次喝奶」→「距下次喝奶」（总览 label 早已是「下次喝奶:」）②总览右列（水+奶量/睡眠时长）整体收紧往右移——item 156→132px、label 76→66px（冒号与数值间隔减少）、数值 42→36px、单位 26→20px、gap 5→4px，第一个字与单位仍保持对齐③「放音乐」标题字重 700→400——与「🎵 听歌/🎧 听故事」（.ee-sub-head）及「🍼 喝奶」等卡片标题（.card-name，均 16px/400）视觉一致（用户反馈 700 观感偏大）。// v3.6.24: ①首页总览「今日计划 / 今日成就」字号 14px→15px，与「下一次喝奶」行一致（水+奶量等同比例统一）②「放音乐」标题 14px→16px 与「🎵 听歌」标题同尺寸；连播提示语从按钮下方移到「放音乐」与按钮之间，且「几首」改为管理里的实际播放音频数（如 5 首，动态渲染）③总览「下次喝奶」下方新增「下一次睡觉 / 睡眠时长」行——5-19 点按「上一次睡眠开始时间+睡眠时长+2 小时」预估下次睡觉时间，19-凌晨 5 点显示「-」，右侧显示上一次睡眠时长（如 13.5 h）；刷新网页的「距下一次喝奶」toast 增加距睡觉倒计时，简化提示语为「距下一次喝奶/睡觉：h min / h min」。// v3.6.23: 播放自动记录改为「每次播放新增去重后的记录」——v3.6.22 的「每类每天仅 1 条」不符合预期（用户反馈：点一次播放就应记一次，同一天可多次播放多次记录）；去重维度改为「同一次播放队列内」：多首故事（中文/英文/古诗）仍合并 1 条听故事、多首儿歌合并 1 条听歌；提示语改为「已添加1条听故事/听歌记录」；切换（eeSwitch）与连播自动接歌仍不记录。// v3.6.22: ①首页「放音乐」手指图标放大 12px→16px（与听歌/听故事图标同尺寸）②修复管理弹窗滚到底时最后一项音频被吸底「确定」条遮住（选项面板底部留白 72px）③播放自动记录去重——每类每天仅 1 条（中文/英文/古诗合并为 1 条听故事、儿歌 1 条听歌），今日已有同类型记录则只高亮已有记录并提示「已添加」，停止后再播放 / 切换不再重复添加 ④早教音频云同步改手动——只有点「立即同步」才加密上云共享（按钮改 .btn 样式置左、状态词与提示移至按钮下方），本地改动只存本机并标记「有改动未同步」，云端拉取仍自动（启动 + 切回前台），家人设备刷新 / 重开即可看到。// v3.6.21: ①修复首页连播「播了几首就莫名停止」——音频元素 error 事件此前无处理（加载失败即死停）、起播无看门狗（加载挂起会卡在「加载中」）、播放/停止按钮无防抖（连击/幽灵点击会误停）；现三路归一失败处理（error/play reject/10s 看门狗）：单曲失败自动跳下一首，连续 3 首失败才停止并明确 toast 原因，按钮加 400ms 防抖 ②修复「管理里删除/新增音频，家人手机不同步」——旧合并逻辑是并集且本地优先，删除直接 splice 导致他端把已删歌曲复活、改名/改分类也不传播；现改墓碑式删除（deleted 标记随云同步，30 天后压缩清理）+ 同 id 按 updatedAt 取新版冲突合并 + 云端保存失败不再静默（管理页早教页新增云同步状态行，失败 toast + 自动重试 + 手动「立即同步」）+ 切回前台节流补拉云端列表 ③首页音频卡新增「放音乐」指引——切换/播放上方左侧指向下手指（尺寸颜色同 AI育儿 图标）+ 右侧加粗黄色「放音乐」，按钮下方灰色小字提示连播与停止方式。// v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5016,23 +5016,33 @@ async function _mapPool(items, limit, fn) {
   return ret;
 }
 // 规则先渲染，再异步用 LLM 回写分类/短标签；无配置或全失败则保持规则结果不动
-async function enrichMilestonesWithLLM(items) {
+// v3.6.29 badges：本次新固化（fresh）的徽章用 AI label 美化一次；已固化组不受影响
+async function enrichMilestonesWithLLM(items, badges) {
   const cfg = getAITagConfig();
   if (!cfg || !items || !items.length) return;
   const unique = []; const seen = new Set();
   for (const it of items) { if (!seen.has(it.text)) { seen.add(it.text); unique.push(it); } }
   let changed = false;
-  await Promise.allSettled(_mapPool(unique, 4, async it => {   // v3.6.17 最多 4 条并行
+  // v3.6.29 修复：_mapPool 自 v3.6.17 起为 async（内部已逐条 try/catch 隔离失败），
+  // 此处却仍用 Promise.allSettled 包住其返回的 Promise → 每次必抛 "object is not iterable"，
+  // 导致 AI label 从未落盘、徽章退化为规则截断（用户反馈「突然改乱」的根因）。改为直接 await。
+  await _mapPool(unique, 4, async it => {   // v3.6.17 最多 4 条并行
     const r = await classifyMilestoneLLM(it.text, cfg);
     if (!r) return;
     const dom = msDomainById(r.domainId);
     for (const x of items) { if (x.text !== it.text) continue; x.domain = dom; if (r.label) x.label = r.label; }
     changed = true;
-  }));
+  });
   if (!changed) return;
+  // v3.6.29 本次新固化的徽章用 AI label 美化一次（已固化组绝不变）
+  if (badges) badges.forEach(b => {
+    if (!b || !b.fresh) return;
+    const it = items.find(x => x.text === b.text);
+    if (it && it.label && it.label.trim()) b.label = it.label.trim();
+  });
   const badgesEl = document.getElementById('milestoneBadges');
   // v3.5.104 renderMilestoneBadges 返回的是自带 id 的整块，用 outerHTML 替换（原用 innerHTML 会造成同 id 嵌套 = 重复 ID）
-  if (badgesEl) badgesEl.outerHTML = renderMilestoneBadges(items);
+  if (badgesEl) badgesEl.outerHTML = renderMilestoneBadges(items, badges);
   const tlEl = document.getElementById('milestoneTimeline');
   if (tlEl) tlEl.innerHTML = renderMilestoneInner();
 }
@@ -7790,42 +7800,68 @@ function shouldRefreshMilestones(now) {
   return true;
 }
 // 把当前里程碑分类结果（含 AI/规则 domain 与 label）缓存到本地，并刷新「上次刷新时间」
-function saveMilestoneBadgeCache(items) {
+// v3.6.29 增加 badges 参数：三大徽章的固化快照（一旦确定不再随周期刷新而改变）
+function saveMilestoneBadgeCache(items, badges) {
   try {
     const data = (items || []).map(it => ({
       text: it.text, date: it.date, isFirst: it.isFirst,
       ageMonths: it.ageMonths, ageDays: it.ageDays,
       label: it.label || null, domainId: it.domain ? it.domain.id : 'other'
     }));
-    localStorage.setItem(MS_BADGE_CACHE_KEY, JSON.stringify({ ts: Date.now(), items: data }));
+    const obj = { ts: Date.now(), items: data };
+    if (badges) obj.badges = badges.map(b => ({ groupIdx: b.groupIdx, text: b.text, label: b.label || null, date: b.date, domainId: b.domainId || null }));
+    localStorage.setItem(MS_BADGE_CACHE_KEY, JSON.stringify(obj));
     localStorage.setItem(MS_BADGE_LAST_KEY, String(Date.now()));
   } catch {}
 }
 // 读取上次刷新的徽章分类结果；无缓存返回 null（此时回落为当前规则结果）
+// v3.6.29 返回 { items, badges }；旧格式缓存（无 badges）返回 badges=null，由调用方推导
 function loadMilestoneBadgeCache() {
   try {
     const raw = localStorage.getItem(MS_BADGE_CACHE_KEY);
     if (!raw) return null;
     const obj = JSON.parse(raw);
     if (!obj || !Array.isArray(obj.items)) return null;
-    return obj.items.map(it => ({
-      text: it.text, date: it.date, isFirst: it.isFirst,
-      ageMonths: it.ageMonths, ageDays: it.ageDays,
-      label: it.label, domain: msDomainById(it.domainId)
-    }));
+    return {
+      items: obj.items.map(it => ({
+        text: it.text, date: it.date, isFirst: it.isFirst,
+        ageMonths: it.ageMonths, ageDays: it.ageDays,
+        label: it.label, domain: msDomainById(it.domainId)
+      })),
+      badges: Array.isArray(obj.badges) ? obj.badges.map(b => ({ groupIdx: b.groupIdx, text: b.text, label: b.label || null, date: b.date, domainId: b.domainId || null })) : null
+    };
   } catch { return null; }
+}
+// v3.6.29 徽章固化：从 items 推导三大徽章快照（挑选逻辑与 renderMilestoneBadges 一致）。
+// 返回稀疏数组 [{groupIdx, text, label, date, domainId, fresh}]——fresh 表示本次新固化（AI 回来后可用其 label 美化一次）。
+// domainId 一并固化：无 label 的徽章标题回退简化时仍需领域关键词（v3.6.29 修复「固化徽章显示原文而非关键词」）。
+// 背景：旧逻辑每 15 天周期重算徽章，且刷新时先把「无 AI 标签的规则结果」存缓存，
+// 若 AI 异步返回前用户离开/失败，缓存被污染 → 之后 15 天徽章标题从 AI 概括退化为规则截断（用户反馈「突然改乱」）。
+// 叠加 v3.6.17 起 enrichMilestonesWithLLM 内 Promise.allSettled(async) 必抛（v3.6.29 修复）→ AI label 实际从未落盘。
+function deriveBadgesFromItems(items) {
+  const out = [];
+  MILESTONE_BADGE_GROUPS.forEach((g, idx) => {
+    const hit = (items || []).find(i => i.isFirst && g.domains.indexOf(i.domain.id) !== -1);
+    if (hit) out[idx] = { groupIdx: idx, text: hit.text, label: (hit.label && hit.label.trim()) ? hit.label.trim() : null, date: hit.date, domainId: hit.domain.id, fresh: true };
+  });
+  return out;
 }
 
 // 徽章行：三大类别各取一条「最新达成的首次」成就，简化描述 + 完整日期；点击看全文
+// v3.6.29 badges 为固化快照（稀疏数组）：存在即优先使用，徽章不再随周期刷新/新记录而改变；仅未固化组才从 items 现找
+// 固化 hit 携带 domain（domainId 反查，兼容无 domainId 的旧快照时按文本重新归类）——保证标题简化与点击展开详情可用
 let _msBadgeHits = [];        // 徽章对应的原始条目（供点击展开）
 let _msBadgeOpen = -1;        // 当前展开的徽章索引，-1 = 无
-function renderMilestoneBadges(items) {
+function renderMilestoneBadges(items, badges) {
   _msBadgeHits = [];
   _msBadgeOpen = -1;
   let html = '<div class="ms-badges" id="milestoneBadges">';
   MILESTONE_BADGE_GROUPS.forEach((g, idx) => {
     // items 已按日期倒序 → 第一个命中的即为该类别最新达成的首次成就
-    const hit = items.find(i => i.isFirst && g.domains.indexOf(i.domain.id) !== -1);
+    const fixed = badges && badges[idx];
+    const hit = fixed ? { text: fixed.text, label: fixed.label, date: fixed.date,
+                          domain: fixed.domainId ? msDomainById(fixed.domainId) : classifyMilestone(fixed.text) }
+                      : (items || []).find(i => i.isFirst && g.domains.indexOf(i.domain.id) !== -1);
     if (hit) {
       _msBadgeHits[idx] = hit;
       let short = (hit.label && hit.label.trim()) ? hit.label.trim() : simplifyMilestone(hit.text, hit.domain);
@@ -7938,7 +7974,10 @@ function saveMsEdit() {
   // 清徽章缓存并重算（保证徽章与"第一次"计数立即更新）
   try { localStorage.removeItem(MS_BADGE_CACHE_KEY); localStorage.removeItem(MS_BADGE_LAST_KEY); } catch {}
   _milestoneItems = collectMilestones();
-  const be = document.getElementById('milestoneBadges'); if (be) be.outerHTML = renderMilestoneBadges(_milestoneItems);
+  // v3.6.29 徽章固化：手动编辑属显式用户意图——按当前结果重推徽章并立即固化（AI label 待下个刷新窗口再美化）
+  const badges = deriveBadgesFromItems(_milestoneItems);
+  saveMilestoneBadgeCache(_milestoneItems, badges);
+  const be = document.getElementById('milestoneBadges'); if (be) be.outerHTML = renderMilestoneBadges(_milestoneItems, badges);
   const tl = document.getElementById('milestoneTimeline'); if (tl) tl.innerHTML = renderMilestoneInner();
   hideModal('msEditModal');
   showToast('已更新里程碑');
@@ -8072,10 +8111,35 @@ function makeMilkTrendChart() {
     `</g>` + dots + tip + `</svg></div>`;
 }
 // v3.5.105 useCacheBadge=true：徽章沿用上次缓存（非刷新窗口，不重算/不调 AI）；false 或缓存缺失时退化为当前 items（刷新窗口或首次）
+// v3.6.25→v3.6.29：缓存带回 {items, badges}；badges 为固化徽章快照（旧格式缓存无 badges 时由 items 现推导并即刻固化）
+let _msBadges = null;        // v3.6.29 本次渲染实际使用的徽章快照（openAnalysis 刷新窗口据此保存/AI 美化）
 function makeMilestoneTimeline(useCacheBadge) {
   const items = collectMilestones();
   _milestoneItems = items;
-  const badgeItems = (useCacheBadge ? loadMilestoneBadgeCache() : null) || items;
+  let badgeItems = items;
+  _msBadges = null;
+  if (useCacheBadge) {
+    // 非刷新窗口：徽章用缓存快照（一旦固化不再随周期/新记录改变）
+    const c = loadMilestoneBadgeCache();
+    if (c) {
+      badgeItems = c.items;
+      if (c.badges) _msBadges = c.badges;
+      else {
+        // 旧格式缓存（无 badges）：用缓存 items 推导一次并即时固化，防止升级后首次打开又变
+        _msBadges = deriveBadgesFromItems(c.items);
+        const _prevLast = localStorage.getItem(MS_BADGE_LAST_KEY);
+        saveMilestoneBadgeCache(c.items, _msBadges);
+        if (_prevLast) localStorage.setItem(MS_BADGE_LAST_KEY, _prevLast);   // 格式升级不重置 15 天刷新锚
+      }
+    }
+  } else {
+    // 刷新窗口/首次：旧徽章原样保留，只补未解锁组；渲染即用合并结果
+    // （v3.6.29 修复：旧代码此分支 badges=null，首渲染退化为「原始重算值」，AI 失败/离开即污染）
+    const oldCache = loadMilestoneBadgeCache();
+    const oldBadges = (oldCache && oldCache.badges) || [];
+    _msBadges = oldBadges.slice();
+    deriveBadgesFromItems(items).forEach((b, idx) => { if (b && !_msBadges[idx]) _msBadges[idx] = b; });
+  }
   const head = `<div class="chart-card"><div class="chart-title">🏆 成长里程碑</div>`;
   if (!items.length) {
     return head + `<div class="chart-empty">还没有成就记录<br><span style="font-size:12px;opacity:.7">记录时写点什么，比如「第一次翻身」</span></div></div>`;
@@ -8083,7 +8147,7 @@ function makeMilestoneTimeline(useCacheBadge) {
   const firstCount = items.filter(i => i.isFirst).length;
   const nowAge = getAgeDetail(getTodayDateStr());
   const stat = `<div class="ms-stat">当前 ${nowAge.months}月龄${nowAge.days > 0 ? nowAge.days + '天' : ''} · 共 ${items.length} 条 · ${firstCount} 个「第一次」</div>`;
-  return head + stat + renderMilestoneBadges(badgeItems) +
+  return head + stat + renderMilestoneBadges(badgeItems, _msBadges) +
     `<div id="milestoneBadgeDetail"></div>` +
     `<div class="ms-timeline" id="milestoneTimeline">${renderMilestoneInner()}</div></div>`;
 }
@@ -8298,7 +8362,7 @@ function openAnalysis() {
   html += makeLineChart(toChart(weightPts), { title: '⚖️ 体重趋势', unit: 'kg', color: '#6ec6ff', fmt: fmtWeight, yMin: 3, yStep: 1, xTickMode: 'keyDates', who: { table: WHO_WEIGHT }, zoomTiers: { min: 3, step: 1 } });
   html += makeLineChart(toChart(heightPts), { title: '📏 身高趋势', unit: 'cm', color: '#6ec6ff', fmt: v => v.toFixed(1), yMin: 48, yStep: 2, xTickMode: 'keyDates', who: { table: WHO_HEIGHT }, zoomTiers: { min: 50, step: 5 } });
   const _msRefresh = shouldRefreshMilestones();
-  html += makeMilestoneTimeline(!_msRefresh);   // 成长里程碑时间轴（非刷新窗口徽章用缓存；刷新窗口/首次用当前并稍后调 AI）
+  html += makeMilestoneTimeline(!_msRefresh);   // 成长里程碑时间轴（徽章快照由 makeMilestoneTimeline 计算并暴露为 _msBadges）
   html += `</div>`;
   content.innerHTML = html;
   bindChartTipDismiss();
@@ -8307,11 +8371,11 @@ function openAnalysis() {
   showModal('analysisModal');
   // v3.5.105 仅在「刷新窗口」才调用 AI/规则回写并重算徽章；其他时间沿用缓存（不调 AI、不重算）
   if (_msRefresh) {
-    // v3.6.16 无论是否配置 AI，都先锚定「上次刷新时间」并缓存当前规则结果；
-    // 否则未配 AI 时 last_update 不更新 → 每次打开都重算，徽章不足间隔就变
-    saveMilestoneBadgeCache(_milestoneItems);
+    // v3.6.29 徽章固化：无论是否配置 AI，先锚定刷新时间并保存合并后的徽章（含已定徽章）
+    // ——修复「AI 异步返回前用户离开/失败 → 缓存被无标签规则结果污染」
+    saveMilestoneBadgeCache(_milestoneItems, _msBadges);
     const cfg = getAITagConfig();
-    if (cfg) enrichMilestonesWithLLM(_milestoneItems).then(() => saveMilestoneBadgeCache(_milestoneItems));
+    if (cfg) enrichMilestonesWithLLM(_milestoneItems, _msBadges).then(() => saveMilestoneBadgeCache(_milestoneItems, _msBadges));
   }
   // v3.5.82 各分类面板统一高度，切换标签时弹窗不跳动
   requestAnimationFrame(() => equalizeAnalysisPanels());

@@ -145,15 +145,11 @@
   .overview-item .ov-value { color: #ffeaa7; font-weight: 400; font-size: 15px; }   /* v3.6.24 14px→15px */
   .overview-item .ov-time { color: #ffeaa7; font-weight: 400; font-size: 15px; }   /* v3.6.24 14px→15px */
   .overview-item .ov-countdown { color: #55efc4; }
-  /* v3.6.25 总览右列（水+奶量 / 睡眠时长）对齐：item 固定宽度使两行第一个字左边界一致；
-     label 固定宽度 + 数值右对齐 + 单位左对齐，使「ml」与「h」起点一致。
-     v3.6.26 右列整体收紧往右移（item 156→132px），冒号与数值间隔减少（label 76→66px）
-     v3.6.28 睡眠时长单位「h」右移与上一行「ml」的「l」对齐（unit 20→22px 容纳偏移，item 总宽不变） */
-  .overview-item.ov-unit-item { width: 132px; flex-shrink: 0; gap: 4px; }
-  .overview-item.ov-unit-item .ov-label { width: 66px; flex-shrink: 0; }
-  .overview-item.ov-unit-item .ov-num { display: inline-block; width: 36px; text-align: right; }
-  .overview-item.ov-unit-item .ov-unit { display: inline-block; width: 22px; text-align: left; }
-  .overview-item.ov-unit-item .ov-unit.unit-h { padding-left: 0.83em; }   /* ≈m 宽，h 与 l 对齐 */
+  /* v3.6.25 总览右列（水+奶量 / 睡眠时长）：item 固定宽度使两行第一个字（水/睡）左边界一致、同贴总览右缘
+     v3.6.26 右列整体收紧往右移（item 156→132px）
+     v3.6.29 冒号与数值间隔改为与「下次喝奶: 02:25」一致（4px）——label/数值/单位均改为 auto 宽、数值紧跟冒号；
+             item 再收紧 132→120px（右移、右缘不变）；v3.6.28 的「h 与 l 对齐」因与冒号紧凑互斥，本次移除 */
+  .overview-item.ov-unit-item { width: 120px; flex-shrink: 0; gap: 4px; }
   /* v3.6.12 今日成就：左右两栏 —— 左栏文字两端对齐(justify)，右栏为点赞按钮独占列；
      右栏下方留白，文字不侵入（即「点赞下方的文字右侧空出来」） */
   .overview-achievement { color: #fff; font-size: 15px; margin-top: 0; display: flex; align-items: flex-start; gap: 4px; }
@@ -2903,6 +2899,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.28"></script>
+<script src="app.js?v=v3.6.29"></script>
 </body>
 </html>
