@@ -2197,7 +2197,7 @@
         <span class="ee-hand">&#128071;</span><span class="ee-play-hint-title">放音乐</span>
       </div>
       <!-- v3.6.24 连播提示语移到「放音乐」与按钮之间；「几首」动态取管理中的播放音频数（eeRefreshPlayHint 渲染） -->
-      <div class="ee-play-hint-bottom">点「播放 / 切换」会自动连播<span id="eePlayHintCount">5</span>首歌，播放中再点一次即停止</div>
+      <div class="ee-play-hint-bottom">点「播放 / 切换」会自动连播<span id="eePlayHintCount">5</span>首歌<span id="eePlayHintNote"></span>，播放中再点一次即停止</div>
       <div class="ee-actions">
         <button class="fab-btn" id="eeSwitchBtn" onclick="eeSwitch()"><span class="fab-icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>切换</button>
         <button class="fab-btn" id="eePlayBtn" onclick="eeToggle()"><span class="fab-icon" id="eeIco"><svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg></span><span id="eePlayLabel">播放</span></button>
@@ -2899,6 +2899,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.29"></script>
+<script src="app.js?v=v3.6.30"></script>
 </body>
 </html>

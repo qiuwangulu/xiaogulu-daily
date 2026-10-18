@@ -1477,7 +1477,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.29'; // v3.6.29: ①成长里程碑徽章固化——双根因导致徽章「突然改乱」：(a) v3.6.17 起 enrichMilestonesWithLLM 内 Promise.allSettled(_mapPool(...)) 包住 async 函数的 Promise，每次必抛 "object is not iterable" → AI label 从未落盘；(b) 徽章每 15 天周期重算且刷新时先把无 AI 标签的规则结果存缓存（AI 异步返回前离开即被污染）→ 徽章标题从 AI 概括退化为规则截断。现徽章一经确定即永久固化（缓存新增 badges 快照，renderMilestoneBadges 优先用固化徽章；刷新窗口只补未解锁组，AI label 仅美化本次新固化组一次；旧格式缓存首次打开即时推导固化；手动编辑里程碑属用户显式意图，重推并固化）②总览右列冒号与数值间隔改为与「下次喝奶: 02:25」一致（4px）——label/数值/单位均 auto 宽、数值紧跟冒号，item 132→120px（右移右缘不变）；v3.6.28 的 h 与 l 对齐因与冒号紧凑互斥移除。// v3.6.28: ①总览「下次睡觉」图标 🌙→😴（与 ACTIVITY_TYPES/日报/图表的睡眠图标体系统一）②睡眠时长单位「h」右移约一个字符宽与上一行「ml」的「l」对齐（.ov-unit.unit-h padding-left:0.83em，unit 框 20→22px，item 总宽 132 不变）；「睡」与「水」第一个字对齐、数值右端对齐保持不变（两端对齐）。// v3.6.27: 总览「下一次睡觉」→「下次睡觉」，与「下次喝奶」口径统一（toast 早已是「距下次喝奶/睡觉」）。// v3.6.26: ①toast 与总览口径统一「距下一次喝奶」→「距下次喝奶」（总览 label 早已是「下次喝奶:」）②总览右列（水+奶量/睡眠时长）整体收紧往右移——item 156→132px、label 76→66px（冒号与数值间隔减少）、数值 42→36px、单位 26→20px、gap 5→4px，第一个字与单位仍保持对齐③「放音乐」标题字重 700→400——与「🎵 听歌/🎧 听故事」（.ee-sub-head）及「🍼 喝奶」等卡片标题（.card-name，均 16px/400）视觉一致（用户反馈 700 观感偏大）。// v3.6.24: ①首页总览「今日计划 / 今日成就」字号 14px→15px，与「下一次喝奶」行一致（水+奶量等同比例统一）②「放音乐」标题 14px→16px 与「🎵 听歌」标题同尺寸；连播提示语从按钮下方移到「放音乐」与按钮之间，且「几首」改为管理里的实际播放音频数（如 5 首，动态渲染）③总览「下次喝奶」下方新增「下一次睡觉 / 睡眠时长」行——5-19 点按「上一次睡眠开始时间+睡眠时长+2 小时」预估下次睡觉时间，19-凌晨 5 点显示「-」，右侧显示上一次睡眠时长（如 13.5 h）；刷新网页的「距下一次喝奶」toast 增加距睡觉倒计时，简化提示语为「距下一次喝奶/睡觉：h min / h min」。// v3.6.23: 播放自动记录改为「每次播放新增去重后的记录」——v3.6.22 的「每类每天仅 1 条」不符合预期（用户反馈：点一次播放就应记一次，同一天可多次播放多次记录）；去重维度改为「同一次播放队列内」：多首故事（中文/英文/古诗）仍合并 1 条听故事、多首儿歌合并 1 条听歌；提示语改为「已添加1条听故事/听歌记录」；切换（eeSwitch）与连播自动接歌仍不记录。// v3.6.22: ①首页「放音乐」手指图标放大 12px→16px（与听歌/听故事图标同尺寸）②修复管理弹窗滚到底时最后一项音频被吸底「确定」条遮住（选项面板底部留白 72px）③播放自动记录去重——每类每天仅 1 条（中文/英文/古诗合并为 1 条听故事、儿歌 1 条听歌），今日已有同类型记录则只高亮已有记录并提示「已添加」，停止后再播放 / 切换不再重复添加 ④早教音频云同步改手动——只有点「立即同步」才加密上云共享（按钮改 .btn 样式置左、状态词与提示移至按钮下方），本地改动只存本机并标记「有改动未同步」，云端拉取仍自动（启动 + 切回前台），家人设备刷新 / 重开即可看到。// v3.6.21: ①修复首页连播「播了几首就莫名停止」——音频元素 error 事件此前无处理（加载失败即死停）、起播无看门狗（加载挂起会卡在「加载中」）、播放/停止按钮无防抖（连击/幽灵点击会误停）；现三路归一失败处理（error/play reject/10s 看门狗）：单曲失败自动跳下一首，连续 3 首失败才停止并明确 toast 原因，按钮加 400ms 防抖 ②修复「管理里删除/新增音频，家人手机不同步」——旧合并逻辑是并集且本地优先，删除直接 splice 导致他端把已删歌曲复活、改名/改分类也不传播；现改墓碑式删除（deleted 标记随云同步，30 天后压缩清理）+ 同 id 按 updatedAt 取新版冲突合并 + 云端保存失败不再静默（管理页早教页新增云同步状态行，失败 toast + 自动重试 + 手动「立即同步」）+ 切回前台节流补拉云端列表 ③首页音频卡新增「放音乐」指引——切换/播放上方左侧指向下手指（尺寸颜色同 AI育儿 图标）+ 右侧加粗黄色「放音乐」，按钮下方灰色小字提示连播与停止方式。// v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
+const APP_VERSION = 'v3.6.30'; // v3.6.30: ①徽章更新策略按用户明确调整——仍每 15 天刷新窗口更新一次、期内固化，且「更新里程碑记录/编辑里程碑」都不再重新更新徽章（v3.6.29 的「编辑即重推」已回退：saveMsEdit 保留徽章固化快照不动，仅刷新缓存 items 供时间轴/分类即时生效，且不重置 15 天刷新锚）②修复「播放音频数设为 5 却只连播 2 首」多重因素：(a) 播放数云同步旧逻辑无条件用云端值覆盖本地——某次保存上传失败/他端旧值后写，本地设置就被顶掉且每次开 App/切前台复发；现本地保存记时间戳，仅当云端 last_modified 更新才覆盖；(b) 连播看门狗 10s→15s 且加载超时改为只跳过本首、不计入连续失败（慢网络下 3 首慢歌误杀整条链是「播 2 首就停」的误停机制；真正无法播放的文件仍走 error/play reject 连续 3 首停+toast；整队超时有 toast 兜底）；(c) 系统/锁屏暂停旧逻辑直接 eeStop 清队列（mediaSession pause 与音频焦点丢失）——现只暂停不散队、UI 显示「已暂停」、点按钮从当前这首继续；(d) 防同一 src 重复 ended（微信 X5 pause/currentTime 归零后重发会导致莫名跳首）；(e) 连播提示语诚实显示实际可连播数=min(设置数, 现有音频数)，不足则明说「不足则全放」。// v3.6.29: ①成长里程碑徽章固化——双根因导致徽章「突然改乱」：(a) v3.6.17 起 enrichMilestonesWithLLM 内 Promise.allSettled(_mapPool(...)) 包住 async 函数的 Promise，每次必抛 "object is not iterable" → AI label 从未落盘；(b) 徽章每 15 天周期重算且刷新时先把无 AI 标签的规则结果存缓存（AI 异步返回前离开即被污染）→ 徽章标题从 AI 概括退化为规则截断。现徽章一经确定即永久固化（缓存新增 badges 快照，renderMilestoneBadges 优先用固化徽章；刷新窗口只补未解锁组，AI label 仅美化本次新固化组一次；旧格式缓存首次打开即时推导固化；手动编辑里程碑属用户显式意图，重推并固化）②总览右列冒号与数值间隔改为与「下次喝奶: 02:25」一致（4px）——label/数值/单位均 auto 宽、数值紧跟冒号，item 132→120px（右移右缘不变）；v3.6.28 的 h 与 l 对齐因与冒号紧凑互斥移除。// v3.6.28: ①总览「下次睡觉」图标 🌙→😴（与 ACTIVITY_TYPES/日报/图表的睡眠图标体系统一）②睡眠时长单位「h」右移约一个字符宽与上一行「ml」的「l」对齐（.ov-unit.unit-h padding-left:0.83em，unit 框 20→22px，item 总宽 132 不变）；「睡」与「水」第一个字对齐、数值右端对齐保持不变（两端对齐）。// v3.6.27: 总览「下一次睡觉」→「下次睡觉」，与「下次喝奶」口径统一（toast 早已是「距下次喝奶/睡觉」）。// v3.6.26: ①toast 与总览口径统一「距下一次喝奶」→「距下次喝奶」（总览 label 早已是「下次喝奶:」）②总览右列（水+奶量/睡眠时长）整体收紧往右移——item 156→132px、label 76→66px（冒号与数值间隔减少）、数值 42→36px、单位 26→20px、gap 5→4px，第一个字与单位仍保持对齐③「放音乐」标题字重 700→400——与「🎵 听歌/🎧 听故事」（.ee-sub-head）及「🍼 喝奶」等卡片标题（.card-name，均 16px/400）视觉一致（用户反馈 700 观感偏大）。// v3.6.24: ①首页总览「今日计划 / 今日成就」字号 14px→15px，与「下一次喝奶」行一致（水+奶量等同比例统一）②「放音乐」标题 14px→16px 与「🎵 听歌」标题同尺寸；连播提示语从按钮下方移到「放音乐」与按钮之间，且「几首」改为管理里的实际播放音频数（如 5 首，动态渲染）③总览「下次喝奶」下方新增「下一次睡觉 / 睡眠时长」行——5-19 点按「上一次睡眠开始时间+睡眠时长+2 小时」预估下次睡觉时间，19-凌晨 5 点显示「-」，右侧显示上一次睡眠时长（如 13.5 h）；刷新网页的「距下一次喝奶」toast 增加距睡觉倒计时，简化提示语为「距下一次喝奶/睡觉：h min / h min」。// v3.6.23: 播放自动记录改为「每次播放新增去重后的记录」——v3.6.22 的「每类每天仅 1 条」不符合预期（用户反馈：点一次播放就应记一次，同一天可多次播放多次记录）；去重维度改为「同一次播放队列内」：多首故事（中文/英文/古诗）仍合并 1 条听故事、多首儿歌合并 1 条听歌；提示语改为「已添加1条听故事/听歌记录」；切换（eeSwitch）与连播自动接歌仍不记录。// v3.6.22: ①首页「放音乐」手指图标放大 12px→16px（与听歌/听故事图标同尺寸）②修复管理弹窗滚到底时最后一项音频被吸底「确定」条遮住（选项面板底部留白 72px）③播放自动记录去重——每类每天仅 1 条（中文/英文/古诗合并为 1 条听故事、儿歌 1 条听歌），今日已有同类型记录则只高亮已有记录并提示「已添加」，停止后再播放 / 切换不再重复添加 ④早教音频云同步改手动——只有点「立即同步」才加密上云共享（按钮改 .btn 样式置左、状态词与提示移至按钮下方），本地改动只存本机并标记「有改动未同步」，云端拉取仍自动（启动 + 切回前台），家人设备刷新 / 重开即可看到。// v3.6.21: ①修复首页连播「播了几首就莫名停止」——音频元素 error 事件此前无处理（加载失败即死停）、起播无看门狗（加载挂起会卡在「加载中」）、播放/停止按钮无防抖（连击/幽灵点击会误停）；现三路归一失败处理（error/play reject/10s 看门狗）：单曲失败自动跳下一首，连续 3 首失败才停止并明确 toast 原因，按钮加 400ms 防抖 ②修复「管理里删除/新增音频，家人手机不同步」——旧合并逻辑是并集且本地优先，删除直接 splice 导致他端把已删歌曲复活、改名/改分类也不传播；现改墓碑式删除（deleted 标记随云同步，30 天后压缩清理）+ 同 id 按 updatedAt 取新版冲突合并 + 云端保存失败不再静默（管理页早教页新增云同步状态行，失败 toast + 自动重试 + 手动「立即同步」）+ 切回前台节流补拉云端列表 ③首页音频卡新增「放音乐」指引——切换/播放上方左侧指向下手指（尺寸颜色同 AI育儿 图标）+ 右侧加粗黄色「放音乐」，按钮下方灰色小字提示连播与停止方式。// v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -5749,10 +5749,19 @@ let _eeSaveTimer = null, _eeLast = '';
 /* v3.5.158 随机连播：播放队列 + 下标 + 播放令牌（令牌用于屏蔽 play/pause 竞态产生的过期回调） */
 let eeQueue = [], eeQueueIdx = 0, eePlayToken = 0;
 /* v3.6.21 连播健壮性：起播看门狗（加载挂起不死卡在「加载中」）+ 连续失败计数（失败自动跳下一首，
- * 连续 EE_MAX_FAIL_STREAK 首失败才停止并明确提示，不再无声停止）+ 播放/停止按钮防抖（连击误停） */
-let EE_WATCHDOG_MS = 10000;
+ * 连续 EE_MAX_FAIL_STREAK 首失败才停止并明确提示，不再无声停止）+ 播放/停止按钮防抖（连击误停）
+ * v3.6.30 继续加固（用户仍反馈「设置为 5 首却连播 2 首就停」）：
+ * ①看门狗 10s→15s（Supabase 冷启动/4G 慢网络下 10s 误杀）；
+ * ②加载超时改为「只跳过本首、不计入连续失败」——慢网络下 3 首慢歌就误杀整条链是本案误停主机制；
+ *   真正无法播放的文件仍走 error/play() reject 计数（连续 3 首停+toast）；整队超时也有 toast 兜底；
+ * ③同一 src 的 ended 只认第一次——部分 WebView（微信 X5）pause()/currentTime 归零后会重发 ended 导致莫名跳首；
+ * ④系统/锁屏暂停只暂停不散队（mediaSession pause 旧逻辑直接 eeStop 清队列），点按钮可继续当前队列。 */
+let EE_WATCHDOG_MS = 15000;
 const EE_MAX_FAIL_STREAK = 3;
 let _eeFailStreak = 0, _eeFailArmed = false, _eeFailTip = '', _eeWatchdog = null, _eeLastToggleTs = 0;
+let _eeTimeoutStreak = 0;          // v3.6.30 连续加载超时计数（独立于硬失败，仅整队都超时才停+提示）
+let _eeLastEndedSrc = '', _eeLastEndedTs = 0;   // v3.6.30 防同一 src 重复 ended
+let _eeInternalPause = false;      // v3.6.30 内部主动 pause（切歌/停止）时不刷新「已暂停」UI
 /* v3.5.162 预取音频 / 管理分类筛选与搜索 / 上传待定分类 / 分类选择回调 */
 let eePrefetchAudio = null;
 const EE_TYPES = ['儿歌', '古诗', '故事(中文)', '故事(英文)'];
@@ -5764,6 +5773,7 @@ const EE_ICO_PLAY = '<svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/>
 const EE_ICO_STOP = '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></svg>';
 /* 播放音频数（管理 → 早教里可改，默认 5） */
 const EE_PLAY_COUNT_KEY = 'ee_play_count';
+const EE_PLAY_COUNT_TS_KEY = 'ee_play_count_ts';   // v3.6.30 本地最近一次保存的时间戳（与云端 last_modified 比较，防旧值覆盖）
 const EE_PLAY_COUNT_CLOUD_KEY = '_ee_play_count';
 const EE_PLAY_COUNT_DEFAULT = 5;
 
@@ -5808,6 +5818,7 @@ function eeSavePlayCount(v) {
   if (!v || v < 1) v = EE_PLAY_COUNT_DEFAULT;
   if (v > 99) v = 99;
   localStorage.setItem(EE_PLAY_COUNT_KEY, String(v));
+  localStorage.setItem(EE_PLAY_COUNT_TS_KEY, String(Date.now()));   // v3.6.30 记本地保存时刻
   const el = document.getElementById('eePlayCount'); if (el) el.value = v;
   showToast('播放音频数：' + v + ' 首');
   eeRefreshPlayHint();   // v3.6.24 管理里改播放数 → 首页连播提示语同步
@@ -5825,11 +5836,18 @@ async function loadEePlayCountCloud() {
   if (!isSyncReady()) return;
   try {
     const key = await getCryptoKey(); if (!key) return;
-    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${EE_PLAY_COUNT_CLOUD_KEY}&select=encrypted_data,iv`);
+    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${EE_PLAY_COUNT_CLOUD_KEY}&select=encrypted_data,iv,last_modified`);
     if (rows.length && rows[0].encrypted_data && rows[0].iv) {
       const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
       const o = JSON.parse(json || '{}');
-      if (o && o.n) localStorage.setItem(EE_PLAY_COUNT_KEY, String(o.n));
+      // v3.6.30 仅当云端比本地保存更新才覆盖——修复「本地设 5 被云端旧值悄悄改回（如 2）→ 连播只播 2 首」
+      // （旧逻辑无条件覆盖：一旦某次保存上传失败/他端旧值后写，本地设置就被顶掉，且每次开 App/切前台都会复发）
+      const cloudTs = Number(rows[0].last_modified || 0);
+      const localTs = Number(localStorage.getItem(EE_PLAY_COUNT_TS_KEY) || 0);
+      if (o && o.n && cloudTs > localTs) {
+        localStorage.setItem(EE_PLAY_COUNT_KEY, String(o.n));
+        localStorage.setItem(EE_PLAY_COUNT_TS_KEY, String(cloudTs));
+      }
     }
   } catch (e) { console.warn('[早教] 播放数读取失败', e); }
 }
@@ -6412,18 +6430,31 @@ function eeStopAudition() {
 function eeDisarmWatchdog() { if (_eeWatchdog) { clearTimeout(_eeWatchdog); _eeWatchdog = null; } }
 function eeArmWatchdog() {
   eeDisarmWatchdog();
-  _eeWatchdog = setTimeout(() => { if (_eeFailArmed) eeFailAdvance('加载超时'); }, EE_WATCHDOG_MS);
+  _eeWatchdog = setTimeout(() => { if (_eeFailArmed) eeFailAdvance('加载超时', true); }, EE_WATCHDOG_MS);
 }
-function eeFailAdvance(reason) {
+function eeFailAdvance(reason, isTimeout) {
   if (!_eeFailArmed) return;               // 已被 playing / 停止 复位：忽略过期回调
   _eeFailArmed = false; eeDisarmWatchdog();
-  _eeFailStreak++;
-  console.warn('[早教] 连播第 ' + (eeQueueIdx + 1) + ' 首失败：' + reason + '（连续 ' + _eeFailStreak + ' 次）');
-  if (_eeFailStreak >= EE_MAX_FAIL_STREAK) {
-    showToast('连播已停止：' + reason + _eeFailTip + '（连续 ' + _eeFailStreak + ' 首无法播放，请检查网络，或删除后重新上传）');
-    eeStop(); return;
+  if (isTimeout) {
+    // v3.6.30 加载超时不计入连续失败——慢网络（Supabase 冷启动/4G）下 3 首慢歌就误杀整条连播链，
+    // 正是「设置为 5 首却连播 2 首就停」的误停机制；超时只跳过本首（队列有限，不会死循环）。
+    // 兜底：整队连续超时（上限 8 次）仍停止并明确提示，避免完全无感知。
+    _eeTimeoutStreak++;
+    console.warn('[早教] 连播第 ' + (eeQueueIdx + 1) + ' 首加载超时，跳过（连续超时 ' + _eeTimeoutStreak + ' 次，不计入失败）');
+    if (_eeTimeoutStreak >= Math.min(Math.max(eeQueue.length, 1), 8)) {
+      showToast('连播已停止：网络较慢，连续 ' + _eeTimeoutStreak + ' 首加载超时，请检查网络后重试');
+      eeStop(); return;
+    }
+  } else {
+    _eeFailStreak++; _eeTimeoutStreak = 0;
+    console.warn('[早教] 连播第 ' + (eeQueueIdx + 1) + ' 首失败：' + reason + '（连续 ' + _eeFailStreak + ' 次）');
+    if (_eeFailStreak >= EE_MAX_FAIL_STREAK) {
+      showToast('连播已停止：' + reason + _eeFailTip + '（连续 ' + _eeFailStreak + ' 首无法播放，请检查网络，或删除后重新上传）');
+      eeStop(); return;
+    }
   }
   if (eeQueueIdx < eeQueue.length - 1) { eeAdvanceQueue(); return; }   // 单曲失败自动跳下一首
+  if (isTimeout) { showToast('最后一首加载超时，连播结束（网络较慢可重试）'); eeStop(); return; }
   showToast('播放失败：' + reason + _eeFailTip + '，可删除后重新上传');
   eeStop();
 }
@@ -6436,14 +6467,32 @@ function eeEnsureAudio() {
     const fill = document.getElementById('eeProgressFill'); if (fill) fill.style.width = (eeAudio.currentTime / eeAudio.duration * 100) + '%';
     const t = document.getElementById('eeTime'); if (t) t.textContent = eeFmtTime(eeAudio.currentTime) + ' / ' + eeFmtTime(eeAudio.duration);
   });
-  eeAudio.addEventListener('ended', () => { eeAdvanceQueue(); }); // 播完自动接下一首，队列播完则停止
+  // v3.6.30 同一 src 的 ended 只认第一次——部分 WebView（微信 X5）在 pause()/currentTime 归零后会重发 ended，
+  // 不防的话连播会莫名跳一首/首数对不上
+  eeAudio.addEventListener('ended', () => {
+    const src = eeAudio.src || '';
+    const now = Date.now();
+    if (src && src === _eeLastEndedSrc && now - _eeLastEndedTs < 1000) return;
+    _eeLastEndedSrc = src; _eeLastEndedTs = now;
+    eeAdvanceQueue();
+  }); // 播完自动接下一首，队列播完则停止
   // v3.6.21 真正出声才算起播成功：复位失败计数并撤看门狗；
   // error 事件（src 加载失败）此前无处理——会死停在本首、后续队列全部作废（「播了 2 首就停」根因之一）
-  eeAudio.addEventListener('playing', () => { _eeFailStreak = 0; _eeFailArmed = false; eeDisarmWatchdog(); });
+  eeAudio.addEventListener('playing', () => { _eeFailStreak = 0; _eeTimeoutStreak = 0; _eeFailArmed = false; eeDisarmWatchdog(); });
   eeAudio.addEventListener('error', () => {
     if (_eeFailArmed) { console.warn('[早教] 音频元素 error', eeAudio.error && eeAudio.error.code); eeFailAdvance('音频加载失败'); }
   });
-  eeAudio.addEventListener('pause', () => { if ('mediaSession' in navigator) { try { navigator.mediaSession.playbackState = 'paused'; } catch (e) {} } });
+  eeAudio.addEventListener('pause', () => {
+    if ('mediaSession' in navigator) { try { navigator.mediaSession.playbackState = 'paused'; } catch (e) {} }
+    // v3.6.30 系统暂停（来电/通知/锁屏抢音频焦点）且队列还在：UI 同步为「已暂停」，点按钮可继续当前队列
+    // （旧逻辑无任何反馈，用户看到的就是「没操作却停了」；_eeInternalPause 排除切歌/停止引发的内部 pause）
+    if (!_eeInternalPause && eeCurrentId && eeQueue.length) {
+      const it = EARLY_EDU.find(x => x.id === eeCurrentId);
+      eeSetNowText('已暂停：' + (it ? it.type + ' · ' + it.name : ''), false);
+      const lbl = document.getElementById('eePlayLabel'); if (lbl) lbl.textContent = '播放';
+      const ico = document.getElementById('eeIco'); if (ico) ico.innerHTML = EE_ICO_PLAY;
+    }
+  });
   eeAudio.addEventListener('play', () => { if ('mediaSession' in navigator) { try { navigator.mediaSession.playbackState = 'playing'; } catch (e) {} } });
   return eeAudio;
 }
@@ -6471,7 +6520,19 @@ function eeToggle() {
   const nowTs = Date.now();
   if (nowTs - _eeLastToggleTs < 400) return;
   _eeLastToggleTs = nowTs;
-  if (eeAudio && !eeAudio.paused && !eeAudio.ended) eeStop(); else eePlayN();
+  if (eeAudio && !eeAudio.paused && !eeAudio.ended) { eeStop(); return; }
+  // v3.6.30 暂停中（系统/锁屏暂停）且队列还在 → 从当前这首继续，而不是重开新队列
+  if (eeCurrentId && eeQueue.length && eeQueueIdx < eeQueue.length) {
+    const it = EARLY_EDU.find(x => x.id === eeCurrentId) || EARLY_EDU.find(x => x.id === eeQueue[eeQueueIdx]);
+    eeSetNowText('正在播放：' + (it ? it.type + ' · ' + it.name : ''), true);
+    const lbl = document.getElementById('eePlayLabel'); if (lbl) lbl.textContent = '停止';
+    const ico = document.getElementById('eeIco'); if (ico) ico.innerHTML = EE_ICO_STOP;
+    _eeInternalPause = false;
+    const p = eeAudio.play();
+    if (p && p.then) p.catch(() => eePlayN());
+    return;
+  }
+  eePlayN();
 }
 /* 随机挑 n 首（n = 管理里「播放音频数」，默认 5），依次播放；不足则全放 */
 function eeShufflePick(n) {
@@ -6483,7 +6544,7 @@ function eePlayN() {
   if (!eeActiveList().length) { showToast('请先在「管理 → 早教」添加音频'); return; }
   eeQueue = eeShufflePick(getEePlayCount()).map(x => x.id);
   eeQueueIdx = 0;
-  _eeFailStreak = 0;   // v3.6.21 新队列重置连续失败计数
+  _eeFailStreak = 0; _eeTimeoutStreak = 0;   // v3.6.21/v3.6.30 新队列重置失败与超时计数
   eeAutoRecordOnPlay();   // v3.5.160 按本次播放队列的类别，自动记听歌/听故事（每种最多 1 条）
   eePlayQueueItem();
 }
@@ -6551,7 +6612,7 @@ function eePlayItem(it) {
   eeSetNowText('加载中：' + it.type + ' · ' + it.name, true);
   const lbl = document.getElementById('eePlayLabel'); if (lbl) lbl.textContent = '停止';
   const ico = document.getElementById('eeIco'); if (ico) ico.innerHTML = EE_ICO_STOP;
-  try { a.pause(); } catch (e) {}          // 先停掉上一首，避免 play() 被隐式 pause 打断
+  try { _eeInternalPause = true; a.pause(); } catch (e) {} finally { _eeInternalPause = false; }   // 先停掉上一首，避免 play() 被隐式 pause 打断
   a.src = it.url;
   try { a.currentTime = 0; } catch (e) {}
   eePrefetchNext();                        // v3.5.162 提前缓冲下一首，加速自动连播切换
@@ -6577,9 +6638,12 @@ function eePlayItem(it) {
 }
 function eeStop() {
   eePlayToken++;                             // 令牌自增，使未完成的 play() 回调全部失效
-  _eeFailArmed = false; _eeFailStreak = 0; eeDisarmWatchdog();   // v3.6.21 复位连播失败状态
+  _eeFailArmed = false; _eeFailStreak = 0; _eeTimeoutStreak = 0; eeDisarmWatchdog();   // v3.6.21 复位连播失败状态
   eeQueue = []; eeQueueIdx = 0;
-  if (eeAudio) { try { eeAudio.pause(); } catch (e) {} try { eeAudio.currentTime = 0; } catch (e) {} }
+  if (eeAudio) {
+    try { _eeInternalPause = true; eeAudio.pause(); } catch (e) {} finally { _eeInternalPause = false; }
+    try { eeAudio.currentTime = 0; } catch (e) {}
+  }
   eeCurrentId = null;
   const lbl = document.getElementById('eePlayLabel'); if (lbl) lbl.textContent = '播放';
   const ico = document.getElementById('eeIco'); if (ico) ico.innerHTML = EE_ICO_PLAY;
@@ -6591,10 +6655,20 @@ function eeSetupMediaSession() {
   if (!('mediaSession' in navigator)) return;
   try {
     navigator.mediaSession.setActionHandler('play', () => { if (eeCurrentId) { eeAudio && eeAudio.play().catch(() => {}); } else eePlayN(); });
-    navigator.mediaSession.setActionHandler('pause', () => eeStop());
+    // v3.6.30 系统/锁屏暂停只暂停、不清队列（旧逻辑直接 eeStop → 队列被清空，表现为「没操作却停了」）
+    navigator.mediaSession.setActionHandler('pause', () => eePause());
     navigator.mediaSession.setActionHandler('stop', () => eeStop());
     navigator.mediaSession.setActionHandler('nexttrack', () => eeSwitch());
   } catch (e) {}
+}
+/* v3.6.30 暂停（保留队列，之后可从当前这首继续） */
+function eePause() {
+  if (!eeAudio || eeAudio.paused) return;
+  try { _eeInternalPause = true; eeAudio.pause(); } catch (e) {} finally { _eeInternalPause = false; }
+  const it = EARLY_EDU.find(x => x.id === eeCurrentId);
+  eeSetNowText('已暂停：' + (it ? it.type + ' · ' + it.name : ''), false);
+  const lbl = document.getElementById('eePlayLabel'); if (lbl) lbl.textContent = '播放';
+  const ico = document.getElementById('eeIco'); if (ico) ico.innerHTML = EE_ICO_PLAY;
 }
 function renderEarlyEduCard() {
   const now = document.getElementById('eeNowText'); if (!now) return;
@@ -6603,10 +6677,16 @@ function renderEarlyEduCard() {
   now.classList.remove('playing');
   eeRefreshPlayHint();   // v3.6.24 连播提示语里的「几首」同步管理中的播放音频数
 }
-/* v3.6.24 连播提示语动态显示播放音频数（管理里可改，默认 5）：「点『播放 / 切换』会自动连播5首歌…」 */
+/* v3.6.24 连播提示语动态显示播放音频数（管理里可改，默认 5）：「点『播放 / 切换』会自动连播5首歌…」
+ * v3.6.30 诚实显示：实际可连播数 = min(设置数, 现有有效音频数)——设置 5 但只有 2 首时明说
+ * 「不足则全放」，避免用户误以为连播链中途坏了（「设置为 5 却只连播 2 首」投诉的主因之一） */
 function eeRefreshPlayHint() {
   const el = document.getElementById('eePlayHintCount'); if (!el) return;
-  el.textContent = String(getEePlayCount());
+  const set = getEePlayCount();
+  const avail = eeActiveList().length;
+  el.textContent = String(avail ? Math.max(1, Math.min(set, avail)) : set);
+  const note = document.getElementById('eePlayHintNote');
+  if (note) note.textContent = (avail && set > avail) ? ('（现有音频 ' + avail + ' 首，不足则全放）') : '';
 }
 
 /* ---------- 首页合并卡片：放音频(固定) + 听歌 + 听故事（随分类筛选显隐） ---------- */
@@ -7971,13 +8051,19 @@ function saveMsEdit() {
   const ov = loadMsOverride();
   ov[msOverrideKey(it.date, it.text)] = { domainId: domId, isFirst: _msEditFirst };
   saveMsOverride(ov);
-  // 清徽章缓存并重算（保证徽章与"第一次"计数立即更新）
-  try { localStorage.removeItem(MS_BADGE_CACHE_KEY); localStorage.removeItem(MS_BADGE_LAST_KEY); } catch {}
+  // v3.6.30 用户明确：徽章只每 15 天刷新窗口更新一次，期内连「编辑里程碑」也不重新更新
+  // ——保留徽章固化快照不动；仅把缓存 items 换成最新结果（时间轴/分类计数即时生效）
   _milestoneItems = collectMilestones();
-  // v3.6.29 徽章固化：手动编辑属显式用户意图——按当前结果重推徽章并立即固化（AI label 待下个刷新窗口再美化）
-  const badges = deriveBadgesFromItems(_milestoneItems);
-  saveMilestoneBadgeCache(_milestoneItems, badges);
-  const be = document.getElementById('milestoneBadges'); if (be) be.outerHTML = renderMilestoneBadges(_milestoneItems, badges);
+  const _c = loadMilestoneBadgeCache();
+  if (_c && _c.badges) {
+    const _prevLast = localStorage.getItem(MS_BADGE_LAST_KEY);
+    saveMilestoneBadgeCache(_milestoneItems, _c.badges);          // items 刷新，badges 原样保留
+    if (_prevLast) localStorage.setItem(MS_BADGE_LAST_KEY, _prevLast);   // 编辑不重置 15 天刷新锚
+    const be = document.getElementById('milestoneBadges'); if (be) be.outerHTML = renderMilestoneBadges(_milestoneItems, _c.badges);
+  } else {
+    // 尚无固化快照（未到过刷新窗口）：按当前结果展示，不落盘（等刷新窗口再定）
+    const be = document.getElementById('milestoneBadges'); if (be) be.outerHTML = renderMilestoneBadges(_milestoneItems);
+  }
   const tl = document.getElementById('milestoneTimeline'); if (tl) tl.innerHTML = renderMilestoneInner();
   hideModal('msEditModal');
   showToast('已更新里程碑');
