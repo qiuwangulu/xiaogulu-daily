@@ -40,12 +40,14 @@ const WEATHER_CACHE_KEY = '_sched_weather';
 const WEATHER_CACHE_TTL = 3 * 3600000;
 // v3.6.17 计划prompt 与前端 v3.6.14 内容对齐（风级换算以家庭知识库为准、穿衣列出同一厚薄档位
 // 全部衣物、辅食试吃条件、统计口径明确行），版本号前后端统一升 12。
+// v3.6.40 新增【辅食第N天食谱推荐】规则（前一日有辅食记录时，按昨日添加时间/量/连续天数+月龄+
+// 知识库「辅食」条目推荐当天具体食谱与制作方法），版本号前后端统一升 13，与前端逐字对齐。
 // 修复的根因：服务端 prompt 此前冻结在 v3.6.3(v8)，生成后却把 task.planVer 标记为
 // ctx.promptVer（前端版本号）——「用旧 prompt 生成的内容冒充最新版本」，前端 staleVer 判假，
 // 导致部署新 prompt 后今日计划永不刷新。现在改为标记服务端自己的版本号：服务端落后时，
 // 前端会按版本差重新生成，前后端任一边更新都能自愈。
 // 注意：prompt 内容变化时须前后端同步升级此版本号（前端 app.js PLAN_PROMPT_VERSION）。
-const PLAN_PROMPT_VERSION = '12';
+const PLAN_PROMPT_VERSION = '13';
 
 // v3.6.0 育儿嫂休假 / 工资结算常量（与前端一致）
 const NANNY_VACATION_CLOUD_KEY = '_nanny_vacation';
@@ -170,9 +172,35 @@ function collectPlanDayStats(recs) {
     if (Object.prototype.hasOwnProperty.call(PLAN_EE_TYPES, r.type)) counts[r.type]++;
     if (r.type === 'poop') poop++;
     if (r.type === 'outdoor' && r.duration) outdoorMin += r.duration;
-    if (r.type === 'solidFood') foods.push({ names: Array.isArray(r.solidFoods) ? r.solidFoods.slice() : [], note: (r.note || '').trim() });
+    if (r.type === 'solidFood') foods.push({ names: Array.isArray(r.solidFoods) ? r.solidFoods.slice() : [], note: (r.note || '').trim(),
+      time: (r.solidFoodTime || r.recTime || ''), amount: (r.solidFoodAmount > 0 ? r.solidFoodAmount : 0), afterMeal: (r.afterMeal || '') });   // v3.6.40 补添加时间/克数/饭后情况：供「辅食第N天」按昨日添加时间与量推荐今日食谱
   }
   return { counts, poop, outdoorMin, foods };
+}
+// v3.6.40 辅食连续添加天数（云端版）：一次拉取目标日前 60 天记录，从目标日前一天往前逐日找 solidFood，遇空档即止。
+// 语义与前端 solidFoodStreak 一致：streak=1 即昨日为辅食第1天（首次添加），今日计划目标日 = 第 streak+1 天。
+async function solidFoodStreakCloud(fid, key, targetDateStr) {
+  try {
+    const t = new Date(targetDateStr + 'T00:00:00');
+    if (isNaN(t.getTime())) return { streak: 0, lastDate: '' };
+    const min = new Date(t.getTime() - 60 * 86400000);
+    const minStr = fmtDateLocal(min);
+    const rows = await sbGet(`family_records?family_id=eq.${fid}&record_date=gte.${minStr}&record_date=lt.${targetDateStr}&select=record_date,encrypted_data,iv`);
+    const foodDates = new Set();
+    for (const row of (rows || [])) {
+      if (!row.encrypted_data || !row.iv) continue;
+      let recs = []; try { recs = JSON.parse(decrypt(key, row.encrypted_data, row.iv)); } catch { continue; }
+      if (Array.isArray(recs) && recs.some(r => r && r.type === 'solidFood')) foodDates.add(String(row.record_date).slice(0, 10));
+    }
+    let streak = 0;
+    const d = new Date(t.getTime() - 86400000);
+    while (streak < 60) {
+      if (!foodDates.has(fmtDateLocal(d))) break;
+      streak++;
+      d.setDate(d.getDate() - 1);
+    }
+    return { streak: streak, lastDate: streak > 0 ? fmtDateLocal(new Date(t.getTime() - 86400000)) : '' };
+  } catch (e) { console.warn('[辅食] 连续添加天数读取失败', e && e.message); return { streak: 0, lastDate: '' }; }
 }
 // v3.6.0 营养补剂建议：读最近 N 天记录中最后一条 supplement，返回相反项（移植前端 getSupplementSuggestion）
 async function recentSupplement(fid, key) {
@@ -211,10 +239,13 @@ function getAgeDetail(birthStr, ds) {
   if (days < 0) days = 0;
   return { months, days };
 }
-function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec) {
+function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec, sfStreak) {
   const ad = getAgeDetail(ctx.birthDate, dateStr);
   const h = ctx.height || '', w = ctx.weight || '';
   const kbPart = (ctx.kb || []).slice(0, 50).map(x => '- [' + x.cat + '] ' + x.text).join('\n');
+  // v3.6.40 辅食连续添加天数（昨日=第 streak 天，今日=第 streak+1 天；streak=0 表示前一日无辅食记录）
+  const _sf = (sfStreak && typeof sfStreak === 'object' && !Array.isArray(sfStreak)) ? sfStreak : null;
+  const sfDay = (_sf && _sf.streak > 0) ? (_sf.streak + 1) : 0;
   // v3.6.1 目标日星期（M/W/F 补剂判定）与「前一日」早教/大便/辅食统计
   const targetDow = new Date(dateStr + 'T00:00:00').getDay();
   const targetIsMWF = (targetDow === 1 || targetDow === 3 || targetDow === 5);
@@ -226,7 +257,8 @@ function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec) {
       + '- 早教各项次数：' + eeLine + '\n'
       + '- 大便次数：' + stats.poop + ' 次\n'
       + '- 户外时长：' + stats.outdoorMin + ' 分钟\n'
-      + (stats.foods.length ? ('- 辅食记录：' + stats.foods.map(f => (f.names.join('/') || '辅食') + (f.note ? '（备注：' + f.note + '）' : '')).join('；') + '\n') : '- 前一日无辅食记录（今日是否试新辅食，需按下方「辅食试吃条件」判断）\n')
+      + (stats.foods.length ? ('- 辅食记录：' + stats.foods.map(f => (f.names.join('/') || '辅食') + (f.amount > 0 ? ' ' + f.amount + 'g' : '') + (f.time ? ('（昨日 ' + f.time + ' 添加' + (f.afterMeal && f.afterMeal !== '正常' ? '，饭后' + f.afterMeal : '') + '）') : '') + (f.note ? '（备注：' + f.note + '）' : '')).join('；') + '\n') : '- 前一日无辅食记录（今日是否试新辅食，需按下方「辅食试吃条件」判断）\n')
+      + (sfDay > 0 ? ('- 辅食已连续添加 ' + _sf.streak + ' 天：昨日为辅食第' + _sf.streak + '天，今日为辅食第' + sfDay + '天\n') : '')
       + '- 营养补剂建议（与上次相反）：' + (supRec || '—') + '\n';
   }
   // v3.6.17 以下 prompt 正文与前端 app.js buildPlanSystemPrompt（v3.6.14）逐字对齐
@@ -248,6 +280,8 @@ function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec) {
        : (stats && stats.poop >= 3 ? '；昨日大便≥3 次，需关注拉肚子：注意保暖、防红屁屁' : '')) + '。\n'
     + '【健康·出行】户外活动时间与时长（结合天气与昨日户外时长，给出具体时段如"上午9-10点、下午4-5点"及总时长建议）、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物；结合知识库「穿衣」给出是否戴帽子、是否裹薄包被/纱巾。\n'
     + '【辅食提醒】若上方"辅食记录"备注含过敏/异常（如某品牌米粉过敏），在喂养或辅食处提醒今日更换品牌（具体到备注里的牌子）。\n'
+    // v3.6.40 辅食第N天食谱推荐（用户要求：前一天添加了辅食计为第一天，按添加辅食的时间与最相近月龄查知识库，推荐当天具体食谱与制作方法，如多少度的水冲泡多少米粉）
+    + (sfDay > 0 ? ('【辅食第' + sfDay + '天食谱推荐】上方显示前一日已添加辅食（含昨日添加时间/食物/量）：今日为辅食第' + sfDay + '天，请在【喂养】的辅食项给出今日具体食谱与制作方法——必须具体到：①吃什么（昨日为首次添加或同食物观察未满2-3天，今日仍吃同一种食物、不添新食物；观察期满可按知识库换下一种）；②多少克/多少毫升（比昨日略增，增幅不超过2成）；③用什么温度的水（如"50-60℃温开水"）及冲调/蒸煮步骤、稀稠程度（由稀到稠）；④建议喂食时段（参考昨日添加时间，如上午10点，固定在宝宝清醒情绪好时）；⑤过敏观察要点（观察皮疹/腹泻/呕吐，出现即停）。食谱必须结合知识库「辅食」条目与宝宝当前月龄；知识库无对应月龄食谱时按通用原则：6月龄首口高铁米粉（约50-60℃水冲成缓慢滴落的稀糊、每天1次）；7-8月龄稍稠引入蛋黄/肉泥；9-10月龄稠粥碎末加手指食物；11-12月龄软饭小丁接近家庭餐。\n') : '')
     + '【辅食试吃条件】若上方为「前一日无辅食记录」（或辅食很少），请在【喂养】的辅食项按辅食添加条件判断今日是否可试新辅食：月龄是否已达 6 月龄且已开始添加辅食、是否处于健康状态且非接种当日、每次只引入一种新食物并连续观察 2-3 天无过敏再加下一种、由稀到稠由少到多；据此明确写出「今日可试 XX（某种具体食物，如米粉/南瓜泥/蛋黄）」或「暂不添加，原因：…」。\n'
     + '【补剂判定】营养补剂是否为补剂日（周一/三/五），一律按本计划日（即上方"目标日期"、任务触发当天）的星期判断；不得按"第二天"或其他任何日期判断。\n'
     + '【统计口径】天气与营养补剂一律按「本计划日（上方目标日期、任务触发当天）」判断；大便次数与早教一律按「前一日」的记录判断。两者口径不得混用。\n'
@@ -461,19 +495,20 @@ async function generatePlan(task, trig, ctx, fid, key) {
   let wText = '（未获取）';
   try { wText = await weatherText(ctx.weatherAddr, dateStr, fid, key); } catch { /* ignore */ }
   // v3.6.1 统计「目标日期的前一天」的记录（如 10-14 的计划按 10-13 的记录）
-  let stats = null, supRec = 'AD';
+  let stats = null, supRec = 'AD', sfStreak = { streak: 0, lastDate: '' };   // v3.6.40 sfStreak：辅食连续添加天数
   if (key && fid) {
     try {
       const prev = new Date(trig.getTime() - 86400000);
       const prevStr = prev.getFullYear() + '-' + pad2(prev.getMonth() + 1) + '-' + pad2(prev.getDate());
       const recs = await fetchDayRecords(fid, key, prevStr);
       stats = collectPlanDayStats(recs);
+      sfStreak = await solidFoodStreakCloud(fid, key, dateStr);
       supRec = await recentSupplement(fid, key);
-      console.log('[计划] 前一日统计', prevStr, '早教=', JSON.stringify(stats && stats.counts), '大便=', stats && stats.poop, '户外=', stats && stats.outdoorMin, '补剂=', supRec);
+      console.log('[计划] 前一日统计', prevStr, '早教=', JSON.stringify(stats && stats.counts), '大便=', stats && stats.poop, '户外=', stats && stats.outdoorMin, '补剂=', supRec, '辅食连续天数=', sfStreak && sfStreak.streak);
     } catch (e) { console.warn('[计划] 统计读取失败', e && e.message); }
   }
   const r = await callAI(ctx.ai, [
-    { role: 'system', content: buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec) },
+    { role: 'system', content: buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec, sfStreak) },
     { role: 'user', content: '请为 ' + dateStr + '（地址：' + (ctx.weatherAddr || '') + '）生成今日计划，严格按格式输出。' }
   ]);
   if (!r) { console.warn('[计划] 生成失败，跳过'); return false; }

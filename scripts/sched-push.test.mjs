@@ -9,12 +9,16 @@
  *   - 不写云端：脚本的 SB_URL 被指向 127.0.0.1 的 mock 服务器。
  *
  * 覆盖 v3.6.17 修复点：
- *   A. 「部署后今日计划不刷新」→ 服务端 prompt 版本过期(staleVer)必须触发重生成，并标记服务端自己的 planVer=12；
+ *   A. 「部署后今日计划不刷新」→ 服务端 prompt 版本过期(staleVer)必须触发重生成，并标记服务端自己的 planVer=13；
  *   B. 30 分钟生成冷却 → 连续两次运行（pg_cron 每 5 分钟触发）不得重复调 AI；
  *   C. 天气缓存 → 同一次运行内两个 AI 任务只打一次 Open-Meteo；
  * D. 到点推送去重 + 「补生成」不得与①同运行双调用（genAttempted 守卫）；
  *   E. 解密失败（盐不一致）→ 明确报错并以退出码 1 结束（不再静默无推送）；
  *   F. 云端版本更高（前端已生成新版）→ 服务端不得回退重生成（防乒乓）。
+ * v3.6.40 新增用例：
+ *   G. 辅食第N天食谱推荐——前一日有辅食记录（含时间/克数）→ prompt 必含【辅食第2天食谱推荐】与
+ *      「50-60℃」「昨日 10:30 添加」「昨日为辅食第1天，今日为辅食第2天」，且 planVer 标记 13；
+ *   H. 前一日无辅食记录 → prompt 含「前一日无辅食记录」提示且不出现食谱推荐段。
  *
  * 用法：
  *   node scripts/sched-push.test.mjs                      # 跑全部用例
@@ -86,7 +90,7 @@ const CASES = {
       eq(c.omForecast, 1, '应调用 1 次 Open-Meteo');
       ok(log.includes('生成今日计划'), '日志应包含「生成今日计划」');
       const cloud = JSON.parse(decrypt(deriveKey(st.mat.code, st.mat.salt), st.store['_sched_cloud'].encrypted_data, st.store['_sched_cloud'].iv));
-      eq(cloud.tasks[0].planVer, '12', '生成后应标记服务端版本 12');
+      eq(cloud.tasks[0].planVer, '13', '生成后应标记服务端版本 13');
       eq(cloud.tasks[0].genDate, st.today, 'genDate 应为今天');
       ok(cloud.tasks[0].content.includes('MOCK'), '内容应为新生成（mock）');
       ok(cloud.tasks[0].genTryTs > 0, 'genTryTs 应已记录（冷却起点）');
@@ -129,7 +133,7 @@ const CASES = {
     assert(runs, st) {
       eq(runs[0].counters.ai, 1, '冷却过后应重试生成');
       const cloud = JSON.parse(decrypt(deriveKey(st.mat.code, st.mat.salt), st.store['_sched_cloud'].encrypted_data, st.store['_sched_cloud'].iv));
-      eq(cloud.tasks[0].planVer, '12', '重生成后应标记 12');
+      eq(cloud.tasks[0].planVer, '13', '重生成后应标记 13');
     }
   },
 
@@ -139,7 +143,7 @@ const CASES = {
     seed(st) {
       const key = deriveKey(st.mat.code, st.mat.salt);
       const today = todayStr();
-      const cloud = { tasks: [aiTask({ id: 't1', genDate: today, planVer: '12', content: '新版内容', genTryTs: Date.now() - 2 * 3600000 })], ctx: baseCtx(st), ts: Date.now() };
+      const cloud = { tasks: [aiTask({ id: 't1', genDate: today, planVer: '13', content: '新版内容', genTryTs: Date.now() - 2 * 3600000 })], ctx: baseCtx(st), ts: Date.now() };
       st.store['_salt'] = { config_key: '_salt', encrypted_data: st.mat.salt, iv: '' };
       const enc = encrypt(key, JSON.stringify(cloud));
       st.store['_sched_cloud'] = { config_key: '_sched_cloud', encrypted_data: enc.data, iv: enc.iv };
@@ -149,19 +153,107 @@ const CASES = {
     }
   },
 
-  /* F. 云端版本更高（前端 v13 已生成）→ 服务端(12)不得回退重生成（防乒乓） */
+  /* F. 云端版本更高（前端 v14 已生成）→ 服务端(13)不得回退重生成（防乒乓） */
   'cloud-newer-no-pingpong': {
     runs: 1,
     seed(st) {
       const key = deriveKey(st.mat.code, st.mat.salt);
       const today = todayStr();
-      const cloud = { tasks: [aiTask({ id: 't1', genDate: today, planVer: '13', content: '前端新版内容', genTryTs: 0 })], ctx: baseCtx(st), ts: Date.now() };
+      const cloud = { tasks: [aiTask({ id: 't1', genDate: today, planVer: '14', content: '前端新版内容', genTryTs: 0 })], ctx: baseCtx(st), ts: Date.now() };
       st.store['_salt'] = { config_key: '_salt', encrypted_data: st.mat.salt, iv: '' };
       const enc = encrypt(key, JSON.stringify(cloud));
       st.store['_sched_cloud'] = { config_key: '_sched_cloud', encrypted_data: enc.data, iv: enc.iv };
     },
     assert(runs) {
       eq(runs[0].counters.ai, 0, '云端版本更高时服务端不得回退重生成');
+    }
+  },
+
+  /* G. v3.6.40 辅食第N天：前一日有辅食记录（含昨日添加时间/克数）→ prompt 必含【辅食第2天食谱推荐】，
+     且具体到水温(50-60℃)/克数/喂食时段/过敏观察；连续天数=1 → 昨日第1天、今日第2天；planVer 标记 13 */
+  'solid-food-day2-recipe': {
+    runs: 1,
+    seed(st) {
+      const key = deriveKey(st.mat.code, st.mat.salt);
+      const today = todayStr();
+      const p = shParts(new Date(Date.now() - 86400000));
+      const yesterday = p.y + '-' + pad2(p.m) + '-' + pad2(p.d);
+      const recs = [{ type: 'solidFood', solidFoodTime: '10:30', solidFoods: ['高铁米粉'], solidFoodAmount: 15, afterMeal: '正常', note: '' }];
+      const enc = encrypt(key, JSON.stringify(recs));
+      st.records = [{ record_date: yesterday, encrypted_data: enc.data, iv: enc.iv }];
+      const cloud = { tasks: [aiTask({ id: 't1', genDate: today, planVer: '12', content: '旧prompt(v12)生成的内容', genTryTs: 0 })], ctx: baseCtx(st), ts: Date.now() };
+      st.store['_salt'] = { config_key: '_salt', encrypted_data: st.mat.salt, iv: '' };
+      const encCloud = encrypt(key, JSON.stringify(cloud));
+      st.store['_sched_cloud'] = { config_key: '_sched_cloud', encrypted_data: encCloud.data, iv: encCloud.iv };
+    },
+    assert(runs, st) {
+      eq(runs[0].counters.ai, 1, '陈旧版本应触发 1 次 AI 生成');
+      const ai = st.lastAI;
+      ok(ai && Array.isArray(ai.messages) && ai.messages.length >= 2, '应记录 AI 请求报文');
+      const sys = (ai.messages[0] && ai.messages[0].content) || '';
+      ok(sys.includes('【辅食第2天食谱推荐】'), 'prompt 应含【辅食第2天食谱推荐】规则段');
+      ok(sys.includes('昨日为辅食第1天，今日为辅食第2天'), 'prompt 应标明昨日=辅食第1天、今日=第2天');
+      ok(sys.includes('昨日 10:30 添加'), 'prompt 辅食记录行应含昨日添加时间');
+      ok(sys.includes('15g'), 'prompt 辅食记录行应含昨日克数');
+      ok(sys.includes('50-60℃'), '食谱推荐应具体到水温 50-60℃');
+      ok(sys.includes('多少克/多少毫升'), '食谱推荐应要求具体克数/毫升');
+      ok(sys.includes('喂食时段'), '食谱推荐应含喂食时段（按昨日添加时间）');
+      ok(sys.includes('过敏观察要点'), '食谱推荐应含过敏观察要点');
+      ok(sys.includes('辅食已连续添加 1 天'), 'prompt 应含连续添加天数行');
+      const cloud = JSON.parse(decrypt(deriveKey(st.mat.code, st.mat.salt), st.store['_sched_cloud'].encrypted_data, st.store['_sched_cloud'].iv));
+      eq(cloud.tasks[0].planVer, '13', '生成后应标记服务端版本 13');
+    }
+  },
+
+  /* G2. v3.6.40 辅食第N天：已连续添加 3 天（前 3 天都有记录）→ 今日应为第 4 天 */
+  'solid-food-day4-streak': {
+    runs: 1,
+    seed(st) {
+      const key = deriveKey(st.mat.code, st.mat.salt);
+      const today = todayStr();
+      st.records = [];
+      for (let i = 1; i <= 3; i++) {
+        const p = shParts(new Date(Date.now() - i * 86400000));
+        const ds = p.y + '-' + pad2(p.m) + '-' + pad2(p.d);
+        const recs = [{ type: 'solidFood', solidFoodTime: '10:00', solidFoods: ['高铁米粉'], solidFoodAmount: 20, afterMeal: '正常', note: '' }];
+        const enc = encrypt(key, JSON.stringify(recs));
+        st.records.push({ record_date: ds, encrypted_data: enc.data, iv: enc.iv });
+      }
+      const cloud = { tasks: [aiTask({ id: 't1', genDate: today, planVer: '12', content: '旧prompt(v12)生成的内容', genTryTs: 0 })], ctx: baseCtx(st), ts: Date.now() };
+      st.store['_salt'] = { config_key: '_salt', encrypted_data: st.mat.salt, iv: '' };
+      const encCloud = encrypt(key, JSON.stringify(cloud));
+      st.store['_sched_cloud'] = { config_key: '_sched_cloud', encrypted_data: encCloud.data, iv: encCloud.iv };
+    },
+    assert(runs, st) {
+      eq(runs[0].counters.ai, 1, '陈旧版本应触发 1 次 AI 生成');
+      const sys = ((st.lastAI && st.lastAI.messages[0]) || {}).content || '';
+      ok(sys.includes('辅食已连续添加 3 天'), '应算出连续添加 3 天');
+      ok(sys.includes('昨日为辅食第3天，今日为辅食第4天'), '今日应为辅食第 4 天');
+      ok(sys.includes('【辅食第4天食谱推荐】'), '规则段标题应为第 4 天');
+    }
+  },
+
+  /* G3. v3.6.40 辅食第N天：前天有记录但昨日断档 → 连续天数归零（昨日无辅食记录，不触发食谱推荐） */
+  'solid-food-gap-resets': {
+    runs: 1,
+    seed(st) {
+      const key = deriveKey(st.mat.code, st.mat.salt);
+      const today = todayStr();
+      const p = shParts(new Date(Date.now() - 2 * 86400000));
+      const dayBefore = p.y + '-' + pad2(p.m) + '-' + pad2(p.d);
+      const recs = [{ type: 'solidFood', solidFoodTime: '10:00', solidFoods: ['高铁米粉'], solidFoodAmount: 20, afterMeal: '正常', note: '' }];
+      const enc = encrypt(key, JSON.stringify(recs));
+      st.records = [{ record_date: dayBefore, encrypted_data: enc.data, iv: enc.iv }];   // 只有前天有，昨日断档
+      const cloud = { tasks: [aiTask({ id: 't1', genDate: today, planVer: '12', content: '旧prompt(v12)生成的内容', genTryTs: 0 })], ctx: baseCtx(st), ts: Date.now() };
+      st.store['_salt'] = { config_key: '_salt', encrypted_data: st.mat.salt, iv: '' };
+      const encCloud = encrypt(key, JSON.stringify(cloud));
+      st.store['_sched_cloud'] = { config_key: '_sched_cloud', encrypted_data: encCloud.data, iv: encCloud.iv };
+    },
+    assert(runs, st) {
+      eq(runs[0].counters.ai, 1, '陈旧版本应触发 1 次 AI 生成');
+      const sys = ((st.lastAI && st.lastAI.messages[0]) || {}).content || '';
+      ok(sys.includes('- 前一日无辅食记录（今日是否试新辅食'), '昨日断档应回到「前一日无辅食记录」提示');
+      ok(!sys.includes('食谱推荐'), '昨日无辅食记录不得出现食谱推荐段');
     }
   },
 
@@ -173,7 +265,7 @@ const CASES = {
       const y = new Date(Date.now() - 86400000);
       const p = shParts(y);
       const yesterday = p.y + '-' + pad2(p.m) + '-' + pad2(p.d);
-      const cloud = { tasks: [aiTask({ id: 't1', genDate: yesterday, planVer: '12', content: '昨天的计划', genTryTs: 0 })], ctx: baseCtx(st), ts: Date.now() };
+      const cloud = { tasks: [aiTask({ id: 't1', genDate: yesterday, planVer: '13', content: '昨天的计划', genTryTs: 0 })], ctx: baseCtx(st), ts: Date.now() };
       st.store['_salt'] = { config_key: '_salt', encrypted_data: st.mat.salt, iv: '' };
       const enc = encrypt(key, JSON.stringify(cloud));
       st.store['_sched_cloud'] = { config_key: '_sched_cloud', encrypted_data: enc.data, iv: enc.iv };
@@ -307,7 +399,7 @@ const CASES = {
     seed(st) {
       const key = deriveKey(st.mat.code, st.mat.salt);
       const t = trigStr(2);
-      const cloud = { tasks: [Object.assign(aiTask({ id: 't1', genDate: todayStr(), planVer: '12', content: '摘要：今天晴\n计划：\n【喂养】正常喝奶', genTryTs: Date.now() - 2 * 3600000 }), { startDate: t.startDate, startTime: t.startTime })], ctx: baseCtx(st), ts: Date.now() };
+      const cloud = { tasks: [Object.assign(aiTask({ id: 't1', genDate: todayStr(), planVer: '13', content: '摘要：今天晴\n计划：\n【喂养】正常喝奶', genTryTs: Date.now() - 2 * 3600000 }), { startDate: t.startDate, startTime: t.startTime })], ctx: baseCtx(st), ts: Date.now() };
       st.store['_salt'] = { config_key: '_salt', encrypted_data: st.mat.salt, iv: '' };
       const enc = encrypt(key, JSON.stringify(cloud));
       st.store['_sched_cloud'] = { config_key: '_sched_cloud', encrypted_data: enc.data, iv: enc.iv };
@@ -417,10 +509,32 @@ async function runChild(caseName, stateFile) {
         counters.sbUpserts++;
         return send(201, {});
       }
-      if (req.method === 'GET' && u.pathname === '/rest/v1/family_records') { counters.sbGets++; return send(200, []); }
+      if (req.method === 'GET' && u.pathname === '/rest/v1/family_records') {
+        counters.sbGets++;
+        // v3.6.40 支持按用例播种记录（st.records：[{record_date, encrypted_data, iv}]），按 gte/lt 过滤
+        // 注意：PostgREST 同一列多条件是重复参数（record_date=gte.X&record_date=lt.Y），须用 getAll 逐个解析
+        let gte = '', lt = '', eqv = '';
+        for (const p of u.searchParams.getAll('record_date')) {
+          if (p.startsWith('gte.')) gte = p.slice(4);
+          else if (p.startsWith('lt.')) lt = p.slice(3);
+          else if (p.startsWith('eq.')) eqv = p.slice(3);
+        }
+        let rows = Array.isArray(st.records) ? st.records.slice() : [];
+        if (eqv) rows = rows.filter(r => String(r.record_date) === eqv);
+        if (gte) rows = rows.filter(r => String(r.record_date) >= gte);
+        if (lt) rows = rows.filter(r => String(r.record_date) < lt);
+        const sel = u.searchParams.get('select') || '';
+        return send(200, rows.map(r => {
+          const out = { record_date: r.record_date };
+          if (sel.includes('encrypted_data')) out.encrypted_data = r.encrypted_data;
+          if (sel.includes('iv')) out.iv = r.iv;
+          return out;
+        }));
+      }
       if (req.method === 'POST' && u.pathname === '/ai') {
         counters.ai++;
-        await readBody(req);
+        const body = await readBody(req);
+        try { st.lastAI = JSON.parse(body); } catch { st.lastAI = null; }   // v3.6.40 记录末次 AI 请求（含 system prompt），供断言
         if (st.cfg && st.cfg.ai === 'fail') return send(500, { error: 'mock AI failure' });
         return send(200, { choices: [{ message: { content: 'MOCK计划：晴天适宜户外（mock 生成内容）' } }] });
       }
