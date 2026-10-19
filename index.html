@@ -178,6 +178,11 @@
   }
   .ov-report-pill:active { transform: scale(.96); }
   .ov-report-pill .pill-chev { opacity: .85; }
+  /* v3.6.38 日报胶囊内 📈 放大（12→15px）：与「👆 AI育儿」胶囊视觉体量拉齐。
+     两胶囊盒高本就锁死一致（均 25px、盒模型全同），观感差异来自 emoji 字形墨迹占比——
+     👆 为竖向实心大手、墨迹占满字形；📈 为方形网格、内置留白多（部分设备字体下更显小），
+     故日报胶囊显矮。放大 📈 后两者视觉高度一致，盒高不变（仍与 AI育儿相同）。 */
+  .ov-report-pill .pill-emoji { font-size: 15px; line-height: 1; flex-shrink: 0; }
 
   /* ===== 分类侧边栏 ===== */
   .category-bar {
@@ -2178,7 +2183,7 @@
 
   <div class="ov-wrap">
     <div class="overview" id="overviewBar"></div>
-    <div class="ov-report-pill" id="ovReportPill" onclick="openReport()">&#128200; 日报 <span class="pill-chev">&#8250;</span></div>
+    <div class="ov-report-pill" id="ovReportPill" onclick="openReport()"><span class="pill-emoji">&#128200;</span> 日报 <span class="pill-chev">&#8250;</span></div>
   </div>
 
   <div class="home-filter" id="homeFilter">
@@ -2899,6 +2904,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.37"></script>
+<script src="app.js?v=v3.6.38"></script>
 </body>
 </html>
