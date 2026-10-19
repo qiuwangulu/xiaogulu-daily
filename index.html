@@ -122,7 +122,7 @@
   .ai-chip {
     position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%);
     background: #24375c; border: 1px solid #b2bec3; color: #fff;
-    font-size: 12px; font-weight: 800; line-height: 1;
+    font-size: 14px; font-weight: 800; line-height: 1;   /* v3.6.39 12px→14px：与日报胶囊文字同字号（用户要求「日报字体与AI育儿一样大」——两胶囊文字本就同为 12px，观感差异来自 v3.6.38 放大的 📈 与 12px 文字的反差；只调大会使日报反比AI育儿大，故两胶囊同步调至 14px，真正一样大） */
     height: 25px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
     padding: 0 11px; border-radius: 13px; white-space: nowrap;
   }
@@ -174,7 +174,7 @@
     height: 25px; box-sizing: border-box; line-height: 1;
     padding: 0 11px; border-radius: 13px; cursor: pointer;
     background: #24375c; border: 1px solid #b2bec3;
-    color: #fff; font-size: 12px; font-weight: 800; transition: all .15s;
+    color: #fff; font-size: 14px; font-weight: 800; transition: all .15s;   /* v3.6.39 12px→14px：与「👆 AI育儿」胶囊文字同字号 */
   }
   .ov-report-pill:active { transform: scale(.96); }
   .ov-report-pill .pill-chev { opacity: .85; }
@@ -2904,6 +2904,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.38"></script>
+<script src="app.js?v=v3.6.39"></script>
 </body>
 </html>
