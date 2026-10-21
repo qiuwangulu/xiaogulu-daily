@@ -1156,6 +1156,19 @@
     padding: 7px 10px; margin-bottom: 8px; line-height: 1.5;
   }
   body.theme-day .hk-settle-tip { color: #b8860b; background: rgba(214,162,26,0.12); border-color: rgba(214,162,26,0.4); }
+  /* v3.6.47 需求③：家政考勤「下户日期」按钮置灰（与「上户日期」区分——上户按钮保持 .fab-btn 原色不变） */
+  .hk-date-btn-end {
+    background: rgba(127,140,141,0.22) !important;
+    border-color: rgba(127,140,141,0.5) !important;
+    color: #8a9499 !important;
+    box-shadow: none !important;
+  }
+  .hk-date-btn-end .fab-emoji { opacity: 0.55; }
+  body.theme-day .hk-date-btn-end {
+    background: rgba(99,110,114,0.14) !important;
+    border-color: rgba(99,110,114,0.45) !important;
+    color: #7f8c8d !important;
+  }
   /* v3.6.45 日期选择器半天切换按钮（多选提示条内，每个已选日期一个） */
   .dp-half-btn {
     border: 1px solid rgba(116,185,255,0.5); background: rgba(116,185,255,0.12); color: #74b9ff;
@@ -2253,7 +2266,7 @@
         <span class="ee-hand">&#128071;</span><span class="ee-play-hint-title">放音乐</span>
       </div>
       <!-- v3.6.24 连播提示语移到「放音乐」与按钮之间；「几首」动态取管理中的播放音频数（eeRefreshPlayHint 渲染）；v3.6.46 文案改为随机/指定两种模式（#eePlayHintNote=「不足则全放」说明，仅随机模式相关） -->
-      <div class="ee-play-hint-bottom">点「播放」可选「随机」连播<span id="eePlayHintCount">5</span>首歌<span id="eePlayHintNote"></span>或「指定」循环播放，播放中再点一次即停止</div>
+      <div class="ee-play-hint-bottom">点「播放」可选「随机」连播<span id="eePlayHintCount">5</span>首歌<span id="eePlayHintNote"></span>或「多曲」循环播放，播放中再点一次即停止</div>
       <div class="ee-actions">
         <button class="fab-btn" id="eeSwitchBtn" onclick="eeSwitch()"><span class="fab-icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>切换</button>
         <!-- v3.6.46 播放按钮外包下拉：未播放时点「播放」先出「随机/指定循环」菜单（播放中再点=停止，逻辑不变） -->
@@ -2261,7 +2274,7 @@
           <button class="fab-btn" id="eePlayBtn" onclick="eeToggle()"><span class="fab-icon" id="eeIco"><svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg></span><span id="eePlayLabel">播放</span></button>
           <div class="ee-play-menu" id="eePlayMenu">
             <button type="button" onclick="eeStartRandom()">🎲 随机播放</button>
-            <button type="button" onclick="openEePickModal()">📋 指定循环</button>
+            <button type="button" onclick="openEePickModal()">📋 多曲循环</button>
           </div>
         </span>
       </div>
@@ -2634,7 +2647,7 @@
           <span class="ee-count-unit">首</span>
         </span>
       </div>
-      <div class="ee-count-hint">首页点「播放」可选随机连播这么多首，也可「指定」勾选歌曲循环播放</div>
+      <div class="ee-count-hint">首页点「播放」可选随机连播这么多首，也可「多曲」勾选歌曲循环播放</div>
       <div class="ee-usage" id="eeUsage"></div>
       <!-- v3.6.22 云同步改手动：「立即同步」按钮（.btn 样式同「☁️ 云端同步」）置左一行，状态词与提示移至按钮下方 -->
       <div class="ee-sync-row">
@@ -2663,11 +2676,11 @@
     </div>
   </div>
 </div>
-<!-- v3.6.46 「指定音频循环放」弹窗：首页播放下拉选「指定循环」打开——上方左侧类别下拉、右侧关键字搜索，列表仅显示音频名称，每首前勾选框（样式同添加记录），多选确定后回首页循环播放所选集 -->
+<!-- v3.6.46 多曲循环弹窗（v3.6.47 需求①「指定循环」改名「多曲循环」）：首页播放下拉选「多曲循环」打开——上方左侧类别下拉、右侧关键字搜索，列表仅显示音频名称，每首前勾选框（样式同添加记录），多选确定后回首页循环播放所选集；v3.6.47 需求②：管理音频编辑弹窗开了「默认加入多曲循环」的音频在此自动勾选并置顶 -->
 <div class="modal-overlay" id="eePickModal" onclick="closeModal(event,'eePickModal')">
   <div class="modal-box" onclick="event.stopPropagation()">
     <button class="modal-close" onclick="hideModal('eePickModal')">&times;</button>
-    <div class="modal-title">指定音频循环放</div>
+    <div class="modal-title">多曲音频循环放</div>
     <div class="add-filter-row">
       <div class="cat-dropdown" id="eePickCatDropdown">
         <button class="cat-dropdown-btn" id="eePickCatBtn" type="button" onclick="toggleEePickCat()">📂 全部分类 ▾</button>
@@ -2803,6 +2816,12 @@
         <option value="故事(英文)">📖 故事(英文)</option>
       </select>
     </div>
+    <!-- v3.6.47 需求②：默认加入多曲循环开关（默认关；开启后该音频在多曲循环弹窗内自动勾选并置顶显示） -->
+    <div class="te-field" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div class="te-label" style="margin:0;">默认加入多曲循环</div>
+      <div class="toggle-switch" id="eeEditLoopSw" onclick="eeEditLoopToggle()" title="开启后，在多曲循环弹窗内自动勾选并置顶"></div>
+    </div>
+    <div class="te-hint" style="margin-top:-6px;">开启后，首页「播放 → 多曲循环」弹窗内该音频自动勾选并置顶，方便快速起播</div>
     <div class="modal-actions">
       <button class="btn" onclick="hideModal('eeEditModal')">取消</button>
       <button class="btn btn-success" onclick="eeSaveEdit()">保存</button>
@@ -2994,6 +3013,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.46"></script>
+<script src="app.js?v=v3.6.47"></script>
 </body>
 </html>
