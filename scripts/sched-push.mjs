@@ -656,10 +656,11 @@ async function main() {
   try { data = JSON.parse(decrypt(key, rows[0].encrypted_data, rows[0].iv)); }
   catch (e) {
     // v3.6.17 明确根因与恢复方法：某台设备/测试环境用不一致的盐覆盖了云端 _salt
-    // （前端 v3.6.17 已修复该「验证不了就覆盖」的自动修复漏洞）。
+    // （前端 v3.6.17 已修复该「验证不了就覆盖」的自动修复漏洞；v3.6.52 再加安全闸：
+    //  家庭已有数据行时，本地无盐设备即使 _salt 查询为空也绝不新建随机盐上传）。
     console.error('[Sched] 云端定时任务解密失败：', e && e.message);
     console.error('[Sched] 根因通常是云端 _salt 被不一致的密钥覆盖（家庭数据密钥被打挂）。');
-    console.error('[Sched] 恢复方法：在存有真实数据的手机上打开 App，开 App 后 10 秒内的密钥巡检会自动判定并修复云端 salt；随后本工作流即可正常解密。');
+    console.error('[Sched] 恢复方法：在存有真实数据的手机上打开 App（切前台/联网即触发密钥巡检），多行试解自动判定并修复云端 salt；随后本工作流即可正常解密。');
     process.exit(1);
   }
 
@@ -670,9 +671,9 @@ async function main() {
   // v3.6.0 育儿嫂休假集合（供工资任务扣减）/ v3.6.45 家政考勤（housekeeper_v1）
   let housekeeper = hkDefault();
   try { housekeeper = await fetchHousekeeper(fid, key); } catch (e) { console.warn('[家政考勤] 读取失败', e && e.message); }
+  const now = new Date();   // v3.6.52 修复 TDZ：原声明在下方家政考勤日志之后，main() 每次运行必崩（v3.6.45 引入，此前被盐解密失败挡着）
   console.log('[Sched] 家政考勤（育儿嫂）当月休假天数 =', hkMonthVacDays(housekeeper.nanny, fmtDateLocal(now).slice(0, 7)));
 
-  const now = new Date();
   let changed = false;
   const genAttempted = new Set();   // v3.6.17 本次运行已尝试过生成的任务（避免①失败后②在同一次运行内重复调 AI+天气）
 
