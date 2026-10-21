@@ -291,26 +291,54 @@ function flushBodySaves() {
   try { saveHeight(); } catch (e) {}
   try { saveWeight(); } catch (e) {}
 }
-function loadHeight() { const el = document.getElementById('heightInput'); if (!el) return; if (document.activeElement === el) return; const h = localStorage.getItem('babyHeight'); if (h != null) el.value = h; }
+// v3.6.44 需求④：新的一天清空首页身高/体重输入（仅回填当天已记录的数值）；
+// 之前日期的记录保留在 bodyHistory（曲线/历史/知识库引用不受影响），babyHeight/babyWeight
+// 保留为「最新录入值」供 AI 上下文引用，输入为空时不写空、不同步
+function loadHeight() {
+  const el = document.getElementById('heightInput'); if (!el) return;
+  if (document.activeElement === el) return;
+  const rec = getBodyHistory().find(x => x.d === getTodayDateStr());
+  el.value = (rec && rec.h != null) ? rec.h : '';
+}
 function saveHeight() {
   const el = document.getElementById('heightInput'); if (!el) return;
   const raw = String(el.value == null ? '' : el.value).trim();
   const prev = localStorage.getItem('babyHeight') || '';
-  if (raw !== prev) { localStorage.setItem('babyHeight', raw); bumpConfigTs('babyHeight'); }
   const v = parseFloat(raw);
-  if (v > 0) recordBodyMeasurement('h', v);          // 幂等：无变化时不重复写盘/上传
-  else if (raw !== prev) syncUpload('config');
+  if (v > 0) {
+    if (raw !== prev) { localStorage.setItem('babyHeight', raw); bumpConfigTs('babyHeight'); }
+    recordBodyMeasurement('h', v);          // 幂等：无变化时不重复写盘/上传
+  }
+  // 输入为空（如新的一天尚未测量）：保留 babyHeight 作为最新录入值，不写空、不触发同步
 }
-function loadWeight() { const el = document.getElementById('weightInput'); if (!el) return; if (document.activeElement === el) return; const w = localStorage.getItem('babyWeight'); if (w != null) el.value = w; }
+function loadWeight() {
+  const el = document.getElementById('weightInput'); if (!el) return;
+  if (document.activeElement === el) return;
+  const rec = getBodyHistory().find(x => x.d === getTodayDateStr());
+  el.value = (rec && rec.w != null) ? rec.w : '';
+}
 function saveWeight() {
   const el = document.getElementById('weightInput'); if (!el) return;
   const raw = String(el.value == null ? '' : el.value).trim();
   const prev = localStorage.getItem('babyWeight') || '';
-  if (raw !== prev) { localStorage.setItem('babyWeight', raw); bumpConfigTs('babyWeight'); }
   const v = parseFloat(raw);
-  if (v > 0) recordBodyMeasurement('w', v);          // 幂等：无变化时不重复写盘/上传
-  else if (raw !== prev) syncUpload('config');
+  if (v > 0) {
+    if (raw !== prev) { localStorage.setItem('babyWeight', raw); bumpConfigTs('babyWeight'); }
+    recordBodyMeasurement('w', v);          // 幂等：无变化时不重复写盘/上传
+  }
+  // 输入为空（如新的一天尚未测量）：保留 babyWeight 作为最新录入值，不写空、不触发同步
 }
+// v3.6.44 需求④：跨天（业务日 1 点翻页）自动清空首页身高/体重输入
+// ——loadHeight/loadWeight 有「焦点保护」（正在输入时不动），定时巡检只在日期真正变化时触发一次
+setInterval(() => {
+  try {
+    const ds = getTodayDateStr();
+    if (window.__hwDay !== ds) {
+      window.__hwDay = ds;
+      loadHeight(); loadWeight();
+    }
+  } catch (e) {}
+}, 60000);
 document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flushBodySaves(); });
 window.addEventListener('pagehide', flushBodySaves);
 window.addEventListener('beforeunload', flushBodySaves);
@@ -1484,7 +1512,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.43'; // v3.6.43: 三项用户反馈——①总览睡眠时长无记录时「暂无记录」改为「-」（与夜间「下次睡觉」的「-」占位风格统一；「下次睡觉」列保持「暂无记录」不变，体温/历史列表等其它暂无记录占位一律不动）；②总览「详情」胶囊由今日计划标题行下移一行至第二行最右侧（.ov-plan-detail-btn top:0→24px=一行行高 15px×1.6，right:0 贴右不变；卡片 min-height:48px 两行高，保证单行摘要时第二行也有空间放胶囊、不溢出到日报胶囊区域）；③备忘录待办勾选后停顿时长 3s→2s（_memoPendingDone 定时器 3000→2000，视觉 pending 标记/「已完成1件事」提示/二次点击撤销逻辑不变）。// v3.6.42: 去掉首页总览体温行 // v3.6.42: 去掉首页总览体温行（用户反馈「总览中去掉体温这一行」——v3.6.41 新增的「🌡️ 体温: 36.5℃ ● 20:30」整行移除，总览恢复为「下次喝奶+水奶量 / 下次睡觉+睡眠时长」两行结构；体温记录仍可在历史列表与添加弹窗正常查看/记录，仅总览不再展示。无 CSS 变动（.temp-normal/.temp-high 为既有样式类，历史列表仍在用，保留）。// v3.6.41: 首页总览新增体温行 // v3.6.41: 首页总览新增体温行（用户要求「首页测体温显示具体温度和正常/发烧的图标」）——总览在「下次睡觉/睡眠时长」行后新增「🌡️ 体温: 36.5℃ ● 20:30」：显示当天最后一次体温记录的具体数值+单位+状态图标+测量时间；状态口径与历史列表/添加弹窗实时指示完全一致（≤37.5℃ 正常=绿● / >37.5℃ 发烧=红⚠️，旧记录无 tempStatus 时按阈值现算）；当天无有效体温记录（temperature>0）则不占位——体温非每日必测，避免每天显示「暂无记录」拥挤总览。无新增 CSS（复用 overview-item/ov-value 与既有 .temp-normal/.temp-high）。// v3.6.40: 新增「辅食第N天食谱推荐」（用户要求「AI推荐今日计划：如果前一天添加了辅食，计为第一天，查询知识库，按添加辅食的时间和最相近的月龄，推荐当天的辅食食谱和制作方法，需要比较具体，比如多少度的水冲泡多少米粉」）——①collectPlanDayStats 的辅食记录补昨日添加时间(solidFoodTime/recTime)/克数(solidFoodAmount)/饭后情况(afterMeal)；②新增 solidFoodStreak()：从目标日往前逐日查辅食记录、遇空档即止（最多回看 60 天），streak=1 即昨日为辅食第1天（首次添加）、今日计划目标日=第 streak+1 天；③buildPlanSystemPrompt 在【辅食提醒】后新增【辅食第N天食谱推荐】规则——前一日有辅食记录时要求【喂养】辅食项给出当天具体食谱与制作方法，必须具体到：吃什么（观察未满2-3天仍吃同一种）/多少克多少毫升（比昨日增不超2成）/什么温度的水（如50-60℃温开水）与冲调蒸煮步骤稀稠程度/喂食时段（参考昨日添加时间，如上午10点）/过敏观察要点，并须结合知识库「辅食」条目与宝宝月龄，知识库无对应月龄食谱时按通用原则（6月龄高铁米粉稀糊、7-8月龄蛋黄肉泥、9-10月龄稠粥手指食物、11-12月龄软饭小丁）；④KB_EG_SEED_VER 2→3 新增 2 条「辅食」种子：按月龄食谱（具体到水温与克数：6月龄约50-60℃水、15g米粉+150ml水冲成缓慢滴落稀糊；7-8月龄20g+170ml稍稠+蛋黄肉泥；9-10月龄稠粥碎末+手指食物；11-12月龄小馄饨蒸糕软饭小丁）与添加观察原则；⑤PLAN_PROMPT_VERSION 12→13（服务端 sched-push.mjs 同步：collectPlanDayStats 同款增强 + solidFoodStreakCloud 一次拉 60 天记录逐日找辅食 + prompt 规则段逐字对齐 + 版本号 13）。// v3.6.39: 修复「将日报字体大小改为与AI育儿字体一样大」——实测两胶囊文字本就同为 12px/800（像素墨迹高 12.0 vs 11.8，基本相同），用户观感差异来自 v3.6.38 放大的 📈（15px）与 12px 文字的反差：AI育儿胶囊 12px 图标+12px 文字均匀显「正常大小」，日报胶囊 15px 图标+12px 文字显字小。若只调大日报则会变成日报反比AI育儿大、仍不一致，故两胶囊文字同步 12px→14px（.ov-report-pill 与 .ai-chip 两条规则），盒高均保持 25px 锁死不变——两胶囊文字真正一样大且更醒目；胶囊宽度各增约 8px（日报为右对齐、AI育儿为居中于头像下，均不破坏布局）。双主题截图验证两胶囊文字同大同醒目。// v3.6.38: 修复「把首页日报胶囊高度调大，和AI育儿胶囊高度调成一样」——实测两胶囊盒模型本就完全一致（均 height:25px、box-sizing:border-box、同 12px/800 字、同 1px 外框、内容盒均 23px，v3.5.153 起即锁死相同高度），观感差异来自 emoji 字形墨迹占比：👆（AI育儿）为竖向实心大手、墨迹占满字形箱；📈（日报）为方形网格、内置留白多，在部分设备 emoji 字体（如苹果/三星）下渲染更小，致日报胶囊显矮。修复：日报胶囊内 📈 用 span.pill-emoji 单独放大 12px→15px（flex-shrink:0 防压缩），视觉体量与 👆 拉齐；盒高保持 25px 不变（与 AI育儿胶囊真正一致），胶囊仅宽约 3px，位置与布局无变化。双主题截图验证视觉高度一致。// v3.6.36: 锁屏/通知媒体信息补 artwork——用户反馈「放音乐，锁屏时，左上角的音频图标改为小咕噜的头像（深色模式的）」，截图显示通知左上角是 PWA 默认图标（星星月亮）：MediaMetadata 从未设置 artwork，系统回退显示应用图标。修复：深色主题 artwork=assets/photo-data-sq.webp（从深色头像 photo-data.webp 居中裁切的 406x406 方形版，系统通知不裁切变形）；浅色主题=assets/photo-day-v3.webp（本身 320x320 方形）；artwork 一律转绝对 URL（系统通知只认绝对地址）；抽公共函数 eeSetMediaMetadata(it)，首页连播起播与管理页改名刷新共用；播放中切换主题（手动/跨时段自动）→ applyTheme 里即时刷新 artwork，头像跟随主题。title/artist/album 语义不变。新增 test_v3636.py 15/15（深色播放→方形深色头像+绝对URL+sizes 406x406+webp/浅色播放→photo-day-v3+320x320/播放中切主题 artwork 双向刷新/标题副标题专辑保持/改名同步锁屏标题且 artwork 不丢/方形头像资源可加载且 406x406）。// v3.6.35: 修复「设置连播5首，但还是2首就停止，无法继续播放」（用户第三次反馈，同一根因横跨 v3.6.30/v3.6.31/v3.6.34 三版）——根因是切歌时序竞态：eePlayItem 里 `_eeInternalPause=true; a.pause()` 在 finally 中同步复位，而 pause 事件是异步派达的——派达时标志已失效、eeCurrentId 还是旧曲，pause 处理器把 UI 误打成「已暂停：旧曲」+按钮「播放」+释放唤醒锁；新曲加载慢（play promise 未 resolve、eeAudio.paused 已因 play() 调用变 false）时该假状态持续数秒，用户看到「已暂停」点「播放」→ eeToggle 判定 !paused=正在播放 → eeStop() 真停，再点只能重开新队列——即「连播2首就停且无法继续」，全程无 toast。修复：①pause 事件处理器加「!eeAudio.paused → return」守卫（pause 后已恢复播放=切歌/恢复竞态，不是系统暂停，不更新 UI，从根上消除假「已暂停」）②eePlayItem 换 src 前先撤旧失败监控（_eeFailArmed=false+撤看门狗），武装延后一个 macrotask 且仅当仍未开播才武装——防旧 src 的 abort/error 噪声（X5 特性）命中新曲 armed 状态导致连续几首切歌凑满失败 3 首误停整条链；play() 早期 reject（同步/微任务早于武装）补 armed 再走失败处理，不漏同步 reject 死停 ③eePlayQueueItem 跳过已删墓碑条目，避免起播已删云端文件 404 触发失败链 ④eeAutoRecordOnPlay 包 try/catch，记录异常（云同步失败）不得阻断起播 ⑤亮屏续播：黑屏期间资源被系统收回（readyState=0 且无进度）直接重载当前曲，不断链。新增 test_v3635.py（切歌加载中不得假「已暂停」+pause 事件不破坏连播状态/真暂停→点播放恢复当前队列不清空不重开/src 切换 error 噪声不打断 5 首连播/墓碑条目跳过且队列继续/亮屏续播两路回归/停止后可重开/记录异常不阻断起播/播放数 5 队列 5）。// v3.6.34: 修复「点击成长里程碑徽章，详情显示 undefined月龄」——根因：v3.6.29 徽章固化后，renderMilestoneBadges 给固化徽章构造的 hit 只有 text/label/date/domain，缺 ageMonths/ageDays/isFirst，renderBadgeDetail 直接渲染 ${it.ageMonths} → 「undefined月龄」且不标「首次」（非固化路径从 items 现找不受影响，故只在徽章固化后的设备上复现）。修复：固化 hit 补 isFirst=true 与月龄——优先取 items 中同 text（同 date 优先）的完整条目，取不到按出生日期 getAgeDetail 现算（try/catch 兜底）；renderBadgeDetail 对缺失月龄不渲染该段，双保险绝不再出现 undefined。// v3.6.33: 修复「配好 AI 密钥、测试通过，但徽章仍是规则值」的剩余断链——用户确认密钥已配且测试通过，徽章却仍像没调 AI。定位四漏洞：①「测试」按钮假通过——classifyMilestoneLLM 缓存键 msllm:provider:model:hash 不含 apiKey，以前用有效密钥测过之后，即使密钥失效/输错，点「测试」仍命中旧缓存显示「✓ 返回」；现测试前先删测试文本的缓存键，保证通过来自真实 API 调用。②保存配置不清补救节流——之前打开分析时补救失败写过 ms_badge_ai_try（24h 节流），用户之后配好密钥，24h 内再打开分析也不会重试；现 saveAITagConfig 检测到配置真正变化（ms_badge_cfg_sig 签名比较）时清除该节流键并立即补救（配置没变则不重置，避免反复点保存反复打 API）。③补救触发依赖打开分析——用户配好密钥后不再打开分析页，徽章永远不更新；现 saveAITagConfig 保存成功后立即对无 AI label 的徽章组尝试补救一次（不在分析页时成功弹「徽章已更新为 AI 概括」）。④期内补救全失败时静默无声——现全部组仍无 label 时弹温和 toast「徽章 AI 概括失败，暂按规则显示（可到 管理 → AI 设置 点「测试」检查密钥）」（ms_badge_ai_fail_tip 24h 节流）；openAnalysis 路径的补救仍静默（用户正看着徽章变化）。v3.6.32 的期内补救/不重置刷新锚/已有 AI label 组绝不变/未配置 toast 指引等行为均不变。// v3.6.32: 修复「成长里程碑徽章像没调用 AI 大模型」——根因是固化设计漏洞：徽章一旦在无 AI label 的情况下固化（旧格式缓存升级时按规则结果即时固化 / 无密钥时进刷新窗口 / AI 调用失败），而 15 天刷新窗口只补「新解锁的组」，这些已固化的无 label 组永远等不到 AI 美化（截图中「妈妈出门休检半天…」正是规则回退的 slice(0,8)+省略号）。修复：①打开分析时若存在无 AI label 的徽章组且已配置 AI → 立即尝试 AI 美化一次（enrichMilestonesWithLLM 美化范围从「仅 fresh 组」扩大到「fresh 组 + 无 label 组」；已有 AI label 的已固化组仍绝不变；不重置 15 天刷新锚；失败 24h 节流）②AI 未配置时 toast 明确提示「请到 管理 → AI 设置 配置密钥（可先点测试）」，不再无声回退规则 ③刷新窗口 AI 调用失败有 toast 提示。15 天周期、期内固化、编辑不重算等既有语义均不变。// v3.6.31: 修复「设 5 首连播只播 2 首、手机黑屏就自动停」的收尾因素——黑屏/锁屏期间系统暂停音频（v3.6.30 已做到只暂停不散队），但连播链在黑屏期间断裂且亮屏后不会自动续播，用户看到的就是「没操作却停了」。现两层防护：①播放期间申请屏幕唤醒锁（Wake Lock API），尽量阻止自动熄屏——屏幕亮着页面就不冻结、音频焦点不丢、连播不断；页面切后台/系统暂停/用户停止时按规范释放（省电），亮屏或恢复播放时重新申请；微信 X5 等旧内核不支持时静默降级。②亮屏自动续播（visibilitychange→visible）：队列还在且音频处于暂停态 → 自动从当前这首继续（UI 恢复「正在播放」）；若当前首在黑屏期间已播完（X5/页面冻结丢 ended）→ 直接下一首；恢复失败（音频资源被收）→ 重载当前曲；用户经媒体通知/锁屏控件主动暂停（_eeUserPaused）时不自动续播，尊重意图，点 App 内播放按钮仍可随时恢复。另修：锁屏媒体通知的「播放」旧实现只 play() 不刷新 App 界面（通知续播后 App 仍显示「已暂停」）——现同步 UI 与唤醒锁。// v3.6.30: ①徽章更新策略按用户明确调整——仍每 15 天刷新窗口更新一次、期内固化，且「更新里程碑记录/编辑里程碑」都不再重新更新徽章（v3.6.29 的「编辑即重推」已回退：saveMsEdit 保留徽章固化快照不动，仅刷新缓存 items 供时间轴/分类即时生效，且不重置 15 天刷新锚）②修复「播放音频数设为 5 却只连播 2 首」多重因素：(a) 播放数云同步旧逻辑无条件用云端值覆盖本地——某次保存上传失败/他端旧值后写，本地设置就被顶掉且每次开 App/切前台复发；现本地保存记时间戳，仅当云端 last_modified 更新才覆盖；(b) 连播看门狗 10s→15s 且加载超时改为只跳过本首、不计入连续失败（慢网络下 3 首慢歌误杀整条链是「播 2 首就停」的误停机制；真正无法播放的文件仍走 error/play reject 连续 3 首停+toast；整队超时有 toast 兜底）；(c) 系统/锁屏暂停旧逻辑直接 eeStop 清队列（mediaSession pause 与音频焦点丢失）——现只暂停不散队、UI 显示「已暂停」、点按钮从当前这首继续；(d) 防同一 src 重复 ended（微信 X5 pause/currentTime 归零后重发会导致莫名跳首）；(e) 连播提示语诚实显示实际可连播数=min(设置数, 现有音频数)，不足则明说「不足则全放」。// v3.6.29: ①成长里程碑徽章固化——双根因导致徽章「突然改乱」：(a) v3.6.17 起 enrichMilestonesWithLLM 内 Promise.allSettled(_mapPool(...)) 包住 async 函数的 Promise，每次必抛 "object is not iterable" → AI label 从未落盘；(b) 徽章每 15 天周期重算且刷新时先把无 AI 标签的规则结果存缓存（AI 异步返回前离开即被污染）→ 徽章标题从 AI 概括退化为规则截断。现徽章一经确定即永久固化（缓存新增 badges 快照，renderMilestoneBadges 优先用固化徽章；刷新窗口只补未解锁组，AI label 仅美化本次新固化组一次；旧格式缓存首次打开即时推导固化；手动编辑里程碑属用户显式意图，重推并固化）②总览右列冒号与数值间隔改为与「下次喝奶: 02:25」一致（4px）——label/数值/单位均 auto 宽、数值紧跟冒号，item 132→120px（右移右缘不变）；v3.6.28 的 h 与 l 对齐因与冒号紧凑互斥移除。// v3.6.28: ①总览「下次睡觉」图标 🌙→😴（与 ACTIVITY_TYPES/日报/图表的睡眠图标体系统一）②睡眠时长单位「h」右移约一个字符宽与上一行「ml」的「l」对齐（.ov-unit.unit-h padding-left:0.83em，unit 框 20→22px，item 总宽 132 不变）；「睡」与「水」第一个字对齐、数值右端对齐保持不变（两端对齐）。// v3.6.27: 总览「下一次睡觉」→「下次睡觉」，与「下次喝奶」口径统一（toast 早已是「距下次喝奶/睡觉」）。// v3.6.26: ①toast 与总览口径统一「距下一次喝奶」→「距下次喝奶」（总览 label 早已是「下次喝奶:」）②总览右列（水+奶量/睡眠时长）整体收紧往右移——item 156→132px、label 76→66px（冒号与数值间隔减少）、数值 42→36px、单位 26→20px、gap 5→4px，第一个字与单位仍保持对齐③「放音乐」标题字重 700→400——与「🎵 听歌/🎧 听故事」（.ee-sub-head）及「🍼 喝奶」等卡片标题（.card-name，均 16px/400）视觉一致（用户反馈 700 观感偏大）。// v3.6.24: ①首页总览「今日计划 / 今日成就」字号 14px→15px，与「下一次喝奶」行一致（水+奶量等同比例统一）②「放音乐」标题 14px→16px 与「🎵 听歌」标题同尺寸；连播提示语从按钮下方移到「放音乐」与按钮之间，且「几首」改为管理里的实际播放音频数（如 5 首，动态渲染）③总览「下次喝奶」下方新增「下一次睡觉 / 睡眠时长」行——5-19 点按「上一次睡眠开始时间+睡眠时长+2 小时」预估下次睡觉时间，19-凌晨 5 点显示「-」，右侧显示上一次睡眠时长（如 13.5 h）；刷新网页的「距下一次喝奶」toast 增加距睡觉倒计时，简化提示语为「距下一次喝奶/睡觉：h min / h min」。// v3.6.23: 播放自动记录改为「每次播放新增去重后的记录」——v3.6.22 的「每类每天仅 1 条」不符合预期（用户反馈：点一次播放就应记一次，同一天可多次播放多次记录）；去重维度改为「同一次播放队列内」：多首故事（中文/英文/古诗）仍合并 1 条听故事、多首儿歌合并 1 条听歌；提示语改为「已添加1条听故事/听歌记录」；切换（eeSwitch）与连播自动接歌仍不记录。// v3.6.22: ①首页「放音乐」手指图标放大 12px→16px（与听歌/听故事图标同尺寸）②修复管理弹窗滚到底时最后一项音频被吸底「确定」条遮住（选项面板底部留白 72px）③播放自动记录去重——每类每天仅 1 条（中文/英文/古诗合并为 1 条听故事、儿歌 1 条听歌），今日已有同类型记录则只高亮已有记录并提示「已添加」，停止后再播放 / 切换不再重复添加 ④早教音频云同步改手动——只有点「立即同步」才加密上云共享（按钮改 .btn 样式置左、状态词与提示移至按钮下方），本地改动只存本机并标记「有改动未同步」，云端拉取仍自动（启动 + 切回前台），家人设备刷新 / 重开即可看到。// v3.6.21: ①修复首页连播「播了几首就莫名停止」——音频元素 error 事件此前无处理（加载失败即死停）、起播无看门狗（加载挂起会卡在「加载中」）、播放/停止按钮无防抖（连击/幽灵点击会误停）；现三路归一失败处理（error/play reject/10s 看门狗）：单曲失败自动跳下一首，连续 3 首失败才停止并明确 toast 原因，按钮加 400ms 防抖 ②修复「管理里删除/新增音频，家人手机不同步」——旧合并逻辑是并集且本地优先，删除直接 splice 导致他端把已删歌曲复活、改名/改分类也不传播；现改墓碑式删除（deleted 标记随云同步，30 天后压缩清理）+ 同 id 按 updatedAt 取新版冲突合并 + 云端保存失败不再静默（管理页早教页新增云同步状态行，失败 toast + 自动重试 + 手动「立即同步」）+ 切回前台节流补拉云端列表 ③首页音频卡新增「放音乐」指引——切换/播放上方左侧指向下手指（尺寸颜色同 AI育儿 图标）+ 右侧加粗黄色「放音乐」，按钮下方灰色小字提示连播与停止方式。// v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
+const APP_VERSION = 'v3.6.44'; // v3.6.44: 六项用户需求——①备忘录三个分区标题（待办事项/已办事项/育儿嫂休假）字号 14px→16px（.memo-todo-head/.memo-done-head/.nanny-vac-head 共用规则，v3.6.44 需求①）②首页身高/体重输入按天清空（v3.6.44 需求④：loadHeight/loadWeight 改为只回填「当天」bodyHistory 记录，新的一天从空开始——前几天的记录完整保留在 bodyHistory（曲线/历史/AI 上下文不受影响）；saveHeight/saveWeight 输入为空时不再写空 babyHeight/babyWeight、不触发同步（保留「最新录入值」供 AI 引用）；新增 60s 跨天巡检（业务日 1 点翻页检测到日期变化即重载两个输入，load 自带焦点保护不会打断正在输入的用户））③成长里程碑编辑类型单选改多选（v3.6.44 需求⑥：openMsEdit 的 select 改为 checkbox-group（样式同添加记录），覆盖存储 ms_override_v1 新格式 {domainIds:[...], isFirst}，读兼容旧格式 domainId；collectMilestones 生成 it.domains 数组（it.domain=domains[0] 主类型，徽章缓存快照/LLM enrich 等无 domains 字段的路径经 msDomainsOf 回退）；时间轴卡片渲染多个类型标签；三大徽章组匹配改为「条目任一类型命中组 domains」）④AI育儿知识库编辑分类单选改多选（v3.6.44 需求⑦：editKb 的 select 改为 checkbox-group；保存时用户勾选与原集合不同→写 cats 数组（cat=cats[0] 保旧消费方兼容），相同→沿用关键词自动重分类（旧行为）；renderKb 筛选改「条目任一分类被选中」、列表渲染多个分类标签；reTagKb/LLM 精分回填同步维护 cats）⑤音频管理页「试听中」文案红改蓝（v3.6.44 需求⑧的上传图1：.ee-aud-tag 深色 #e17055→#74b9ff、白天 #d63031→#0984e3，与播放按钮蓝色系统一；按钮图标红色不变）⑥锁屏/通知媒体信息（v3.6.44 需求⑧的上传图2：artwork 固定为小咕噜深色模式头像 assets/photo-data-sq.webp 406x406 不再跟随主题（原浅色主题用 photo-day-v3 320x320）；主标题=音频名（title=it.name 本就如此，回归锁定）；副标题固定「小咕噜音频」（原「小咕噜音频 · 类型」）；title/artist/album/绝对URL 语义不变）。test_v3636.py 同步更新为新语义（浅色主题下 artwork 仍为深色头像、切主题不换 artwork、artist=小咕噜音频）。// v3.6.43: 三项用户反馈——①总览睡眠时长无记录时「暂无记录」改为「-」（与夜间「下次睡觉」的「-」占位风格统一；「下次睡觉」列保持「暂无记录」不变，体温/历史列表等其它暂无记录占位一律不动）；②总览「详情」胶囊由今日计划标题行下移一行至第二行最右侧（.ov-plan-detail-btn top:0→24px=一行行高 15px×1.6，right:0 贴右不变；卡片 min-height:48px 两行高，保证单行摘要时第二行也有空间放胶囊、不溢出到日报胶囊区域）；③备忘录待办勾选后停顿时长 3s→2s（_memoPendingDone 定时器 3000→2000，视觉 pending 标记/「已完成1件事」提示/二次点击撤销逻辑不变）。// v3.6.42: 去掉首页总览体温行 // v3.6.42: 去掉首页总览体温行（用户反馈「总览中去掉体温这一行」——v3.6.41 新增的「🌡️ 体温: 36.5℃ ● 20:30」整行移除，总览恢复为「下次喝奶+水奶量 / 下次睡觉+睡眠时长」两行结构；体温记录仍可在历史列表与添加弹窗正常查看/记录，仅总览不再展示。无 CSS 变动（.temp-normal/.temp-high 为既有样式类，历史列表仍在用，保留）。// v3.6.41: 首页总览新增体温行 // v3.6.41: 首页总览新增体温行（用户要求「首页测体温显示具体温度和正常/发烧的图标」）——总览在「下次睡觉/睡眠时长」行后新增「🌡️ 体温: 36.5℃ ● 20:30」：显示当天最后一次体温记录的具体数值+单位+状态图标+测量时间；状态口径与历史列表/添加弹窗实时指示完全一致（≤37.5℃ 正常=绿● / >37.5℃ 发烧=红⚠️，旧记录无 tempStatus 时按阈值现算）；当天无有效体温记录（temperature>0）则不占位——体温非每日必测，避免每天显示「暂无记录」拥挤总览。无新增 CSS（复用 overview-item/ov-value 与既有 .temp-normal/.temp-high）。// v3.6.40: 新增「辅食第N天食谱推荐」（用户要求「AI推荐今日计划：如果前一天添加了辅食，计为第一天，查询知识库，按添加辅食的时间和最相近的月龄，推荐当天的辅食食谱和制作方法，需要比较具体，比如多少度的水冲泡多少米粉」）——①collectPlanDayStats 的辅食记录补昨日添加时间(solidFoodTime/recTime)/克数(solidFoodAmount)/饭后情况(afterMeal)；②新增 solidFoodStreak()：从目标日往前逐日查辅食记录、遇空档即止（最多回看 60 天），streak=1 即昨日为辅食第1天（首次添加）、今日计划目标日=第 streak+1 天；③buildPlanSystemPrompt 在【辅食提醒】后新增【辅食第N天食谱推荐】规则——前一日有辅食记录时要求【喂养】辅食项给出当天具体食谱与制作方法，必须具体到：吃什么（观察未满2-3天仍吃同一种）/多少克多少毫升（比昨日增不超2成）/什么温度的水（如50-60℃温开水）与冲调蒸煮步骤稀稠程度/喂食时段（参考昨日添加时间，如上午10点）/过敏观察要点，并须结合知识库「辅食」条目与宝宝月龄，知识库无对应月龄食谱时按通用原则（6月龄高铁米粉稀糊、7-8月龄蛋黄肉泥、9-10月龄稠粥手指食物、11-12月龄软饭小丁）；④KB_EG_SEED_VER 2→3 新增 2 条「辅食」种子：按月龄食谱（具体到水温与克数：6月龄约50-60℃水、15g米粉+150ml水冲成缓慢滴落稀糊；7-8月龄20g+170ml稍稠+蛋黄肉泥；9-10月龄稠粥碎末+手指食物；11-12月龄小馄饨蒸糕软饭小丁）与添加观察原则；⑤PLAN_PROMPT_VERSION 12→13（服务端 sched-push.mjs 同步：collectPlanDayStats 同款增强 + solidFoodStreakCloud 一次拉 60 天记录逐日找辅食 + prompt 规则段逐字对齐 + 版本号 13）。// v3.6.39: 修复「将日报字体大小改为与AI育儿字体一样大」——实测两胶囊文字本就同为 12px/800（像素墨迹高 12.0 vs 11.8，基本相同），用户观感差异来自 v3.6.38 放大的 📈（15px）与 12px 文字的反差：AI育儿胶囊 12px 图标+12px 文字均匀显「正常大小」，日报胶囊 15px 图标+12px 文字显字小。若只调大日报则会变成日报反比AI育儿大、仍不一致，故两胶囊文字同步 12px→14px（.ov-report-pill 与 .ai-chip 两条规则），盒高均保持 25px 锁死不变——两胶囊文字真正一样大且更醒目；胶囊宽度各增约 8px（日报为右对齐、AI育儿为居中于头像下，均不破坏布局）。双主题截图验证两胶囊文字同大同醒目。// v3.6.38: 修复「把首页日报胶囊高度调大，和AI育儿胶囊高度调成一样」——实测两胶囊盒模型本就完全一致（均 height:25px、box-sizing:border-box、同 12px/800 字、同 1px 外框、内容盒均 23px，v3.5.153 起即锁死相同高度），观感差异来自 emoji 字形墨迹占比：👆（AI育儿）为竖向实心大手、墨迹占满字形箱；📈（日报）为方形网格、内置留白多，在部分设备 emoji 字体（如苹果/三星）下渲染更小，致日报胶囊显矮。修复：日报胶囊内 📈 用 span.pill-emoji 单独放大 12px→15px（flex-shrink:0 防压缩），视觉体量与 👆 拉齐；盒高保持 25px 不变（与 AI育儿胶囊真正一致），胶囊仅宽约 3px，位置与布局无变化。双主题截图验证视觉高度一致。// v3.6.36: 锁屏/通知媒体信息补 artwork——用户反馈「放音乐，锁屏时，左上角的音频图标改为小咕噜的头像（深色模式的）」，截图显示通知左上角是 PWA 默认图标（星星月亮）：MediaMetadata 从未设置 artwork，系统回退显示应用图标。修复：深色主题 artwork=assets/photo-data-sq.webp（从深色头像 photo-data.webp 居中裁切的 406x406 方形版，系统通知不裁切变形）；浅色主题=assets/photo-day-v3.webp（本身 320x320 方形）；artwork 一律转绝对 URL（系统通知只认绝对地址）；抽公共函数 eeSetMediaMetadata(it)，首页连播起播与管理页改名刷新共用；播放中切换主题（手动/跨时段自动）→ applyTheme 里即时刷新 artwork，头像跟随主题。title/artist/album 语义不变。新增 test_v3636.py 15/15（深色播放→方形深色头像+绝对URL+sizes 406x406+webp/浅色播放→photo-day-v3+320x320/播放中切主题 artwork 双向刷新/标题副标题专辑保持/改名同步锁屏标题且 artwork 不丢/方形头像资源可加载且 406x406）。// v3.6.35: 修复「设置连播5首，但还是2首就停止，无法继续播放」（用户第三次反馈，同一根因横跨 v3.6.30/v3.6.31/v3.6.34 三版）——根因是切歌时序竞态：eePlayItem 里 `_eeInternalPause=true; a.pause()` 在 finally 中同步复位，而 pause 事件是异步派达的——派达时标志已失效、eeCurrentId 还是旧曲，pause 处理器把 UI 误打成「已暂停：旧曲」+按钮「播放」+释放唤醒锁；新曲加载慢（play promise 未 resolve、eeAudio.paused 已因 play() 调用变 false）时该假状态持续数秒，用户看到「已暂停」点「播放」→ eeToggle 判定 !paused=正在播放 → eeStop() 真停，再点只能重开新队列——即「连播2首就停且无法继续」，全程无 toast。修复：①pause 事件处理器加「!eeAudio.paused → return」守卫（pause 后已恢复播放=切歌/恢复竞态，不是系统暂停，不更新 UI，从根上消除假「已暂停」）②eePlayItem 换 src 前先撤旧失败监控（_eeFailArmed=false+撤看门狗），武装延后一个 macrotask 且仅当仍未开播才武装——防旧 src 的 abort/error 噪声（X5 特性）命中新曲 armed 状态导致连续几首切歌凑满失败 3 首误停整条链；play() 早期 reject（同步/微任务早于武装）补 armed 再走失败处理，不漏同步 reject 死停 ③eePlayQueueItem 跳过已删墓碑条目，避免起播已删云端文件 404 触发失败链 ④eeAutoRecordOnPlay 包 try/catch，记录异常（云同步失败）不得阻断起播 ⑤亮屏续播：黑屏期间资源被系统收回（readyState=0 且无进度）直接重载当前曲，不断链。新增 test_v3635.py（切歌加载中不得假「已暂停」+pause 事件不破坏连播状态/真暂停→点播放恢复当前队列不清空不重开/src 切换 error 噪声不打断 5 首连播/墓碑条目跳过且队列继续/亮屏续播两路回归/停止后可重开/记录异常不阻断起播/播放数 5 队列 5）。// v3.6.34: 修复「点击成长里程碑徽章，详情显示 undefined月龄」——根因：v3.6.29 徽章固化后，renderMilestoneBadges 给固化徽章构造的 hit 只有 text/label/date/domain，缺 ageMonths/ageDays/isFirst，renderBadgeDetail 直接渲染 ${it.ageMonths} → 「undefined月龄」且不标「首次」（非固化路径从 items 现找不受影响，故只在徽章固化后的设备上复现）。修复：固化 hit 补 isFirst=true 与月龄——优先取 items 中同 text（同 date 优先）的完整条目，取不到按出生日期 getAgeDetail 现算（try/catch 兜底）；renderBadgeDetail 对缺失月龄不渲染该段，双保险绝不再出现 undefined。// v3.6.33: 修复「配好 AI 密钥、测试通过，但徽章仍是规则值」的剩余断链——用户确认密钥已配且测试通过，徽章却仍像没调 AI。定位四漏洞：①「测试」按钮假通过——classifyMilestoneLLM 缓存键 msllm:provider:model:hash 不含 apiKey，以前用有效密钥测过之后，即使密钥失效/输错，点「测试」仍命中旧缓存显示「✓ 返回」；现测试前先删测试文本的缓存键，保证通过来自真实 API 调用。②保存配置不清补救节流——之前打开分析时补救失败写过 ms_badge_ai_try（24h 节流），用户之后配好密钥，24h 内再打开分析也不会重试；现 saveAITagConfig 检测到配置真正变化（ms_badge_cfg_sig 签名比较）时清除该节流键并立即补救（配置没变则不重置，避免反复点保存反复打 API）。③补救触发依赖打开分析——用户配好密钥后不再打开分析页，徽章永远不更新；现 saveAITagConfig 保存成功后立即对无 AI label 的徽章组尝试补救一次（不在分析页时成功弹「徽章已更新为 AI 概括」）。④期内补救全失败时静默无声——现全部组仍无 label 时弹温和 toast「徽章 AI 概括失败，暂按规则显示（可到 管理 → AI 设置 点「测试」检查密钥）」（ms_badge_ai_fail_tip 24h 节流）；openAnalysis 路径的补救仍静默（用户正看着徽章变化）。v3.6.32 的期内补救/不重置刷新锚/已有 AI label 组绝不变/未配置 toast 指引等行为均不变。// v3.6.32: 修复「成长里程碑徽章像没调用 AI 大模型」——根因是固化设计漏洞：徽章一旦在无 AI label 的情况下固化（旧格式缓存升级时按规则结果即时固化 / 无密钥时进刷新窗口 / AI 调用失败），而 15 天刷新窗口只补「新解锁的组」，这些已固化的无 label 组永远等不到 AI 美化（截图中「妈妈出门休检半天…」正是规则回退的 slice(0,8)+省略号）。修复：①打开分析时若存在无 AI label 的徽章组且已配置 AI → 立即尝试 AI 美化一次（enrichMilestonesWithLLM 美化范围从「仅 fresh 组」扩大到「fresh 组 + 无 label 组」；已有 AI label 的已固化组仍绝不变；不重置 15 天刷新锚；失败 24h 节流）②AI 未配置时 toast 明确提示「请到 管理 → AI 设置 配置密钥（可先点测试）」，不再无声回退规则 ③刷新窗口 AI 调用失败有 toast 提示。15 天周期、期内固化、编辑不重算等既有语义均不变。// v3.6.31: 修复「设 5 首连播只播 2 首、手机黑屏就自动停」的收尾因素——黑屏/锁屏期间系统暂停音频（v3.6.30 已做到只暂停不散队），但连播链在黑屏期间断裂且亮屏后不会自动续播，用户看到的就是「没操作却停了」。现两层防护：①播放期间申请屏幕唤醒锁（Wake Lock API），尽量阻止自动熄屏——屏幕亮着页面就不冻结、音频焦点不丢、连播不断；页面切后台/系统暂停/用户停止时按规范释放（省电），亮屏或恢复播放时重新申请；微信 X5 等旧内核不支持时静默降级。②亮屏自动续播（visibilitychange→visible）：队列还在且音频处于暂停态 → 自动从当前这首继续（UI 恢复「正在播放」）；若当前首在黑屏期间已播完（X5/页面冻结丢 ended）→ 直接下一首；恢复失败（音频资源被收）→ 重载当前曲；用户经媒体通知/锁屏控件主动暂停（_eeUserPaused）时不自动续播，尊重意图，点 App 内播放按钮仍可随时恢复。另修：锁屏媒体通知的「播放」旧实现只 play() 不刷新 App 界面（通知续播后 App 仍显示「已暂停」）——现同步 UI 与唤醒锁。// v3.6.30: ①徽章更新策略按用户明确调整——仍每 15 天刷新窗口更新一次、期内固化，且「更新里程碑记录/编辑里程碑」都不再重新更新徽章（v3.6.29 的「编辑即重推」已回退：saveMsEdit 保留徽章固化快照不动，仅刷新缓存 items 供时间轴/分类即时生效，且不重置 15 天刷新锚）②修复「播放音频数设为 5 却只连播 2 首」多重因素：(a) 播放数云同步旧逻辑无条件用云端值覆盖本地——某次保存上传失败/他端旧值后写，本地设置就被顶掉且每次开 App/切前台复发；现本地保存记时间戳，仅当云端 last_modified 更新才覆盖；(b) 连播看门狗 10s→15s 且加载超时改为只跳过本首、不计入连续失败（慢网络下 3 首慢歌误杀整条链是「播 2 首就停」的误停机制；真正无法播放的文件仍走 error/play reject 连续 3 首停+toast；整队超时有 toast 兜底）；(c) 系统/锁屏暂停旧逻辑直接 eeStop 清队列（mediaSession pause 与音频焦点丢失）——现只暂停不散队、UI 显示「已暂停」、点按钮从当前这首继续；(d) 防同一 src 重复 ended（微信 X5 pause/currentTime 归零后重发会导致莫名跳首）；(e) 连播提示语诚实显示实际可连播数=min(设置数, 现有音频数)，不足则明说「不足则全放」。// v3.6.29: ①成长里程碑徽章固化——双根因导致徽章「突然改乱」：(a) v3.6.17 起 enrichMilestonesWithLLM 内 Promise.allSettled(_mapPool(...)) 包住 async 函数的 Promise，每次必抛 "object is not iterable" → AI label 从未落盘；(b) 徽章每 15 天周期重算且刷新时先把无 AI 标签的规则结果存缓存（AI 异步返回前离开即被污染）→ 徽章标题从 AI 概括退化为规则截断。现徽章一经确定即永久固化（缓存新增 badges 快照，renderMilestoneBadges 优先用固化徽章；刷新窗口只补未解锁组，AI label 仅美化本次新固化组一次；旧格式缓存首次打开即时推导固化；手动编辑里程碑属用户显式意图，重推并固化）②总览右列冒号与数值间隔改为与「下次喝奶: 02:25」一致（4px）——label/数值/单位均 auto 宽、数值紧跟冒号，item 132→120px（右移右缘不变）；v3.6.28 的 h 与 l 对齐因与冒号紧凑互斥移除。// v3.6.28: ①总览「下次睡觉」图标 🌙→😴（与 ACTIVITY_TYPES/日报/图表的睡眠图标体系统一）②睡眠时长单位「h」右移约一个字符宽与上一行「ml」的「l」对齐（.ov-unit.unit-h padding-left:0.83em，unit 框 20→22px，item 总宽 132 不变）；「睡」与「水」第一个字对齐、数值右端对齐保持不变（两端对齐）。// v3.6.27: 总览「下一次睡觉」→「下次睡觉」，与「下次喝奶」口径统一（toast 早已是「距下次喝奶/睡觉」）。// v3.6.26: ①toast 与总览口径统一「距下一次喝奶」→「距下次喝奶」（总览 label 早已是「下次喝奶:」）②总览右列（水+奶量/睡眠时长）整体收紧往右移——item 156→132px、label 76→66px（冒号与数值间隔减少）、数值 42→36px、单位 26→20px、gap 5→4px，第一个字与单位仍保持对齐③「放音乐」标题字重 700→400——与「🎵 听歌/🎧 听故事」（.ee-sub-head）及「🍼 喝奶」等卡片标题（.card-name，均 16px/400）视觉一致（用户反馈 700 观感偏大）。// v3.6.24: ①首页总览「今日计划 / 今日成就」字号 14px→15px，与「下一次喝奶」行一致（水+奶量等同比例统一）②「放音乐」标题 14px→16px 与「🎵 听歌」标题同尺寸；连播提示语从按钮下方移到「放音乐」与按钮之间，且「几首」改为管理里的实际播放音频数（如 5 首，动态渲染）③总览「下次喝奶」下方新增「下一次睡觉 / 睡眠时长」行——5-19 点按「上一次睡眠开始时间+睡眠时长+2 小时」预估下次睡觉时间，19-凌晨 5 点显示「-」，右侧显示上一次睡眠时长（如 13.5 h）；刷新网页的「距下一次喝奶」toast 增加距睡觉倒计时，简化提示语为「距下一次喝奶/睡觉：h min / h min」。// v3.6.23: 播放自动记录改为「每次播放新增去重后的记录」——v3.6.22 的「每类每天仅 1 条」不符合预期（用户反馈：点一次播放就应记一次，同一天可多次播放多次记录）；去重维度改为「同一次播放队列内」：多首故事（中文/英文/古诗）仍合并 1 条听故事、多首儿歌合并 1 条听歌；提示语改为「已添加1条听故事/听歌记录」；切换（eeSwitch）与连播自动接歌仍不记录。// v3.6.22: ①首页「放音乐」手指图标放大 12px→16px（与听歌/听故事图标同尺寸）②修复管理弹窗滚到底时最后一项音频被吸底「确定」条遮住（选项面板底部留白 72px）③播放自动记录去重——每类每天仅 1 条（中文/英文/古诗合并为 1 条听故事、儿歌 1 条听歌），今日已有同类型记录则只高亮已有记录并提示「已添加」，停止后再播放 / 切换不再重复添加 ④早教音频云同步改手动——只有点「立即同步」才加密上云共享（按钮改 .btn 样式置左、状态词与提示移至按钮下方），本地改动只存本机并标记「有改动未同步」，云端拉取仍自动（启动 + 切回前台），家人设备刷新 / 重开即可看到。// v3.6.21: ①修复首页连播「播了几首就莫名停止」——音频元素 error 事件此前无处理（加载失败即死停）、起播无看门狗（加载挂起会卡在「加载中」）、播放/停止按钮无防抖（连击/幽灵点击会误停）；现三路归一失败处理（error/play reject/10s 看门狗）：单曲失败自动跳下一首，连续 3 首失败才停止并明确 toast 原因，按钮加 400ms 防抖 ②修复「管理里删除/新增音频，家人手机不同步」——旧合并逻辑是并集且本地优先，删除直接 splice 导致他端把已删歌曲复活、改名/改分类也不传播；现改墓碑式删除（deleted 标记随云同步，30 天后压缩清理）+ 同 id 按 updatedAt 取新版冲突合并 + 云端保存失败不再静默（管理页早教页新增云同步状态行，失败 toast + 自动重试 + 手动「立即同步」）+ 切回前台节流补拉云端列表 ③首页音频卡新增「放音乐」指引——切换/播放上方左侧指向下手指（尺寸颜色同 AI育儿 图标）+ 右侧加粗黄色「放音乐」，按钮下方灰色小字提示连播与停止方式。// v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -4978,6 +5006,8 @@ function getAITagConfig() {
   } catch { return null; }
 }
 function msDomainById(id) { return MILESTONE_DOMAINS.find(d => d.id === id) || MILESTONE_OTHER; }
+// v3.6.44 需求⑥：里程碑条目的类型列表（兼容无 domains 字段的旧数据/徽章缓存快照，回退为主类型）
+function msDomainsOf(it) { return (it && Array.isArray(it.domains) && it.domains.length) ? it.domains : [it.domain]; }
 // 统一的 OpenAI 兼容 chat/completions 调用；任何异常/非 200/解析失败都返回 null（由上层回退规则）
 // v3.5.121 超时 9s→15s：JSON 归类在网络较慢时同样容易被误判失败（与 AI 问答无响应同源问题）
 async function callChatCompletions(cfg, messages) {
@@ -5051,7 +5081,7 @@ async function enrichMilestonesWithLLM(items, badges) {
     const r = await classifyMilestoneLLM(it.text, cfg);
     if (!r) return;
     const dom = msDomainById(r.domainId);
-    for (const x of items) { if (x.text !== it.text) continue; x.domain = dom; if (r.label) x.label = r.label; }
+    for (const x of items) { if (x.text !== it.text) continue; x.domain = dom; x.domains = [dom]; if (r.label) x.label = r.label; }
     changed = true;
   });
   if (!changed) return;
@@ -6812,19 +6842,18 @@ function eeStop() {
  * 此前未设 artwork，系统通知左上角显示的是 PWA 默认图标（星星月亮），
  * 用户要求改为小咕噜头像（深色模式）。 */
 function eeArtworkUrl() {
-  const day = document.body.classList.contains('theme-day');
-  const rel = day ? DEFAULT_PHOTO_DAY : DEFAULT_PHOTO_DATA_SQ;
+  // v3.6.44 需求⑧：锁屏/通知媒体信息图标固定为小咕噜深色模式头像（photo-data-sq.webp，406x406），不再跟随主题
+  const rel = DEFAULT_PHOTO_DATA_SQ;
   try { return new URL(rel, location.href).href; } catch (e) { return rel; }   // 系统通知只认绝对 URL
 }
 function eeSetMediaMetadata(it) {
   if (!('mediaSession' in navigator) || !it) return;
-  const day = document.body.classList.contains('theme-day');
   try {
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: it.name,
-      artist: '小咕噜音频 · ' + it.type,
+      title: it.name,               // 主标题=试听音频名称（v3.6.44 需求⑧）
+      artist: '小咕噜音频',          // 副标题固定「小咕噜音频」（v3.6.44 需求⑧，原为「小咕噜音频 · 类型」）
       album: '早教音频',
-      artwork: [{ src: eeArtworkUrl(), sizes: day ? '320x320' : '406x406', type: 'image/webp' }]
+      artwork: [{ src: eeArtworkUrl(), sizes: '406x406', type: 'image/webp' }]
     });
   } catch (e) {}
 }
@@ -7852,7 +7881,7 @@ async function addKb() {
     classifyKbLLM(v, cfg).then(c => {
       if (!c || c === cat) return;
       const idx = KB.findIndex(x => x.text === v && x.cat === cat);
-      if (idx >= 0) { KB[idx].cat = c; saveKBLocal(); saveKBCloud(); renderKb(); updateKbCntLine(); }
+      if (idx >= 0) { KB[idx].cat = c; if (Array.isArray(KB[idx].cats)) KB[idx].cats = [c]; saveKBLocal(); saveKBCloud(); renderKb(); updateKbCntLine(); }
     }).catch(() => {});
   }
 }
@@ -7868,19 +7897,23 @@ function delKb(i) {
 }
 // v3.5.123 编辑知识库：由浏览器原生 prompt（单行，长文本看不全）改为与首页「编辑记录」同一套弹窗样式，
 // 支持多行文本（textarea 自动增高，最长 200px，超出内部滚动）
+// v3.6.44 需求⑦：编辑弹窗分类改为多选（checkbox-group，样式同添加记录）
 let _kbEditIdx = -1, _kbEditOrigCat = '';
+// v3.6.44 需求⑦：条目分类列表（兼容旧格式单 cat；cat 始终等于 cats[0]，供 AI 上下文等旧消费方使用）
+function kbCatsOf(x) { return (x && Array.isArray(x.cats) && x.cats.length) ? x.cats : (x && x.cat ? [x.cat] : []); }
 function editKb(i) {
   if (i < 0 || i >= KB.length) return;
   _kbEditIdx = i; _kbEditOrigCat = KB[i].cat;
-  // 分类下拉：可选分类 + 综合；若该条分类不在预设里（历史自定义），临时补进去，避免选择被重置
+  // 分类多选：可选分类 + 综合；若该条分类不在预设里（历史自定义），临时补进去，避免选择被重置
   const cats = KB_FILTER_CATS.concat();
+  const cur = kbCatsOf(KB[i]);
   if (KB[i].cat && !cats.includes(KB[i].cat)) cats.unshift(KB[i].cat);
   const catRow = document.getElementById('kbEditCatRow');
   if (catRow) {
-    catRow.innerHTML = '<label>分类:</label>'
-      + '<select id="kbEditCat">'
-      + cats.map(c => `<option value="${_escAttr(c)}"${c === KB[i].cat ? ' selected' : ''}>${_escAttr(c)}</option>`).join('')
-      + '</select>';
+    catRow.innerHTML = '<label>分类（可多选）:</label>'
+      + '<div class="checkbox-group" id="kbEditCatBox">'
+      + cats.map(c => `<label><input type="checkbox" value="${_escAttr(c)}"${cur.indexOf(c) !== -1 ? ' checked' : ''}> ${_escAttr(c)}</label>`).join('')
+      + '</div>';
   }
   const ta = document.getElementById('kbEditTa');
   if (ta) ta.value = KB[i].text;
@@ -7897,11 +7930,22 @@ function saveKbEdit() {
   const ta = document.getElementById('kbEditTa');
   const v = ta ? ta.value.trim() : '';
   if (!v) { showToast('内容不能为空'); if (ta) ta.focus(); return; }
-  const sel = document.getElementById('kbEditCat');
-  const chosen = sel ? sel.value : _kbEditOrigCat;
+  // v3.6.44 需求⑦：收集多选分类
+  const box = document.getElementById('kbEditCatBox');
+  const cats = [];
+  if (box) box.querySelectorAll('input[type="checkbox"]').forEach(c => { if (c.checked) cats.push(c.value); });
+  const origCats = kbCatsOf(KB[i]);
+  const sameSet = cats.length === origCats.length && cats.every(c => origCats.indexOf(c) !== -1);
   KB[i].text = v;
-  // 用户主动改了分类 → 尊重用户选择；未改分类 → 沿用原有关键词自动重分类（保持旧行为）
-  KB[i].cat = (chosen && chosen !== _kbEditOrigCat) ? chosen : aiClassifyKb(v);
+  if (cats.length && !sameSet) {
+    // 用户主动改了分类（多选）→ 尊重用户选择；cat 取首个，保持 AI 上下文等旧消费方兼容
+    KB[i].cats = cats.slice();
+    KB[i].cat = cats[0];
+  } else {
+    // 未改分类 → 沿用原有关键词自动重分类（保持旧行为）
+    KB[i].cat = aiClassifyKb(v);
+    delete KB[i].cats;
+  }
   hideModal('kbEditModal');
   saveKBLocal(); saveKBCloud(); renderKb(); updateKbCntLine();
 }
@@ -7916,7 +7960,7 @@ function reTagKb(i) {
   const items = KB_FILTER_CATS.map(c => ({ id: c, name: c, icon: KB_CAT_ICON[c] || '🏷️' }));
   openCatPicker('选择分类', items, KB[i].cat, (id) => {
     if (!id) return;
-    KB[i].cat = id; saveKBLocal(); saveKBCloud(); renderKb();
+    KB[i].cat = id; KB[i].cats = [id]; saveKBLocal(); saveKBCloud(); renderKb();
   });
 }
 // v3.5.122 知识库条目折叠/展开：编辑/删除/改分类需 stopPropagation，避免误触整条折叠切换
@@ -7928,14 +7972,15 @@ function renderKb() {
   const list = document.getElementById('kbList'); if (!list) return;
   // v3.5.127 知识库筛选：多选分类 + 文本搜索（默认全选+空搜索=显示全部）
   const q = (kbSearchQuery || '').trim().toLowerCase();
-  const arr = KB.filter(x => kbSelectedCats.has(x.cat) && (!q || (x.text || '').toLowerCase().includes(q)));
+  const arr = KB.filter(x => kbCatsOf(x).some(c => kbSelectedCats.has(c)) && (!q || (x.text || '').toLowerCase().includes(q)));
   const cnt = document.getElementById('kbCnt'); if (cnt) cnt.textContent = KB.length;
   if (!arr.length) { list.innerHTML = '<div class="ai-kb-empty">该分类下还没有内容～</div>'; return; }
   list.innerHTML = arr.map(x => {
     const realIdx = KB.indexOf(x);
     const expanded = kbExpanded.has(realIdx);
     return `<div class="ai-kb-item${expanded ? ' expanded' : ' collapsed'}" onclick="toggleKbExpand(${realIdx})"><div class="kb-body">`
-      + `<span class="ai-kb-tag" onclick="event.stopPropagation();reTagKb(${realIdx})" title="点此改分类">${escapeHtml(x.cat)}</span>`
+      // v3.6.44 需求⑦：多分类条目渲染多个标签（点任一标签都可改分类）
+      + kbCatsOf(x).map(c => `<span class="ai-kb-tag" onclick="event.stopPropagation();reTagKb(${realIdx})" title="点此改分类">${escapeHtml(c)}</span>`).join('')
       + `<div class="kb-txt">${escapeHtml(x.text)}</div>`
       + `<div class="kb-toggle">${expanded ? '▾ 收起' : '▸ 展开'}</div>`
       + `</div>`
@@ -8026,11 +8071,17 @@ function collectMilestones() {
   const ov = loadMsOverride();
   for (const it of items) {
     it.domain = classifyMilestone(it.text);
+    it.domains = [it.domain];   // v3.6.44 需求⑥：多类型（至少含自动分类的主类型）
     const ad = getAgeDetail(it.date);
     it.ageMonths = ad.months; it.ageDays = ad.days;
     const o = ov[msOverrideKey(it.date, it.text)];
     if (o) {
-      if (o.domainId) it.domain = msDomainById(o.domainId);
+      // v3.6.44 需求⑥：兼容旧格式 domainId（单选）与新格式 domainIds（多选）
+      const domIds = Array.isArray(o.domainIds) ? o.domainIds : (o.domainId ? [o.domainId] : []);
+      if (domIds.length) {
+        it.domains = domIds.map(msDomainById).filter(Boolean);
+        it.domain = it.domains[0];
+      }
       if (typeof o.isFirst === 'boolean') it.isFirst = o.isFirst;
     }
   }
@@ -8182,7 +8233,7 @@ function loadMilestoneBadgeCache() {
 function deriveBadgesFromItems(items) {
   const out = [];
   MILESTONE_BADGE_GROUPS.forEach((g, idx) => {
-    const hit = (items || []).find(i => i.isFirst && g.domains.indexOf(i.domain.id) !== -1);
+    const hit = (items || []).find(i => i.isFirst && msDomainsOf(i).some(d => g.domains.indexOf(d.id) !== -1));
     if (hit) out[idx] = { groupIdx: idx, text: hit.text, label: (hit.label && hit.label.trim()) ? hit.label.trim() : null, date: hit.date, domainId: hit.domain.id, fresh: true };
   });
   return out;
@@ -8214,7 +8265,7 @@ function renderMilestoneBadges(items, badges) {
       if (src && src.ageMonths != null) { hit.ageMonths = src.ageMonths; hit.ageDays = src.ageDays; }
       else { try { const ad = getAgeDetail(fixed.date); hit.ageMonths = ad.months; hit.ageDays = ad.days; } catch { hit.ageMonths = null; hit.ageDays = null; } }
     } else {
-      hit = (items || []).find(i => i.isFirst && g.domains.indexOf(i.domain.id) !== -1);
+      hit = (items || []).find(i => i.isFirst && msDomainsOf(i).some(d => g.domains.indexOf(d.id) !== -1));
     }
     if (hit) {
       _msBadgeHits[idx] = hit;
@@ -8271,12 +8322,14 @@ function renderMilestoneInner() {
     const ageLabel = `${head.ageMonths}月龄${head.ageDays > 0 ? head.ageDays + '天' : ''}`;
     let cards = '';
     for (const it of g.items) {
+      // v3.6.44 需求⑥：多类型条目渲染多个标签（主类型决定卡片左边框色）
       const d = it.domain;
+      const domTags = msDomainsOf(it).map(dm => `<span class="ms-tag" style="background:${dm.color}22;color:${dm.color}">${dm.icon} ${dm.name}</span>`).join('');
       const gi = _milestoneItems.indexOf(it);
       cards += `<div class="ms-card" style="border-left-color:${d.color}">` +
         `<div class="ms-text">${it.text.replace(/</g, '&lt;')}</div>` +
         `<div class="ms-meta">` +
-          `<span class="ms-tag" style="background:${d.color}22;color:${d.color}">${d.icon} ${d.name}</span>` +
+          domTags +
           (it.isFirst ? `<span class="ms-first">首次</span>` : '') +
           (isAchLiked(it.date) ? `<span class="ms-like-icon" title="已点赞">👍</span>` : '') +
         `</div>` +
@@ -8299,15 +8352,17 @@ function toggleMilestoneExpand() {
   const el = document.getElementById('milestoneTimeline');
   if (el) el.innerHTML = renderMilestoneInner();   // 只重绘时间轴，保持弹窗滚动位置
 }
-// v3.6.0 里程碑编辑：修改类型/是否首次
+// v3.6.0 里程碑编辑：修改类型（可多选，v3.6.44 需求⑥）/是否首次
 let _msEditIdx = -1, _msEditFirst = false;
 function openMsEdit(idx) {
   const it = _milestoneItems[idx]; if (!it) return;
   _msEditIdx = idx; _msEditFirst = !!it.isFirst;
-  const sel = document.getElementById('msEditType');
-  if (sel) {
-    sel.innerHTML = MILESTONE_DOMAINS.concat([MILESTONE_OTHER]).map(d => '<option value="' + d.id + '">' + d.icon + ' ' + d.name + '</option>').join('');
-    sel.value = it.domain.id;
+  // v3.6.44 需求⑥：类型改多选——checkbox-group（样式同添加记录），全领域+成长点滴
+  const box = document.getElementById('msEditTypeBox');
+  if (box) {
+    const doms = msDomainsOf(it);
+    box.innerHTML = MILESTONE_DOMAINS.concat([MILESTONE_OTHER]).map(d =>
+      '<label><input type="checkbox" value="' + d.id + '"' + (doms.some(x => x.id === d.id) ? ' checked' : '') + '> ' + d.icon + ' ' + d.name + '</label>').join('');
   }
   // v3.6.2 是否首次改用原生 radio（与辅食饭后情况同款），用 checked 回显
   const yes = document.getElementById('msFirstYes'), no = document.getElementById('msFirstNo');
@@ -8323,9 +8378,13 @@ function setMsFirst(v) {
 }
 function saveMsEdit() {
   const it = _milestoneItems[_msEditIdx]; if (!it) { hideModal('msEditModal'); return; }
-  const domId = (document.getElementById('msEditType') || {}).value || it.domain.id;
+  // v3.6.44 需求⑥：收集多选类型（一个都没勾则沿用原类型，防止误清空）
+  const box = document.getElementById('msEditTypeBox');
+  let domIds = [];
+  if (box) box.querySelectorAll('input[type="checkbox"]').forEach(c => { if (c.checked) domIds.push(c.value); });
+  if (!domIds.length) domIds = msDomainsOf(it).map(d => d.id);
   const ov = loadMsOverride();
-  ov[msOverrideKey(it.date, it.text)] = { domainId: domId, isFirst: _msEditFirst };
+  ov[msOverrideKey(it.date, it.text)] = { domainIds: domIds, isFirst: _msEditFirst };
   saveMsOverride(ov);
   // v3.6.30 用户明确：徽章只每 15 天刷新窗口更新一次，期内连「编辑里程碑」也不重新更新
   // ——保留徽章固化快照不动；仅把缓存 items 换成最新结果（时间轴/分类计数即时生效）

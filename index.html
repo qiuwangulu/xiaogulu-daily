@@ -1110,9 +1110,10 @@
   .nanny-vac-chip b { font-weight: 700; opacity: .8; }
   .nanny-vac-chip:active { transform: scale(.96); }
   /* v3.6.3 备忘录三区块标题统一：chevron + 图标 + 文案 + 计数，左对齐 */
+  /* v3.6.44 需求①：三个分区标题（待办事项/已办事项/育儿嫂休假）字号 14px→16px */
   .memo-todo-head, .memo-done-head, .nanny-vac-head {
     display: flex; align-items: center; gap: 6px; cursor: pointer;
-    font-size: 14px; font-weight: 700; color: #dfe6e9;
+    font-size: 16px; font-weight: 700; color: #dfe6e9;
     padding: 12px 2px 8px; user-select: none; -webkit-user-select: none;
   }
   .memo-todo-head .chev, .memo-done-head .chev, .nanny-vac-head .chev {
@@ -2070,8 +2071,9 @@
   /* v3.6.20 试听中：按钮变红=再点一次停止 */
   .ee-item .ee-play.ee-aud-ing { opacity: 1; }
   .ee-item .ee-play.ee-aud-ing svg { stroke: #e74c3c; fill: #e74c3c; }
-  .ee-item .ee-aud-tag { color: #e17055; }
-  body.theme-day .ee-item .ee-aud-tag { color: #d63031; }
+  /* v3.6.44 需求⑦：试听中文案由红色改为蓝色（深色主题 #74b9ff / 白天主题 #0984e3，与播放按钮蓝色系一致） */
+  .ee-item .ee-aud-tag { color: #74b9ff; }
+  body.theme-day .ee-item .ee-aud-tag { color: #0984e3; }
   .ee-item .rec-del { width: 24px; height: 24px; cursor: pointer; padding: 2px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; opacity: 0.75; transition: opacity 0.2s; background: transparent; border: none; }
   .ee-item .rec-del svg { width: 100%; height: 100%; display: block; stroke: #fff; stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
   .ee-item .rec-del:active { opacity: 1; }
@@ -2754,8 +2756,9 @@
     <button class="modal-close" onclick="hideModal('msEditModal')">&times;</button>
     <div class="modal-title">✏️ 修改里程碑</div>
     <div class="te-field">
-      <div class="te-label">类型</div>
-      <select id="msEditType" class="te-input"></select>
+      <div class="te-label">类型（可多选）</div>
+      <!-- v3.6.44 需求⑥：类型单选改为多选（checkbox-group，样式同添加记录） -->
+      <div class="checkbox-group" id="msEditTypeBox"></div>
     </div>
     <div class="te-field">
       <div class="te-label">是否首次</div>
@@ -2906,6 +2909,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.43"></script>
+<script src="app.js?v=v3.6.44"></script>
 </body>
 </html>
