@@ -2005,6 +2005,25 @@
   body.theme-day .ee-time { color: #7b8a94; }
   /* v3.5.158 首页早教按钮：左「切换」+ 右「播放」，样式复用首页添加按钮(.fab-btn)，左右与底部「添加/语音」对齐 */
   .ee-card .ee-actions { display: flex; justify-content: center; gap: 40px; margin-top: 2px; }
+  /* v3.6.46 播放模式下拉（随机 / 指定循环）：未播放时点「播放」先出菜单，播放中再点=停止（eeToggle 逻辑不变） */
+  .ee-play-wrap { position: relative; display: inline-flex; }
+  .ee-play-menu { display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
+    flex-direction: column; min-width: 136px; padding: 6px;
+    background: rgba(40,50,70,0.98); border: 1px solid rgba(255,255,255,0.18); border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .ee-play-menu.open { display: flex; }
+  .ee-play-menu button { padding: 9px 12px; border: none; border-radius: 8px; background: transparent;
+    color: #dfe6e9; font-size: 14px; text-align: left; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .ee-play-menu button:hover { background: rgba(255,255,255,0.08); }
+  .ee-play-menu button:active { transform: scale(0.97); }
+  body.theme-day .ee-play-menu { background: #fff; border-color: rgba(9,132,227,0.25); }
+  body.theme-day .ee-play-menu button { color: #3d4852; }
+  body.theme-day .ee-play-menu button:hover { background: rgba(9,132,227,0.08); }
+  /* v3.6.46 「指定音频循环放」弹窗底部操作条（已选数 + 取消/确定） */
+  .ee-pick-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
+  .ee-pick-cnt { font-size: 13px; color: #b2bec3; }
+  body.theme-day .ee-pick-cnt { color: #636e72; }
+  .ee-pick-btns { display: inline-flex; gap: 10px; }
   /* v3.5.158 管理 → 早教「播放音频数」 */
   .ee-count-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 2px 0 10px; }
   .ee-count-row .ee-count-label { font-size: 14px; color: #dfe6e9; }
@@ -2233,11 +2252,18 @@
       <div class="ee-play-hint-top">
         <span class="ee-hand">&#128071;</span><span class="ee-play-hint-title">放音乐</span>
       </div>
-      <!-- v3.6.24 连播提示语移到「放音乐」与按钮之间；「几首」动态取管理中的播放音频数（eeRefreshPlayHint 渲染） -->
-      <div class="ee-play-hint-bottom">点「播放 / 切换」会自动连播<span id="eePlayHintCount">5</span>首歌<span id="eePlayHintNote"></span>，播放中再点一次即停止</div>
+      <!-- v3.6.24 连播提示语移到「放音乐」与按钮之间；「几首」动态取管理中的播放音频数（eeRefreshPlayHint 渲染）；v3.6.46 文案改为随机/指定两种模式（#eePlayHintNote=「不足则全放」说明，仅随机模式相关） -->
+      <div class="ee-play-hint-bottom">点「播放」可选「随机」连播<span id="eePlayHintCount">5</span>首歌<span id="eePlayHintNote"></span>或「指定」循环播放，播放中再点一次即停止</div>
       <div class="ee-actions">
         <button class="fab-btn" id="eeSwitchBtn" onclick="eeSwitch()"><span class="fab-icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>切换</button>
-        <button class="fab-btn" id="eePlayBtn" onclick="eeToggle()"><span class="fab-icon" id="eeIco"><svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg></span><span id="eePlayLabel">播放</span></button>
+        <!-- v3.6.46 播放按钮外包下拉：未播放时点「播放」先出「随机/指定循环」菜单（播放中再点=停止，逻辑不变） -->
+        <span class="ee-play-wrap" id="eePlayWrap">
+          <button class="fab-btn" id="eePlayBtn" onclick="eeToggle()"><span class="fab-icon" id="eeIco"><svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg></span><span id="eePlayLabel">播放</span></button>
+          <div class="ee-play-menu" id="eePlayMenu">
+            <button type="button" onclick="eeStartRandom()">🎲 随机播放</button>
+            <button type="button" onclick="openEePickModal()">📋 指定循环</button>
+          </div>
+        </span>
       </div>
       <div class="ee-now" id="eeNowText">暂未添加音频，去「管理 → 音频」添加</div>
       <div class="ee-progress-row">
@@ -2608,7 +2634,7 @@
           <span class="ee-count-unit">首</span>
         </span>
       </div>
-      <div class="ee-count-hint">首页点「播放」会随机连播这么多首</div>
+      <div class="ee-count-hint">首页点「播放」可选随机连播这么多首，也可「指定」勾选歌曲循环播放</div>
       <div class="ee-usage" id="eeUsage"></div>
       <!-- v3.6.22 云同步改手动：「立即同步」按钮（.btn 样式同「☁️ 云端同步」）置左一行，状态词与提示移至按钮下方 -->
       <div class="ee-sync-row">
@@ -2634,6 +2660,28 @@
     <!-- v3.5.69 底部固定操作条：选项区很长，滚到最底下也能一键关闭（选项为即时保存，无需"保存"按钮） -->
     <div class="manage-footer">
       <button class="btn btn-success" onclick="hideModal('manageModal')">确定</button>
+    </div>
+  </div>
+</div>
+<!-- v3.6.46 「指定音频循环放」弹窗：首页播放下拉选「指定循环」打开——上方左侧类别下拉、右侧关键字搜索，列表仅显示音频名称，每首前勾选框（样式同添加记录），多选确定后回首页循环播放所选集 -->
+<div class="modal-overlay" id="eePickModal" onclick="closeModal(event,'eePickModal')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="hideModal('eePickModal')">&times;</button>
+    <div class="modal-title">指定音频循环放</div>
+    <div class="add-filter-row">
+      <div class="cat-dropdown" id="eePickCatDropdown">
+        <button class="cat-dropdown-btn" id="eePickCatBtn" type="button" onclick="toggleEePickCat()">📂 全部分类 ▾</button>
+        <div class="cat-dropdown-panel" id="eePickCatPanel"></div>
+      </div>
+      <input class="act-search" id="eePickSearch" type="text" placeholder="&#128269; 搜索音频名称…" oninput="onEePickSearch()">
+    </div>
+    <div class="add-list" id="eePickList"></div>
+    <div class="ee-pick-foot">
+      <span class="ee-pick-cnt" id="eePickCnt">已选 0 首</span>
+      <span class="ee-pick-btns">
+        <button class="btn" type="button" onclick="hideModal('eePickModal')">取消</button>
+        <button class="btn btn-success" type="button" onclick="confirmEePick()">确定</button>
+      </span>
     </div>
   </div>
 </div>
@@ -2946,6 +2994,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.45"></script>
+<script src="app.js?v=v3.6.46"></script>
 </body>
 </html>
