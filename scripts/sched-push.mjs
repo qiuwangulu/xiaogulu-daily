@@ -355,12 +355,22 @@ async function fetchHousekeeper(fid, key) {
   return hkDefault();
 }
 // 某人当月总天数口径（与前端 hkMonthTotalDays 一致）：
-//   上户中(on)：本月=1号至今天；历史月=整月
+//   v3.6.51 用户需求「如果上户日期在当月，当天日期减上户日期」：上户中(on)且上户日期在当月 →
+//     本月天数 = 当天 − 上户日期 + 1（含两端：上户当天即开始工作计 1 天，与下户口径「1号至下户日含当天」对称）；
+//     上户日期不在当月（更早月份上户）= 1号至今天；历史月=整月
 //   已下户(!on)：下户日期在当月=1号至下户日期（含当天）；否则整月
 function hkMonthTotalDays(person, ym, todayStr) {
   const dim = daysInMonth(ym);
   if (person.on) {
-    if (ym === todayStr.slice(0, 7)) return parseInt(todayStr.slice(8, 10), 10) || 1;
+    if (ym === todayStr.slice(0, 7)) {
+      const td = parseInt(todayStr.slice(8, 10), 10) || 1;
+      const sd = person.startDate;
+      if (sd && sd.slice(0, 7) === ym) {
+        const sdd = parseInt(sd.slice(8, 10), 10);
+        if (sdd >= 1 && sdd <= td) return td - sdd + 1;   // v3.6.51：上户日期在当月，按上户日至当天计
+      }
+      return td;
+    }
     return dim;
   }
   const end = person.endDate;
