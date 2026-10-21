@@ -237,7 +237,7 @@ function init() {
   aiInit();
   loadMemoCloud().catch(() => {});   // v3.5.115 备忘录启动即从家庭云恢复（本地优先合并）
   loadMsOverrideCloud().catch(() => {}); // v3.6.0 里程碑类型/首次覆盖 启动即从家庭云恢复
-  loadNannyVacationCloud().catch(() => {}); // v3.6.0 育儿嫂休假 启动即从家庭云恢复
+  loadHousekeeperCloud().catch(() => {}); // v3.6.0 育儿嫂休假 / v3.6.45 家政考勤 启动即从家庭云恢复
   loadAchLikesLocal();
   loadAchLikesCloud().then(() => refreshAchLikeUI()).catch(() => {}); // v3.6.7 成就点赞启动即从家庭云恢复
   setInterval(() => { if (!document.hidden) loadAchLikesCloud().then(() => refreshAchLikeUI()).catch(() => {}); }, 30000); // 家人点赞后本机及时可见
@@ -1512,7 +1512,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.44'; // v3.6.44: 六项用户需求——①备忘录三个分区标题（待办事项/已办事项/育儿嫂休假）字号 14px→16px（.memo-todo-head/.memo-done-head/.nanny-vac-head 共用规则，v3.6.44 需求①）②首页身高/体重输入按天清空（v3.6.44 需求④：loadHeight/loadWeight 改为只回填「当天」bodyHistory 记录，新的一天从空开始——前几天的记录完整保留在 bodyHistory（曲线/历史/AI 上下文不受影响）；saveHeight/saveWeight 输入为空时不再写空 babyHeight/babyWeight、不触发同步（保留「最新录入值」供 AI 引用）；新增 60s 跨天巡检（业务日 1 点翻页检测到日期变化即重载两个输入，load 自带焦点保护不会打断正在输入的用户））③成长里程碑编辑类型单选改多选（v3.6.44 需求⑥：openMsEdit 的 select 改为 checkbox-group（样式同添加记录），覆盖存储 ms_override_v1 新格式 {domainIds:[...], isFirst}，读兼容旧格式 domainId；collectMilestones 生成 it.domains 数组（it.domain=domains[0] 主类型，徽章缓存快照/LLM enrich 等无 domains 字段的路径经 msDomainsOf 回退）；时间轴卡片渲染多个类型标签；三大徽章组匹配改为「条目任一类型命中组 domains」）④AI育儿知识库编辑分类单选改多选（v3.6.44 需求⑦：editKb 的 select 改为 checkbox-group；保存时用户勾选与原集合不同→写 cats 数组（cat=cats[0] 保旧消费方兼容），相同→沿用关键词自动重分类（旧行为）；renderKb 筛选改「条目任一分类被选中」、列表渲染多个分类标签；reTagKb/LLM 精分回填同步维护 cats）⑤音频管理页「试听中」文案红改蓝（v3.6.44 需求⑧的上传图1：.ee-aud-tag 深色 #e17055→#74b9ff、白天 #d63031→#0984e3，与播放按钮蓝色系统一；按钮图标红色不变）⑥锁屏/通知媒体信息（v3.6.44 需求⑧的上传图2：artwork 固定为小咕噜深色模式头像 assets/photo-data-sq.webp 406x406 不再跟随主题（原浅色主题用 photo-day-v3 320x320）；主标题=音频名（title=it.name 本就如此，回归锁定）；副标题固定「小咕噜音频」（原「小咕噜音频 · 类型」）；title/artist/album/绝对URL 语义不变）。test_v3636.py 同步更新为新语义（浅色主题下 artwork 仍为深色头像、切主题不换 artwork、artist=小咕噜音频）。// v3.6.43: 三项用户反馈——①总览睡眠时长无记录时「暂无记录」改为「-」（与夜间「下次睡觉」的「-」占位风格统一；「下次睡觉」列保持「暂无记录」不变，体温/历史列表等其它暂无记录占位一律不动）；②总览「详情」胶囊由今日计划标题行下移一行至第二行最右侧（.ov-plan-detail-btn top:0→24px=一行行高 15px×1.6，right:0 贴右不变；卡片 min-height:48px 两行高，保证单行摘要时第二行也有空间放胶囊、不溢出到日报胶囊区域）；③备忘录待办勾选后停顿时长 3s→2s（_memoPendingDone 定时器 3000→2000，视觉 pending 标记/「已完成1件事」提示/二次点击撤销逻辑不变）。// v3.6.42: 去掉首页总览体温行 // v3.6.42: 去掉首页总览体温行（用户反馈「总览中去掉体温这一行」——v3.6.41 新增的「🌡️ 体温: 36.5℃ ● 20:30」整行移除，总览恢复为「下次喝奶+水奶量 / 下次睡觉+睡眠时长」两行结构；体温记录仍可在历史列表与添加弹窗正常查看/记录，仅总览不再展示。无 CSS 变动（.temp-normal/.temp-high 为既有样式类，历史列表仍在用，保留）。// v3.6.41: 首页总览新增体温行 // v3.6.41: 首页总览新增体温行（用户要求「首页测体温显示具体温度和正常/发烧的图标」）——总览在「下次睡觉/睡眠时长」行后新增「🌡️ 体温: 36.5℃ ● 20:30」：显示当天最后一次体温记录的具体数值+单位+状态图标+测量时间；状态口径与历史列表/添加弹窗实时指示完全一致（≤37.5℃ 正常=绿● / >37.5℃ 发烧=红⚠️，旧记录无 tempStatus 时按阈值现算）；当天无有效体温记录（temperature>0）则不占位——体温非每日必测，避免每天显示「暂无记录」拥挤总览。无新增 CSS（复用 overview-item/ov-value 与既有 .temp-normal/.temp-high）。// v3.6.40: 新增「辅食第N天食谱推荐」（用户要求「AI推荐今日计划：如果前一天添加了辅食，计为第一天，查询知识库，按添加辅食的时间和最相近的月龄，推荐当天的辅食食谱和制作方法，需要比较具体，比如多少度的水冲泡多少米粉」）——①collectPlanDayStats 的辅食记录补昨日添加时间(solidFoodTime/recTime)/克数(solidFoodAmount)/饭后情况(afterMeal)；②新增 solidFoodStreak()：从目标日往前逐日查辅食记录、遇空档即止（最多回看 60 天），streak=1 即昨日为辅食第1天（首次添加）、今日计划目标日=第 streak+1 天；③buildPlanSystemPrompt 在【辅食提醒】后新增【辅食第N天食谱推荐】规则——前一日有辅食记录时要求【喂养】辅食项给出当天具体食谱与制作方法，必须具体到：吃什么（观察未满2-3天仍吃同一种）/多少克多少毫升（比昨日增不超2成）/什么温度的水（如50-60℃温开水）与冲调蒸煮步骤稀稠程度/喂食时段（参考昨日添加时间，如上午10点）/过敏观察要点，并须结合知识库「辅食」条目与宝宝月龄，知识库无对应月龄食谱时按通用原则（6月龄高铁米粉稀糊、7-8月龄蛋黄肉泥、9-10月龄稠粥手指食物、11-12月龄软饭小丁）；④KB_EG_SEED_VER 2→3 新增 2 条「辅食」种子：按月龄食谱（具体到水温与克数：6月龄约50-60℃水、15g米粉+150ml水冲成缓慢滴落稀糊；7-8月龄20g+170ml稍稠+蛋黄肉泥；9-10月龄稠粥碎末+手指食物；11-12月龄小馄饨蒸糕软饭小丁）与添加观察原则；⑤PLAN_PROMPT_VERSION 12→13（服务端 sched-push.mjs 同步：collectPlanDayStats 同款增强 + solidFoodStreakCloud 一次拉 60 天记录逐日找辅食 + prompt 规则段逐字对齐 + 版本号 13）。// v3.6.39: 修复「将日报字体大小改为与AI育儿字体一样大」——实测两胶囊文字本就同为 12px/800（像素墨迹高 12.0 vs 11.8，基本相同），用户观感差异来自 v3.6.38 放大的 📈（15px）与 12px 文字的反差：AI育儿胶囊 12px 图标+12px 文字均匀显「正常大小」，日报胶囊 15px 图标+12px 文字显字小。若只调大日报则会变成日报反比AI育儿大、仍不一致，故两胶囊文字同步 12px→14px（.ov-report-pill 与 .ai-chip 两条规则），盒高均保持 25px 锁死不变——两胶囊文字真正一样大且更醒目；胶囊宽度各增约 8px（日报为右对齐、AI育儿为居中于头像下，均不破坏布局）。双主题截图验证两胶囊文字同大同醒目。// v3.6.38: 修复「把首页日报胶囊高度调大，和AI育儿胶囊高度调成一样」——实测两胶囊盒模型本就完全一致（均 height:25px、box-sizing:border-box、同 12px/800 字、同 1px 外框、内容盒均 23px，v3.5.153 起即锁死相同高度），观感差异来自 emoji 字形墨迹占比：👆（AI育儿）为竖向实心大手、墨迹占满字形箱；📈（日报）为方形网格、内置留白多，在部分设备 emoji 字体（如苹果/三星）下渲染更小，致日报胶囊显矮。修复：日报胶囊内 📈 用 span.pill-emoji 单独放大 12px→15px（flex-shrink:0 防压缩），视觉体量与 👆 拉齐；盒高保持 25px 不变（与 AI育儿胶囊真正一致），胶囊仅宽约 3px，位置与布局无变化。双主题截图验证视觉高度一致。// v3.6.36: 锁屏/通知媒体信息补 artwork——用户反馈「放音乐，锁屏时，左上角的音频图标改为小咕噜的头像（深色模式的）」，截图显示通知左上角是 PWA 默认图标（星星月亮）：MediaMetadata 从未设置 artwork，系统回退显示应用图标。修复：深色主题 artwork=assets/photo-data-sq.webp（从深色头像 photo-data.webp 居中裁切的 406x406 方形版，系统通知不裁切变形）；浅色主题=assets/photo-day-v3.webp（本身 320x320 方形）；artwork 一律转绝对 URL（系统通知只认绝对地址）；抽公共函数 eeSetMediaMetadata(it)，首页连播起播与管理页改名刷新共用；播放中切换主题（手动/跨时段自动）→ applyTheme 里即时刷新 artwork，头像跟随主题。title/artist/album 语义不变。新增 test_v3636.py 15/15（深色播放→方形深色头像+绝对URL+sizes 406x406+webp/浅色播放→photo-day-v3+320x320/播放中切主题 artwork 双向刷新/标题副标题专辑保持/改名同步锁屏标题且 artwork 不丢/方形头像资源可加载且 406x406）。// v3.6.35: 修复「设置连播5首，但还是2首就停止，无法继续播放」（用户第三次反馈，同一根因横跨 v3.6.30/v3.6.31/v3.6.34 三版）——根因是切歌时序竞态：eePlayItem 里 `_eeInternalPause=true; a.pause()` 在 finally 中同步复位，而 pause 事件是异步派达的——派达时标志已失效、eeCurrentId 还是旧曲，pause 处理器把 UI 误打成「已暂停：旧曲」+按钮「播放」+释放唤醒锁；新曲加载慢（play promise 未 resolve、eeAudio.paused 已因 play() 调用变 false）时该假状态持续数秒，用户看到「已暂停」点「播放」→ eeToggle 判定 !paused=正在播放 → eeStop() 真停，再点只能重开新队列——即「连播2首就停且无法继续」，全程无 toast。修复：①pause 事件处理器加「!eeAudio.paused → return」守卫（pause 后已恢复播放=切歌/恢复竞态，不是系统暂停，不更新 UI，从根上消除假「已暂停」）②eePlayItem 换 src 前先撤旧失败监控（_eeFailArmed=false+撤看门狗），武装延后一个 macrotask 且仅当仍未开播才武装——防旧 src 的 abort/error 噪声（X5 特性）命中新曲 armed 状态导致连续几首切歌凑满失败 3 首误停整条链；play() 早期 reject（同步/微任务早于武装）补 armed 再走失败处理，不漏同步 reject 死停 ③eePlayQueueItem 跳过已删墓碑条目，避免起播已删云端文件 404 触发失败链 ④eeAutoRecordOnPlay 包 try/catch，记录异常（云同步失败）不得阻断起播 ⑤亮屏续播：黑屏期间资源被系统收回（readyState=0 且无进度）直接重载当前曲，不断链。新增 test_v3635.py（切歌加载中不得假「已暂停」+pause 事件不破坏连播状态/真暂停→点播放恢复当前队列不清空不重开/src 切换 error 噪声不打断 5 首连播/墓碑条目跳过且队列继续/亮屏续播两路回归/停止后可重开/记录异常不阻断起播/播放数 5 队列 5）。// v3.6.34: 修复「点击成长里程碑徽章，详情显示 undefined月龄」——根因：v3.6.29 徽章固化后，renderMilestoneBadges 给固化徽章构造的 hit 只有 text/label/date/domain，缺 ageMonths/ageDays/isFirst，renderBadgeDetail 直接渲染 ${it.ageMonths} → 「undefined月龄」且不标「首次」（非固化路径从 items 现找不受影响，故只在徽章固化后的设备上复现）。修复：固化 hit 补 isFirst=true 与月龄——优先取 items 中同 text（同 date 优先）的完整条目，取不到按出生日期 getAgeDetail 现算（try/catch 兜底）；renderBadgeDetail 对缺失月龄不渲染该段，双保险绝不再出现 undefined。// v3.6.33: 修复「配好 AI 密钥、测试通过，但徽章仍是规则值」的剩余断链——用户确认密钥已配且测试通过，徽章却仍像没调 AI。定位四漏洞：①「测试」按钮假通过——classifyMilestoneLLM 缓存键 msllm:provider:model:hash 不含 apiKey，以前用有效密钥测过之后，即使密钥失效/输错，点「测试」仍命中旧缓存显示「✓ 返回」；现测试前先删测试文本的缓存键，保证通过来自真实 API 调用。②保存配置不清补救节流——之前打开分析时补救失败写过 ms_badge_ai_try（24h 节流），用户之后配好密钥，24h 内再打开分析也不会重试；现 saveAITagConfig 检测到配置真正变化（ms_badge_cfg_sig 签名比较）时清除该节流键并立即补救（配置没变则不重置，避免反复点保存反复打 API）。③补救触发依赖打开分析——用户配好密钥后不再打开分析页，徽章永远不更新；现 saveAITagConfig 保存成功后立即对无 AI label 的徽章组尝试补救一次（不在分析页时成功弹「徽章已更新为 AI 概括」）。④期内补救全失败时静默无声——现全部组仍无 label 时弹温和 toast「徽章 AI 概括失败，暂按规则显示（可到 管理 → AI 设置 点「测试」检查密钥）」（ms_badge_ai_fail_tip 24h 节流）；openAnalysis 路径的补救仍静默（用户正看着徽章变化）。v3.6.32 的期内补救/不重置刷新锚/已有 AI label 组绝不变/未配置 toast 指引等行为均不变。// v3.6.32: 修复「成长里程碑徽章像没调用 AI 大模型」——根因是固化设计漏洞：徽章一旦在无 AI label 的情况下固化（旧格式缓存升级时按规则结果即时固化 / 无密钥时进刷新窗口 / AI 调用失败），而 15 天刷新窗口只补「新解锁的组」，这些已固化的无 label 组永远等不到 AI 美化（截图中「妈妈出门休检半天…」正是规则回退的 slice(0,8)+省略号）。修复：①打开分析时若存在无 AI label 的徽章组且已配置 AI → 立即尝试 AI 美化一次（enrichMilestonesWithLLM 美化范围从「仅 fresh 组」扩大到「fresh 组 + 无 label 组」；已有 AI label 的已固化组仍绝不变；不重置 15 天刷新锚；失败 24h 节流）②AI 未配置时 toast 明确提示「请到 管理 → AI 设置 配置密钥（可先点测试）」，不再无声回退规则 ③刷新窗口 AI 调用失败有 toast 提示。15 天周期、期内固化、编辑不重算等既有语义均不变。// v3.6.31: 修复「设 5 首连播只播 2 首、手机黑屏就自动停」的收尾因素——黑屏/锁屏期间系统暂停音频（v3.6.30 已做到只暂停不散队），但连播链在黑屏期间断裂且亮屏后不会自动续播，用户看到的就是「没操作却停了」。现两层防护：①播放期间申请屏幕唤醒锁（Wake Lock API），尽量阻止自动熄屏——屏幕亮着页面就不冻结、音频焦点不丢、连播不断；页面切后台/系统暂停/用户停止时按规范释放（省电），亮屏或恢复播放时重新申请；微信 X5 等旧内核不支持时静默降级。②亮屏自动续播（visibilitychange→visible）：队列还在且音频处于暂停态 → 自动从当前这首继续（UI 恢复「正在播放」）；若当前首在黑屏期间已播完（X5/页面冻结丢 ended）→ 直接下一首；恢复失败（音频资源被收）→ 重载当前曲；用户经媒体通知/锁屏控件主动暂停（_eeUserPaused）时不自动续播，尊重意图，点 App 内播放按钮仍可随时恢复。另修：锁屏媒体通知的「播放」旧实现只 play() 不刷新 App 界面（通知续播后 App 仍显示「已暂停」）——现同步 UI 与唤醒锁。// v3.6.30: ①徽章更新策略按用户明确调整——仍每 15 天刷新窗口更新一次、期内固化，且「更新里程碑记录/编辑里程碑」都不再重新更新徽章（v3.6.29 的「编辑即重推」已回退：saveMsEdit 保留徽章固化快照不动，仅刷新缓存 items 供时间轴/分类即时生效，且不重置 15 天刷新锚）②修复「播放音频数设为 5 却只连播 2 首」多重因素：(a) 播放数云同步旧逻辑无条件用云端值覆盖本地——某次保存上传失败/他端旧值后写，本地设置就被顶掉且每次开 App/切前台复发；现本地保存记时间戳，仅当云端 last_modified 更新才覆盖；(b) 连播看门狗 10s→15s 且加载超时改为只跳过本首、不计入连续失败（慢网络下 3 首慢歌误杀整条链是「播 2 首就停」的误停机制；真正无法播放的文件仍走 error/play reject 连续 3 首停+toast；整队超时有 toast 兜底）；(c) 系统/锁屏暂停旧逻辑直接 eeStop 清队列（mediaSession pause 与音频焦点丢失）——现只暂停不散队、UI 显示「已暂停」、点按钮从当前这首继续；(d) 防同一 src 重复 ended（微信 X5 pause/currentTime 归零后重发会导致莫名跳首）；(e) 连播提示语诚实显示实际可连播数=min(设置数, 现有音频数)，不足则明说「不足则全放」。// v3.6.29: ①成长里程碑徽章固化——双根因导致徽章「突然改乱」：(a) v3.6.17 起 enrichMilestonesWithLLM 内 Promise.allSettled(_mapPool(...)) 包住 async 函数的 Promise，每次必抛 "object is not iterable" → AI label 从未落盘；(b) 徽章每 15 天周期重算且刷新时先把无 AI 标签的规则结果存缓存（AI 异步返回前离开即被污染）→ 徽章标题从 AI 概括退化为规则截断。现徽章一经确定即永久固化（缓存新增 badges 快照，renderMilestoneBadges 优先用固化徽章；刷新窗口只补未解锁组，AI label 仅美化本次新固化组一次；旧格式缓存首次打开即时推导固化；手动编辑里程碑属用户显式意图，重推并固化）②总览右列冒号与数值间隔改为与「下次喝奶: 02:25」一致（4px）——label/数值/单位均 auto 宽、数值紧跟冒号，item 132→120px（右移右缘不变）；v3.6.28 的 h 与 l 对齐因与冒号紧凑互斥移除。// v3.6.28: ①总览「下次睡觉」图标 🌙→😴（与 ACTIVITY_TYPES/日报/图表的睡眠图标体系统一）②睡眠时长单位「h」右移约一个字符宽与上一行「ml」的「l」对齐（.ov-unit.unit-h padding-left:0.83em，unit 框 20→22px，item 总宽 132 不变）；「睡」与「水」第一个字对齐、数值右端对齐保持不变（两端对齐）。// v3.6.27: 总览「下一次睡觉」→「下次睡觉」，与「下次喝奶」口径统一（toast 早已是「距下次喝奶/睡觉」）。// v3.6.26: ①toast 与总览口径统一「距下一次喝奶」→「距下次喝奶」（总览 label 早已是「下次喝奶:」）②总览右列（水+奶量/睡眠时长）整体收紧往右移——item 156→132px、label 76→66px（冒号与数值间隔减少）、数值 42→36px、单位 26→20px、gap 5→4px，第一个字与单位仍保持对齐③「放音乐」标题字重 700→400——与「🎵 听歌/🎧 听故事」（.ee-sub-head）及「🍼 喝奶」等卡片标题（.card-name，均 16px/400）视觉一致（用户反馈 700 观感偏大）。// v3.6.24: ①首页总览「今日计划 / 今日成就」字号 14px→15px，与「下一次喝奶」行一致（水+奶量等同比例统一）②「放音乐」标题 14px→16px 与「🎵 听歌」标题同尺寸；连播提示语从按钮下方移到「放音乐」与按钮之间，且「几首」改为管理里的实际播放音频数（如 5 首，动态渲染）③总览「下次喝奶」下方新增「下一次睡觉 / 睡眠时长」行——5-19 点按「上一次睡眠开始时间+睡眠时长+2 小时」预估下次睡觉时间，19-凌晨 5 点显示「-」，右侧显示上一次睡眠时长（如 13.5 h）；刷新网页的「距下一次喝奶」toast 增加距睡觉倒计时，简化提示语为「距下一次喝奶/睡觉：h min / h min」。// v3.6.23: 播放自动记录改为「每次播放新增去重后的记录」——v3.6.22 的「每类每天仅 1 条」不符合预期（用户反馈：点一次播放就应记一次，同一天可多次播放多次记录）；去重维度改为「同一次播放队列内」：多首故事（中文/英文/古诗）仍合并 1 条听故事、多首儿歌合并 1 条听歌；提示语改为「已添加1条听故事/听歌记录」；切换（eeSwitch）与连播自动接歌仍不记录。// v3.6.22: ①首页「放音乐」手指图标放大 12px→16px（与听歌/听故事图标同尺寸）②修复管理弹窗滚到底时最后一项音频被吸底「确定」条遮住（选项面板底部留白 72px）③播放自动记录去重——每类每天仅 1 条（中文/英文/古诗合并为 1 条听故事、儿歌 1 条听歌），今日已有同类型记录则只高亮已有记录并提示「已添加」，停止后再播放 / 切换不再重复添加 ④早教音频云同步改手动——只有点「立即同步」才加密上云共享（按钮改 .btn 样式置左、状态词与提示移至按钮下方），本地改动只存本机并标记「有改动未同步」，云端拉取仍自动（启动 + 切回前台），家人设备刷新 / 重开即可看到。// v3.6.21: ①修复首页连播「播了几首就莫名停止」——音频元素 error 事件此前无处理（加载失败即死停）、起播无看门狗（加载挂起会卡在「加载中」）、播放/停止按钮无防抖（连击/幽灵点击会误停）；现三路归一失败处理（error/play reject/10s 看门狗）：单曲失败自动跳下一首，连续 3 首失败才停止并明确 toast 原因，按钮加 400ms 防抖 ②修复「管理里删除/新增音频，家人手机不同步」——旧合并逻辑是并集且本地优先，删除直接 splice 导致他端把已删歌曲复活、改名/改分类也不传播；现改墓碑式删除（deleted 标记随云同步，30 天后压缩清理）+ 同 id 按 updatedAt 取新版冲突合并 + 云端保存失败不再静默（管理页早教页新增云同步状态行，失败 toast + 自动重试 + 手动「立即同步」）+ 切回前台节流补拉云端列表 ③首页音频卡新增「放音乐」指引——切换/播放上方左侧指向下手指（尺寸颜色同 AI育儿 图标）+ 右侧加粗黄色「放音乐」，按钮下方灰色小字提示连播与停止方式。// v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
+const APP_VERSION = 'v3.6.45'; // v3.6.45: 两项用户需求——①备忘录「育儿嫂休假」升级为「家政考勤」（v3.6.45 需求②）：分区标题改「家政考勤」（🏠），下含钟点工/育儿嫂两个子标题；每个子标题带「是否上户」开关（样式同管理中的活动开关 .toggle-switch，默认开启）；上户中→显示上户日期（日期选择组件，样式同添加休假日期的组件）+ 当月休假和工作时间；已下户→显示下户日期 + 自动清掉超出下户日期的休假 + 提示「请根据微信推送消息，结算家政当月的工资」；当月工作时间 = 当月1号至下户日期或当月最后一天的总天数 − 休假天数（上户中：当月=1号至今天、历史月=整月；已下户：下户日期在当月=1号至下户日期）；日期选择组件支持选半天（多选提示条内每个已选日期带「全天/半天」切换按钮，按 1/0.5 计数），日历中超出下户日期的日期置灰不可选；数据模型 housekeeper_v1：每人 {on,startDate,endDate,vac:{日期:1|0.5}}，云键 _housekeeper（本地优先并集合并）；旧数据自动迁移：旧 nanny_vacation_v1 平铺数组 → 育儿嫂.vac（值1），旧云键 _nanny_vacation 兼容读取；保留 getNannyVacation/addNannyVacation/removeNannyVacation/renderNannyVacation/openNannyVacationPicker 兼容旧调用方。②任务工资结算改造（v3.6.45 需求③）：任务编辑新增「满勤月工资/满勤天数」输入（默认 10000 元/26 天，getTaskWageVals 读写、旧任务回落默认）；computeWage 改为「满勤月工资÷满勤天数×当月工作天数」，当月工作天数取家政考勤·育儿嫂（当月总天数−当月休假，0.5计数），结算月=触发日前一天所在月（下户提前推送时=下户当月）；添加/编辑弹窗工资结算图标 👩→💰；关闭任务不再推送（pushTask 入口终检 task.enabled===false 直接不推，覆盖已认领/并发窗口场景）；当月有下户日期时推送提前至下户日期当天同一时刻（runScheduler 中 wage 任务的 trig 用「下户日期+任务开始时刻」替换原触发点，原日期不再推；periodKey 随调整后 trig 计算，不重复推）；服务端 scripts/sched-push.mjs 同步：fetchHousekeeperCloud（新键+旧键兜底）、computeWage 新口径、下户提前推送、archiveNannyMonthCloud 改操作 housekeeper.nanny.vac（保留 0.5 值）。// v3.6.44: 六项用户需求——①备忘录三个分区标题（待办事项/已办事项/育儿嫂休假）字号 14px→16px（.memo-todo-head/.memo-done-head/.nanny-vac-head 共用规则，v3.6.44 需求①）②首页身高/体重输入按天清空（v3.6.44 需求④：loadHeight/loadWeight 改为只回填「当天」bodyHistory 记录，新的一天从空开始——前几天的记录完整保留在 bodyHistory（曲线/历史/AI 上下文不受影响）；saveHeight/saveWeight 输入为空时不再写空 babyHeight/babyWeight、不触发同步（保留「最新录入值」供 AI 引用）；新增 60s 跨天巡检（业务日 1 点翻页检测到日期变化即重载两个输入，load 自带焦点保护不会打断正在输入的用户））③成长里程碑编辑类型单选改多选（v3.6.44 需求⑥：openMsEdit 的 select 改为 checkbox-group（样式同添加记录），覆盖存储 ms_override_v1 新格式 {domainIds:[...], isFirst}，读兼容旧格式 domainId；collectMilestones 生成 it.domains 数组（it.domain=domains[0] 主类型，徽章缓存快照/LLM enrich 等无 domains 字段的路径经 msDomainsOf 回退）；时间轴卡片渲染多个类型标签；三大徽章组匹配改为「条目任一类型命中组 domains」）④AI育儿知识库编辑分类单选改多选（v3.6.44 需求⑦：editKb 的 select 改为 checkbox-group；保存时用户勾选与原集合不同→写 cats 数组（cat=cats[0] 保旧消费方兼容），相同→沿用关键词自动重分类（旧行为）；renderKb 筛选改「条目任一分类被选中」、列表渲染多个分类标签；reTagKb/LLM 精分回填同步维护 cats）⑤音频管理页「试听中」文案红改蓝（v3.6.44 需求⑧的上传图1：.ee-aud-tag 深色 #e17055→#74b9ff、白天 #d63031→#0984e3，与播放按钮蓝色系统一；按钮图标红色不变）⑥锁屏/通知媒体信息（v3.6.44 需求⑧的上传图2：artwork 固定为小咕噜深色模式头像 assets/photo-data-sq.webp 406x406 不再跟随主题（原浅色主题用 photo-day-v3 320x320）；主标题=音频名（title=it.name 本就如此，回归锁定）；副标题固定「小咕噜音频」（原「小咕噜音频 · 类型」）；title/artist/album/绝对URL 语义不变）。test_v3636.py 同步更新为新语义（浅色主题下 artwork 仍为深色头像、切主题不换 artwork、artist=小咕噜音频）。// v3.6.43: 三项用户反馈——①总览睡眠时长无记录时「暂无记录」改为「-」（与夜间「下次睡觉」的「-」占位风格统一；「下次睡觉」列保持「暂无记录」不变，体温/历史列表等其它暂无记录占位一律不动）；②总览「详情」胶囊由今日计划标题行下移一行至第二行最右侧（.ov-plan-detail-btn top:0→24px=一行行高 15px×1.6，right:0 贴右不变；卡片 min-height:48px 两行高，保证单行摘要时第二行也有空间放胶囊、不溢出到日报胶囊区域）；③备忘录待办勾选后停顿时长 3s→2s（_memoPendingDone 定时器 3000→2000，视觉 pending 标记/「已完成1件事」提示/二次点击撤销逻辑不变）。// v3.6.42: 去掉首页总览体温行 // v3.6.42: 去掉首页总览体温行（用户反馈「总览中去掉体温这一行」——v3.6.41 新增的「🌡️ 体温: 36.5℃ ● 20:30」整行移除，总览恢复为「下次喝奶+水奶量 / 下次睡觉+睡眠时长」两行结构；体温记录仍可在历史列表与添加弹窗正常查看/记录，仅总览不再展示。无 CSS 变动（.temp-normal/.temp-high 为既有样式类，历史列表仍在用，保留）。// v3.6.41: 首页总览新增体温行 // v3.6.41: 首页总览新增体温行（用户要求「首页测体温显示具体温度和正常/发烧的图标」）——总览在「下次睡觉/睡眠时长」行后新增「🌡️ 体温: 36.5℃ ● 20:30」：显示当天最后一次体温记录的具体数值+单位+状态图标+测量时间；状态口径与历史列表/添加弹窗实时指示完全一致（≤37.5℃ 正常=绿● / >37.5℃ 发烧=红⚠️，旧记录无 tempStatus 时按阈值现算）；当天无有效体温记录（temperature>0）则不占位——体温非每日必测，避免每天显示「暂无记录」拥挤总览。无新增 CSS（复用 overview-item/ov-value 与既有 .temp-normal/.temp-high）。// v3.6.40: 新增「辅食第N天食谱推荐」（用户要求「AI推荐今日计划：如果前一天添加了辅食，计为第一天，查询知识库，按添加辅食的时间和最相近的月龄，推荐当天的辅食食谱和制作方法，需要比较具体，比如多少度的水冲泡多少米粉」）——①collectPlanDayStats 的辅食记录补昨日添加时间(solidFoodTime/recTime)/克数(solidFoodAmount)/饭后情况(afterMeal)；②新增 solidFoodStreak()：从目标日往前逐日查辅食记录、遇空档即止（最多回看 60 天），streak=1 即昨日为辅食第1天（首次添加）、今日计划目标日=第 streak+1 天；③buildPlanSystemPrompt 在【辅食提醒】后新增【辅食第N天食谱推荐】规则——前一日有辅食记录时要求【喂养】辅食项给出当天具体食谱与制作方法，必须具体到：吃什么（观察未满2-3天仍吃同一种）/多少克多少毫升（比昨日增不超2成）/什么温度的水（如50-60℃温开水）与冲调蒸煮步骤稀稠程度/喂食时段（参考昨日添加时间，如上午10点）/过敏观察要点，并须结合知识库「辅食」条目与宝宝月龄，知识库无对应月龄食谱时按通用原则（6月龄高铁米粉稀糊、7-8月龄蛋黄肉泥、9-10月龄稠粥手指食物、11-12月龄软饭小丁）；④KB_EG_SEED_VER 2→3 新增 2 条「辅食」种子：按月龄食谱（具体到水温与克数：6月龄约50-60℃水、15g米粉+150ml水冲成缓慢滴落稀糊；7-8月龄20g+170ml稍稠+蛋黄肉泥；9-10月龄稠粥碎末+手指食物；11-12月龄小馄饨蒸糕软饭小丁）与添加观察原则；⑤PLAN_PROMPT_VERSION 12→13（服务端 sched-push.mjs 同步：collectPlanDayStats 同款增强 + solidFoodStreakCloud 一次拉 60 天记录逐日找辅食 + prompt 规则段逐字对齐 + 版本号 13）。// v3.6.39: 修复「将日报字体大小改为与AI育儿字体一样大」——实测两胶囊文字本就同为 12px/800（像素墨迹高 12.0 vs 11.8，基本相同），用户观感差异来自 v3.6.38 放大的 📈（15px）与 12px 文字的反差：AI育儿胶囊 12px 图标+12px 文字均匀显「正常大小」，日报胶囊 15px 图标+12px 文字显字小。若只调大日报则会变成日报反比AI育儿大、仍不一致，故两胶囊文字同步 12px→14px（.ov-report-pill 与 .ai-chip 两条规则），盒高均保持 25px 锁死不变——两胶囊文字真正一样大且更醒目；胶囊宽度各增约 8px（日报为右对齐、AI育儿为居中于头像下，均不破坏布局）。双主题截图验证两胶囊文字同大同醒目。// v3.6.38: 修复「把首页日报胶囊高度调大，和AI育儿胶囊高度调成一样」——实测两胶囊盒模型本就完全一致（均 height:25px、box-sizing:border-box、同 12px/800 字、同 1px 外框、内容盒均 23px，v3.5.153 起即锁死相同高度），观感差异来自 emoji 字形墨迹占比：👆（AI育儿）为竖向实心大手、墨迹占满字形箱；📈（日报）为方形网格、内置留白多，在部分设备 emoji 字体（如苹果/三星）下渲染更小，致日报胶囊显矮。修复：日报胶囊内 📈 用 span.pill-emoji 单独放大 12px→15px（flex-shrink:0 防压缩），视觉体量与 👆 拉齐；盒高保持 25px 不变（与 AI育儿胶囊真正一致），胶囊仅宽约 3px，位置与布局无变化。双主题截图验证视觉高度一致。// v3.6.36: 锁屏/通知媒体信息补 artwork——用户反馈「放音乐，锁屏时，左上角的音频图标改为小咕噜的头像（深色模式的）」，截图显示通知左上角是 PWA 默认图标（星星月亮）：MediaMetadata 从未设置 artwork，系统回退显示应用图标。修复：深色主题 artwork=assets/photo-data-sq.webp（从深色头像 photo-data.webp 居中裁切的 406x406 方形版，系统通知不裁切变形）；浅色主题=assets/photo-day-v3.webp（本身 320x320 方形）；artwork 一律转绝对 URL（系统通知只认绝对地址）；抽公共函数 eeSetMediaMetadata(it)，首页连播起播与管理页改名刷新共用；播放中切换主题（手动/跨时段自动）→ applyTheme 里即时刷新 artwork，头像跟随主题。title/artist/album 语义不变。新增 test_v3636.py 15/15（深色播放→方形深色头像+绝对URL+sizes 406x406+webp/浅色播放→photo-day-v3+320x320/播放中切主题 artwork 双向刷新/标题副标题专辑保持/改名同步锁屏标题且 artwork 不丢/方形头像资源可加载且 406x406）。// v3.6.35: 修复「设置连播5首，但还是2首就停止，无法继续播放」（用户第三次反馈，同一根因横跨 v3.6.30/v3.6.31/v3.6.34 三版）——根因是切歌时序竞态：eePlayItem 里 `_eeInternalPause=true; a.pause()` 在 finally 中同步复位，而 pause 事件是异步派达的——派达时标志已失效、eeCurrentId 还是旧曲，pause 处理器把 UI 误打成「已暂停：旧曲」+按钮「播放」+释放唤醒锁；新曲加载慢（play promise 未 resolve、eeAudio.paused 已因 play() 调用变 false）时该假状态持续数秒，用户看到「已暂停」点「播放」→ eeToggle 判定 !paused=正在播放 → eeStop() 真停，再点只能重开新队列——即「连播2首就停且无法继续」，全程无 toast。修复：①pause 事件处理器加「!eeAudio.paused → return」守卫（pause 后已恢复播放=切歌/恢复竞态，不是系统暂停，不更新 UI，从根上消除假「已暂停」）②eePlayItem 换 src 前先撤旧失败监控（_eeFailArmed=false+撤看门狗），武装延后一个 macrotask 且仅当仍未开播才武装——防旧 src 的 abort/error 噪声（X5 特性）命中新曲 armed 状态导致连续几首切歌凑满失败 3 首误停整条链；play() 早期 reject（同步/微任务早于武装）补 armed 再走失败处理，不漏同步 reject 死停 ③eePlayQueueItem 跳过已删墓碑条目，避免起播已删云端文件 404 触发失败链 ④eeAutoRecordOnPlay 包 try/catch，记录异常（云同步失败）不得阻断起播 ⑤亮屏续播：黑屏期间资源被系统收回（readyState=0 且无进度）直接重载当前曲，不断链。新增 test_v3635.py（切歌加载中不得假「已暂停」+pause 事件不破坏连播状态/真暂停→点播放恢复当前队列不清空不重开/src 切换 error 噪声不打断 5 首连播/墓碑条目跳过且队列继续/亮屏续播两路回归/停止后可重开/记录异常不阻断起播/播放数 5 队列 5）。// v3.6.34: 修复「点击成长里程碑徽章，详情显示 undefined月龄」——根因：v3.6.29 徽章固化后，renderMilestoneBadges 给固化徽章构造的 hit 只有 text/label/date/domain，缺 ageMonths/ageDays/isFirst，renderBadgeDetail 直接渲染 ${it.ageMonths} → 「undefined月龄」且不标「首次」（非固化路径从 items 现找不受影响，故只在徽章固化后的设备上复现）。修复：固化 hit 补 isFirst=true 与月龄——优先取 items 中同 text（同 date 优先）的完整条目，取不到按出生日期 getAgeDetail 现算（try/catch 兜底）；renderBadgeDetail 对缺失月龄不渲染该段，双保险绝不再出现 undefined。// v3.6.33: 修复「配好 AI 密钥、测试通过，但徽章仍是规则值」的剩余断链——用户确认密钥已配且测试通过，徽章却仍像没调 AI。定位四漏洞：①「测试」按钮假通过——classifyMilestoneLLM 缓存键 msllm:provider:model:hash 不含 apiKey，以前用有效密钥测过之后，即使密钥失效/输错，点「测试」仍命中旧缓存显示「✓ 返回」；现测试前先删测试文本的缓存键，保证通过来自真实 API 调用。②保存配置不清补救节流——之前打开分析时补救失败写过 ms_badge_ai_try（24h 节流），用户之后配好密钥，24h 内再打开分析也不会重试；现 saveAITagConfig 检测到配置真正变化（ms_badge_cfg_sig 签名比较）时清除该节流键并立即补救（配置没变则不重置，避免反复点保存反复打 API）。③补救触发依赖打开分析——用户配好密钥后不再打开分析页，徽章永远不更新；现 saveAITagConfig 保存成功后立即对无 AI label 的徽章组尝试补救一次（不在分析页时成功弹「徽章已更新为 AI 概括」）。④期内补救全失败时静默无声——现全部组仍无 label 时弹温和 toast「徽章 AI 概括失败，暂按规则显示（可到 管理 → AI 设置 点「测试」检查密钥）」（ms_badge_ai_fail_tip 24h 节流）；openAnalysis 路径的补救仍静默（用户正看着徽章变化）。v3.6.32 的期内补救/不重置刷新锚/已有 AI label 组绝不变/未配置 toast 指引等行为均不变。// v3.6.32: 修复「成长里程碑徽章像没调用 AI 大模型」——根因是固化设计漏洞：徽章一旦在无 AI label 的情况下固化（旧格式缓存升级时按规则结果即时固化 / 无密钥时进刷新窗口 / AI 调用失败），而 15 天刷新窗口只补「新解锁的组」，这些已固化的无 label 组永远等不到 AI 美化（截图中「妈妈出门休检半天…」正是规则回退的 slice(0,8)+省略号）。修复：①打开分析时若存在无 AI label 的徽章组且已配置 AI → 立即尝试 AI 美化一次（enrichMilestonesWithLLM 美化范围从「仅 fresh 组」扩大到「fresh 组 + 无 label 组」；已有 AI label 的已固化组仍绝不变；不重置 15 天刷新锚；失败 24h 节流）②AI 未配置时 toast 明确提示「请到 管理 → AI 设置 配置密钥（可先点测试）」，不再无声回退规则 ③刷新窗口 AI 调用失败有 toast 提示。15 天周期、期内固化、编辑不重算等既有语义均不变。// v3.6.31: 修复「设 5 首连播只播 2 首、手机黑屏就自动停」的收尾因素——黑屏/锁屏期间系统暂停音频（v3.6.30 已做到只暂停不散队），但连播链在黑屏期间断裂且亮屏后不会自动续播，用户看到的就是「没操作却停了」。现两层防护：①播放期间申请屏幕唤醒锁（Wake Lock API），尽量阻止自动熄屏——屏幕亮着页面就不冻结、音频焦点不丢、连播不断；页面切后台/系统暂停/用户停止时按规范释放（省电），亮屏或恢复播放时重新申请；微信 X5 等旧内核不支持时静默降级。②亮屏自动续播（visibilitychange→visible）：队列还在且音频处于暂停态 → 自动从当前这首继续（UI 恢复「正在播放」）；若当前首在黑屏期间已播完（X5/页面冻结丢 ended）→ 直接下一首；恢复失败（音频资源被收）→ 重载当前曲；用户经媒体通知/锁屏控件主动暂停（_eeUserPaused）时不自动续播，尊重意图，点 App 内播放按钮仍可随时恢复。另修：锁屏媒体通知的「播放」旧实现只 play() 不刷新 App 界面（通知续播后 App 仍显示「已暂停」）——现同步 UI 与唤醒锁。// v3.6.30: ①徽章更新策略按用户明确调整——仍每 15 天刷新窗口更新一次、期内固化，且「更新里程碑记录/编辑里程碑」都不再重新更新徽章（v3.6.29 的「编辑即重推」已回退：saveMsEdit 保留徽章固化快照不动，仅刷新缓存 items 供时间轴/分类即时生效，且不重置 15 天刷新锚）②修复「播放音频数设为 5 却只连播 2 首」多重因素：(a) 播放数云同步旧逻辑无条件用云端值覆盖本地——某次保存上传失败/他端旧值后写，本地设置就被顶掉且每次开 App/切前台复发；现本地保存记时间戳，仅当云端 last_modified 更新才覆盖；(b) 连播看门狗 10s→15s 且加载超时改为只跳过本首、不计入连续失败（慢网络下 3 首慢歌误杀整条链是「播 2 首就停」的误停机制；真正无法播放的文件仍走 error/play reject 连续 3 首停+toast；整队超时有 toast 兜底）；(c) 系统/锁屏暂停旧逻辑直接 eeStop 清队列（mediaSession pause 与音频焦点丢失）——现只暂停不散队、UI 显示「已暂停」、点按钮从当前这首继续；(d) 防同一 src 重复 ended（微信 X5 pause/currentTime 归零后重发会导致莫名跳首）；(e) 连播提示语诚实显示实际可连播数=min(设置数, 现有音频数)，不足则明说「不足则全放」。// v3.6.29: ①成长里程碑徽章固化——双根因导致徽章「突然改乱」：(a) v3.6.17 起 enrichMilestonesWithLLM 内 Promise.allSettled(_mapPool(...)) 包住 async 函数的 Promise，每次必抛 "object is not iterable" → AI label 从未落盘；(b) 徽章每 15 天周期重算且刷新时先把无 AI 标签的规则结果存缓存（AI 异步返回前离开即被污染）→ 徽章标题从 AI 概括退化为规则截断。现徽章一经确定即永久固化（缓存新增 badges 快照，renderMilestoneBadges 优先用固化徽章；刷新窗口只补未解锁组，AI label 仅美化本次新固化组一次；旧格式缓存首次打开即时推导固化；手动编辑里程碑属用户显式意图，重推并固化）②总览右列冒号与数值间隔改为与「下次喝奶: 02:25」一致（4px）——label/数值/单位均 auto 宽、数值紧跟冒号，item 132→120px（右移右缘不变）；v3.6.28 的 h 与 l 对齐因与冒号紧凑互斥移除。// v3.6.28: ①总览「下次睡觉」图标 🌙→😴（与 ACTIVITY_TYPES/日报/图表的睡眠图标体系统一）②睡眠时长单位「h」右移约一个字符宽与上一行「ml」的「l」对齐（.ov-unit.unit-h padding-left:0.83em，unit 框 20→22px，item 总宽 132 不变）；「睡」与「水」第一个字对齐、数值右端对齐保持不变（两端对齐）。// v3.6.27: 总览「下一次睡觉」→「下次睡觉」，与「下次喝奶」口径统一（toast 早已是「距下次喝奶/睡觉」）。// v3.6.26: ①toast 与总览口径统一「距下一次喝奶」→「距下次喝奶」（总览 label 早已是「下次喝奶:」）②总览右列（水+奶量/睡眠时长）整体收紧往右移——item 156→132px、label 76→66px（冒号与数值间隔减少）、数值 42→36px、单位 26→20px、gap 5→4px，第一个字与单位仍保持对齐③「放音乐」标题字重 700→400——与「🎵 听歌/🎧 听故事」（.ee-sub-head）及「🍼 喝奶」等卡片标题（.card-name，均 16px/400）视觉一致（用户反馈 700 观感偏大）。// v3.6.24: ①首页总览「今日计划 / 今日成就」字号 14px→15px，与「下一次喝奶」行一致（水+奶量等同比例统一）②「放音乐」标题 14px→16px 与「🎵 听歌」标题同尺寸；连播提示语从按钮下方移到「放音乐」与按钮之间，且「几首」改为管理里的实际播放音频数（如 5 首，动态渲染）③总览「下次喝奶」下方新增「下一次睡觉 / 睡眠时长」行——5-19 点按「上一次睡眠开始时间+睡眠时长+2 小时」预估下次睡觉时间，19-凌晨 5 点显示「-」，右侧显示上一次睡眠时长（如 13.5 h）；刷新网页的「距下一次喝奶」toast 增加距睡觉倒计时，简化提示语为「距下一次喝奶/睡觉：h min / h min」。// v3.6.23: 播放自动记录改为「每次播放新增去重后的记录」——v3.6.22 的「每类每天仅 1 条」不符合预期（用户反馈：点一次播放就应记一次，同一天可多次播放多次记录）；去重维度改为「同一次播放队列内」：多首故事（中文/英文/古诗）仍合并 1 条听故事、多首儿歌合并 1 条听歌；提示语改为「已添加1条听故事/听歌记录」；切换（eeSwitch）与连播自动接歌仍不记录。// v3.6.22: ①首页「放音乐」手指图标放大 12px→16px（与听歌/听故事图标同尺寸）②修复管理弹窗滚到底时最后一项音频被吸底「确定」条遮住（选项面板底部留白 72px）③播放自动记录去重——每类每天仅 1 条（中文/英文/古诗合并为 1 条听故事、儿歌 1 条听歌），今日已有同类型记录则只高亮已有记录并提示「已添加」，停止后再播放 / 切换不再重复添加 ④早教音频云同步改手动——只有点「立即同步」才加密上云共享（按钮改 .btn 样式置左、状态词与提示移至按钮下方），本地改动只存本机并标记「有改动未同步」，云端拉取仍自动（启动 + 切回前台），家人设备刷新 / 重开即可看到。// v3.6.21: ①修复首页连播「播了几首就莫名停止」——音频元素 error 事件此前无处理（加载失败即死停）、起播无看门狗（加载挂起会卡在「加载中」）、播放/停止按钮无防抖（连击/幽灵点击会误停）；现三路归一失败处理（error/play reject/10s 看门狗）：单曲失败自动跳下一首，连续 3 首失败才停止并明确 toast 原因，按钮加 400ms 防抖 ②修复「管理里删除/新增音频，家人手机不同步」——旧合并逻辑是并集且本地优先，删除直接 splice 导致他端把已删歌曲复活、改名/改分类也不传播；现改墓碑式删除（deleted 标记随云同步，30 天后压缩清理）+ 同 id 按 updatedAt 取新版冲突合并 + 云端保存失败不再静默（管理页早教页新增云同步状态行，失败 toast + 自动重试 + 手动「立即同步」）+ 切回前台节流补拉云端列表 ③首页音频卡新增「放音乐」指引——切换/播放上方左侧指向下手指（尺寸颜色同 AI育儿 图标）+ 右侧加粗黄色「放音乐」，按钮下方灰色小字提示连播与停止方式。// v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
 function openAddModal(ds) {
@@ -3049,7 +3049,9 @@ function addHistoryRecord() {
 // ---------- 自绘日期选择器（替代系统 picker：蓝色"确定"按钮 + 蓝色头部） ----------
 let _dpViewYear = 0, _dpViewMonth = 0, _dpSelected = '';
 let _dpPicked = []; // v3.6.1 育儿嫂休假多选：本次会话勾选的日期集合
-let _dpMode = 'history'; // v3.5.135 日期选择器模式：history(历史,禁未来) | task(定时任务,可选未来) | nanny(育儿嫂休假,多选)
+let _dpHalf = new Set();   // v3.6.45 需求②：本次会话勾选为「半天」的日期集合（按 0.5 计数）
+let _dpPerson = 'nanny';   // v3.6.45 需求②：家政考勤多选模式下的操作对象（hourly/nanny）
+let _dpMode = 'history'; // v3.5.135 日期选择器模式：history(历史,禁未来) | task(定时任务,可选未来) | nanny(家政考勤休假,多选+半天) | hkStart(上户日期,单选) | hkEnd(下户日期,单选)
 function openHistoryDatePicker() {
   _dpMode = 'history';
   const cur = document.getElementById('historyDate').value;
@@ -3095,8 +3097,16 @@ function renderHistoryDatePicker() {
   const prevMonthDays = new Date(_dpViewYear, _dpViewMonth, 0).getDate();
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-  const lockFuture = (_dpMode !== 'task' && _dpMode !== 'nanny'); // 历史模式禁选未来；定时任务/育儿嫂休假模式可选任意日期
+  const lockFuture = (_dpMode !== 'task' && _dpMode !== 'nanny' && _dpMode !== 'hkStart' && _dpMode !== 'hkEnd'); // 历史模式禁选未来；定时任务/家政考勤模式可选任意日期
   const multi = (_dpMode === 'nanny');   // v3.6.1 育儿嫂休假：多选日期
+  // v3.6.45 需求②：已下户(!on)人员的休假日期不得晚于下户日期（添加按钮中超出下户日期的不可选）
+  let hkEndLimit = '';
+  if (_dpMode === 'nanny') {
+    try {
+      const p0 = getHousekeeper()[_dpPerson];
+      if (p0 && !p0.on && p0.endDate) hkEndLimit = p0.endDate;
+    } catch (e) {}
+  }
   let html = '';
   // 上月尾部
   for (let i = startOffset - 1; i >= 0; i--) {
@@ -3109,14 +3119,17 @@ function renderHistoryDatePicker() {
     const cls = ['dp-cell'];
     // 历史记录只能看过去，禁止选当天及以后的日期；定时任务模式可选未来
     const isFuture = key >= todayKey;
+    // v3.6.45 需求②：超出下户日期的日期不可选（家政考勤多选模式）
+    const overEnd = !!(hkEndLimit && key > hkEndLimit);
     if (key === todayKey) cls.push('today');
     if (multi) {
       // 多选模式：已选日期高亮，再次点击取消
-      if (_dpPicked.indexOf(key) >= 0) cls.push('selected');
+      if (_dpPicked.indexOf(key) >= 0) { cls.push('selected'); if (_dpHalf.has(key)) cls.push('half'); }
     } else if (key === _dpSelected && (!lockFuture || !isFuture)) cls.push('selected');
     if (lockFuture && isFuture) cls.push('disabled');
-    if (lockFuture && isFuture) {
-      html += `<div class="${cls.join(' ')}" data-d="${d}">${d}</div>`;
+    if (overEnd) cls.push('disabled');
+    if (overEnd || (lockFuture && isFuture)) {
+      html += `<div class="${cls.join(' ')}" data-d="${d}" title="${overEnd ? '已超出下户日期' : ''}">${d}</div>`;
     } else {
       html += `<div class="${cls.join(' ')}" data-d="${d}" onclick="dpSelectDay('${key}')">${d}</div>`;
     }
@@ -3133,14 +3146,14 @@ function dpSelectDay(key) {
   if (_dpMode === 'nanny') {
     // v3.6.1 多选：点一下加选，再点一下取消
     const i = _dpPicked.indexOf(key);
-    if (i >= 0) _dpPicked.splice(i, 1); else _dpPicked.push(key);
-    _dpPicked.sort();
+    if (i >= 0) { _dpPicked.splice(i, 1); _dpHalf.delete(key); }
+    else { _dpPicked.push(key); _dpPicked.sort(); }
     _dpSelected = _dpPicked[_dpPicked.length - 1] || '';
     renderHistoryDatePicker();
     updateDpMultiBar();
     return;
   }
-  if (_dpMode !== 'task') {
+  if (_dpMode !== 'task' && _dpMode !== 'hkStart' && _dpMode !== 'hkEnd') {
     // 历史模式禁止选择当天及以后
     const t = new Date();
     const todayKey = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
@@ -3148,6 +3161,12 @@ function dpSelectDay(key) {
   }
   _dpSelected = key;
   renderHistoryDatePicker();
+}
+// v3.6.45 需求②：半天切换（多选提示条内每个已选日期一个按钮，全天↔半天，按 1/0.5 计数）
+function dpToggleHalf(d) {
+  if (_dpHalf.has(d)) _dpHalf.delete(d); else _dpHalf.add(d);
+  renderHistoryDatePicker();
+  updateDpMultiBar();
 }
 function dpNavMonth(delta) {
   _dpViewMonth += delta;
@@ -3166,15 +3185,35 @@ function dpPickQuick(deltaDays) {
   renderHistoryDatePicker();
 }
 function confirmHistoryDatePicker() {
-  // v3.6.1 育儿嫂休假模式（多选）：把勾选的所有日期加入休假集合并关闭
+  // v3.6.45 家政考勤·上户日期（单选）
+  if (_dpMode === 'hkStart') {
+    if (!_dpSelected) { showToast('请先选择日期'); return; }
+    hkSetStartDate(_dpPerson, _dpSelected);
+    showToast('已设置上户日期');
+    hideModal('historyDatePickerModal');
+    return;
+  }
+  // v3.6.45 家政考勤·下户日期（单选）：设后自动清掉超出下户日期的休假
+  if (_dpMode === 'hkEnd') {
+    if (!_dpSelected) { showToast('请先选择日期'); return; }
+    hkSetEndDate(_dpPerson, _dpSelected);
+    showToast('已设置下户日期');
+    hideModal('historyDatePickerModal');
+    return;
+  }
+  // v3.6.1 家政考勤休假模式（多选，v3.6.45 起含半天 0.5）：把勾选的所有日期（含半天计数）合并进该人的休假如集
   if (_dpMode === 'nanny') {
     if (!_dpPicked.length) { showToast('请先选择日期'); return; }
-    const list = getNannyVacation();
+    const hk = getHousekeeper();
+    const person = hk[_dpPerson] || hk.nanny;
     let added = 0;
-    _dpPicked.forEach(d => { if (list.indexOf(d) < 0) { list.push(d); added++; } });
-    saveNannyVacation(list);
+    _dpPicked.forEach(d => {
+      if (!(d in person.vac)) added++;
+      person.vac[d] = _dpHalf.has(d) ? 0.5 : 1;   // 已勾选同日期：半天/全天取值以本次为准
+    });
+    saveHousekeeper(hk);
     showToast(added ? ('已添加 ' + added + ' 天休假') : '所选日期已是休假');
-    _dpPicked = [];
+    _dpPicked = []; _dpHalf = new Set();
     hideModal('historyDatePickerModal');
     return;
   }
@@ -3760,23 +3799,90 @@ async function saveMemoCloud() {
   } catch (e) { console.warn('[Memo] 云端保存失败:', e); }
 }
 
-/* ---------- 育儿嫂休假（v3.6.0 → v3.6.1） ----------
- * 存储一组休假日期（YYYY-MM-DD），加密同步家庭云 `_nanny_vacation`，合并策略取并集。
- * 用于：①备忘录内展示「当月已工作天数」；②育儿嫂工资任务按周期扣减休假天数算工资。
- * v3.6.1：新增「当前年月」概念（默认本月）；每月推送结算任务后，把当月休假日归档进
- *         备忘录已办事项、清空当月休假，并自动切到下个月。 */
-const NANNY_VACATION_KEY = 'nanny_vacation_v1';
-const NANNY_VACATION_CLOUD_KEY = '_nanny_vacation';
+/* ---------- 家政考勤（v3.6.45 需求②；前身：育儿嫂休假 v3.6.0 → v3.6.44） ----------
+ * 「育儿嫂休假」升级为「家政考勤」：下含钟点工 / 育儿嫂两个子标题，每人一份配置：
+ *   { on: 是否上户(默认true), startDate: 上户日期, endDate: 下户日期, vac: { 'YYYY-MM-DD': 1|0.5 } }
+ * vac 的值 1=全天休假、0.5=半天休假（v3.6.45 新增：日期选择组件支持选半天，按 0.5 计数）。
+ * 展示口径（当月工作时间 = 当月1号至下户日期或当月最后一天的总天数 − 当月休假天数）：
+ *   上户中(on=true)：当月=本月1号至今天；历史月=整月天数
+ *   已下户(on=false)：下户日期在当月→当月1号至下户日期；否则整月天数
+ * 用于：①备忘录内展示每人当月休假与工作时间；②育儿嫂工资任务按「满勤月工资÷满勤天数×当月工作天数」结算。
+ * 存储键 housekeeper_v1，加密同步家庭云 `_housekeeper`；
+ * 旧数据自动迁移：旧 `nanny_vacation_v1`（平铺日期数组）平移到 育儿嫂(nanny).vac（值 1），旧云键 `_nanny_vacation` 兼容读取合并。 */
+const HOUSEKEEPER_KEY = 'housekeeper_v1';
+const HOUSEKEEPER_CLOUD_KEY = '_housekeeper';
+const NANNY_VACATION_KEY = 'nanny_vacation_v1';            // 旧键（仅迁移用，保留常量名）
+const NANNY_VACATION_CLOUD_KEY = '_nanny_vacation';        // 旧云键（兼容读取）
 const NANNY_MONTH_KEY = 'nanny_month_v1';   // v3.6.1 当前展示年月 YYYY-MM
-function getNannyVacation() {
-  try { const arr = JSON.parse(localStorage.getItem(NANNY_VACATION_KEY) || '[]'); return Array.isArray(arr) ? arr.filter(d => typeof d === 'string') : []; }
-  catch { return []; }
+const HK_PERSONS = [
+  { id: 'hourly', name: '钟点工', icon: '🧹' },
+  { id: 'nanny',  name: '育儿嫂', icon: '👩' }
+];
+function hkDefaultPerson() { return { on: true, startDate: '', endDate: '', vac: {} }; }
+function hkDefault() { return { hourly: hkDefaultPerson(), nanny: hkDefaultPerson() }; }
+// 旧平铺日期数组 → vac { date: 1 }（全天）
+function hkVacFromList(list) {
+  const vac = {};
+  (Array.isArray(list) ? list : []).forEach(d => { if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) vac[d] = 1; });
+  return vac;
 }
+function hkPersonDef(v) {
+  const p0 = hkDefaultPerson();
+  if (v && typeof v === 'object') {
+    p0.on = v.on !== false;                                  // 缺省=开启（默认上户中）
+    if (typeof v.startDate === 'string') p0.startDate = v.startDate;
+    if (typeof v.endDate === 'string') p0.endDate = v.endDate;
+    if (v.vac && typeof v.vac === 'object' && !Array.isArray(v.vac)) {
+      Object.keys(v.vac).forEach(d => {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) p0.vac[d] = (v.vac[d] === 0.5 || v.vac[d] === '0.5') ? 0.5 : 1;
+      });
+    }
+  }
+  return p0;
+}
+function getHousekeeper() {
+  let hk = null;
+  try {
+    const raw = localStorage.getItem(HOUSEKEEPER_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p && typeof p === 'object') { hk = { hourly: hkPersonDef(p.hourly), nanny: hkPersonDef(p.nanny) }; }
+    }
+  } catch (e) {}
+  if (!hk) {
+    // 首次读取：从旧育儿嫂休假键迁移（v3.6.45 之前的数据平移到 nanny.vac）
+    hk = hkDefault();
+    try {
+      const old = JSON.parse(localStorage.getItem(NANNY_VACATION_KEY) || '[]');
+      if (Array.isArray(old) && old.length) hk.nanny.vac = hkVacFromList(old);
+    } catch (e) {}
+    localStorage.setItem(HOUSEKEEPER_KEY, JSON.stringify(hk));
+  }
+  return hk;
+}
+function saveHousekeeper(hk) {
+  const v = hk || getHousekeeper();
+  localStorage.setItem(HOUSEKEEPER_KEY, JSON.stringify(v));
+  saveHousekeeperCloud();
+  renderHousekeeper();
+}
+// ---- 兼容旧 API（育儿嫂 = 家政考勤中的 nanny 子项）：平铺日期数组视图，供旧调用方/测试使用 ----
+function getNannyVacation() { return Object.keys(getHousekeeper().nanny.vac).sort(); }
 function saveNannyVacation(list) {
-  const uniq = Array.isArray(list) ? [...new Set(list.filter(d => typeof d === 'string'))].sort() : [];
-  localStorage.setItem(NANNY_VACATION_KEY, JSON.stringify(uniq));
-  saveNannyVacationCloud();
-  renderNannyVacation();
+  const hk = getHousekeeper();
+  hk.nanny.vac = hkVacFromList(list);
+  saveHousekeeper(hk);
+}
+function addNannyVacation(date) {
+  const hk = getHousekeeper();
+  if (date && !(date in hk.nanny.vac)) hk.nanny.vac[date] = 1;
+  saveHousekeeper(hk);
+}
+function removeNannyVacation(date) {
+  const hk = getHousekeeper();
+  let hit = '';
+  HK_PERSONS.forEach(p => { if (date in hk[p.id].vac) { delete hk[p.id].vac[date]; hit = p.id; } });
+  saveHousekeeper(hk);
 }
 // v3.6.1 当前年月（默认本月），格式 YYYY-MM
 function getNannyMonth() {
@@ -3796,50 +3902,155 @@ function daysInNannyMonth(ym) {
   const m = /^(\d{4})-(\d{2})$/.exec(ym || ''); if (!m) return 30;
   return new Date(+m[1], +m[2], 0).getDate();
 }
-// v3.6.0 工资结算常量（月薪 / 计薪基准天数）
+// 某人当月总天数口径（v3.6.45 需求②：当月1号至下户日期或当月最后一天的总天数）：
+//   上户中(on)：本月=1号至今天；历史月=整月
+//   已下户(!on)：下户日期在当月=1号至下户日期（含当天）；否则整月
+function hkMonthTotalDays(person, ym) {
+  const daysInMonth = daysInNannyMonth(ym);
+  if (person.on) {
+    const today = getTodayDateStr();
+    if (ym === today.slice(0, 7)) return parseInt(today.slice(8, 10), 10) || 1;
+    return daysInMonth;
+  }
+  const end = person.endDate;
+  if (end && end.slice(0, 7) === ym) return parseInt(end.slice(8, 10), 10) || daysInMonth;
+  return daysInMonth;
+}
+// 某人当月休假天数（0.5 计数）
+function hkMonthVacDays(person, ym) {
+  let v = 0;
+  Object.keys(person.vac || {}).forEach(d => {
+    if (d.slice(0, 7) === ym) v += (person.vac[d] === 0.5 ? 0.5 : 1);
+  });
+  return v;
+}
+// 某人当月工作天数 = 总天数 − 休假天数
+function hkMonthWorkDays(person, ym) { return Math.max(0, hkMonthTotalDays(person, ym) - hkMonthVacDays(person, ym)); }
+// 去掉整数小数点，便于文案展示（10 → "10"，10.5 → "10.5"）
+function hkNum(n) { const v = Math.round(n * 10) / 10; return Number.isInteger(v) ? String(v) : String(v); }
+// v3.6.0 工资结算默认常量（月薪 / 计薪基准天数）；v3.6.45 需求③起可在任务编辑中按人覆盖（task.baseSalary/task.payDays）
 const NANNY_BASE_SALARY = 10000;
 const NANNY_PAY_DIVISOR = 26;
 // 把 Date 格式化为 YYYY-MM-DD（本地时区）
 function fmtDateLocal(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
-// 计算工资任务在某个触发周期内的结算明细：
-// 周期 = 上次结算日(lastWageDate，首次用 startDate) ~ 本次触发日(trig)，左闭右开。
-// 周期总天数 = 跨度天数；工作天数 = 总天数 − 该周期内的休假天数；工资 = 10000/26 × 工作天数。
+// v3.6.45 需求③：工资 = 满勤月工资 ÷ 满勤天数 × 当月工作天数。
+// 当月工作天数取家政考勤·育儿嫂（备忘录 → 家政考勤）：当月1号至下户日期或当月最后一天 − 当月休假（0.5计数）。
+// 结算月 = 触发日前一天所在月（monthly 任务每月1号推=结算上月；下户提前推送时=下户当月）。
+// vacList 参数保留以兼容旧调用签名（v3.6.45 起休假数据一律取家政考勤，不再由调用方传入）。
 function computeWage(task, trig, vacList) {
-  const dailyRate = NANNY_BASE_SALARY / NANNY_PAY_DIVISOR;
+  const base = (task && task.baseSalary > 0) ? task.baseSalary : NANNY_BASE_SALARY;
+  const div = (task && task.payDays > 0) ? task.payDays : NANNY_PAY_DIVISOR;
+  const dailyRate = base / div;
   const end = new Date(trig.getFullYear(), trig.getMonth(), trig.getDate());
-  const startStr = (task.lastWageDate && /^\d{4}-\d{2}-\d{2}$/.test(task.lastWageDate)) ? task.lastWageDate : (task.startDate || fmtDateLocal(end));
-  const start = new Date(startStr + 'T00:00:00');
-  if (isNaN(start.getTime())) { start.setTime(end.getTime()); }
-  let totalDays = Math.round((end - start) / 86400000);
-  if (totalDays < 1) totalDays = 1;
-  const vac = (vacList && Array.isArray(vacList)) ? vacList : getNannyVacation();
-  let vacDays = 0;
-  for (const d of vac) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
-    const dd = new Date(d + 'T00:00:00');
-    if (dd >= start && dd < end) vacDays++;
-  }
-  const workDays = Math.max(0, totalDays - vacDays);
+  const ym = fmtDateLocal(new Date(end.getTime() - 86400000)).slice(0, 7);
+  const person = getHousekeeper().nanny;
+  const totalDays = hkMonthTotalDays(person, ym);
+  const vacDays = hkMonthVacDays(person, ym);
+  const workDays = hkMonthWorkDays(person, ym);
   const wage = Math.round(dailyRate * workDays);
-  return { dailyRate, totalDays, vacDays, workDays, wage, startStr, endStr: fmtDateLocal(new Date(end.getTime() - 86400000)) };
+  return { dailyRate, baseSalary: base, payDays: div, totalDays, vacDays, workDays, wage, ym,
+    startStr: ym + '-01', endStr: ym + '-' + String(totalDays).padStart(2, '0') };
 }
 // v3.6.1 工资结算推送内容改为固定默认格式（任务编辑时无需填写内容）：
 // 「YYYY-MM：休假 X 天，工作 Y 天，应发工资 Z 元，请转账。」
 function wagePushContent(w) {
   const ym = (w.endStr || '').slice(0, 7);
-  return `${ym}：休假 ${w.vacDays} 天，工作 ${w.workDays} 天，应发工资 ${w.wage} 元，请转账。`;
+  return `${ym}：休假 ${hkNum(w.vacDays)} 天，工作 ${hkNum(w.workDays)} 天，应发工资 ${w.wage} 元，请转账。`;
 }
-function openNannyVacationPicker() {
-  _dpMode = 'nanny';
-  _dpPicked = [];
-  // 定位到「当前年月」，并把该月已休日期作为默认勾选（方便改休假日）
+// ---- 家政考勤 UI ----
+function hkPersonElId(id) { return 'hkPerson' + id.charAt(0).toUpperCase() + id.slice(1); }
+function renderHousekeeper() {
+  const hk = getHousekeeper();
+  const ym = getNannyMonth();
+  const cntEl = document.getElementById('nannyVacDays');
+  if (cntEl) {
+    let c = 0; HK_PERSONS.forEach(p => { c += hkMonthVacDays(hk[p.id], ym); });
+    cntEl.textContent = hkNum(c);
+  }
+  const monthEl = document.getElementById('nannyMonthLabel');
+  if (monthEl) monthEl.textContent = ym;
+  HK_PERSONS.forEach(p => renderHKPerson(p.id, hk[p.id], ym));
+}
+function renderHKPerson(id, person, ym) {
+  const box = document.getElementById(hkPersonElId(id)); if (!box) return;
+  const meta = HK_PERSONS.find(p => p.id === id) || { name: id, icon: '👩' };
+  let h = '<div class="hk-sub-head"><span class="hk-sub-name">' + meta.icon + ' ' + meta.name + '</span>'
+    + '<div class="toggle-switch ' + (person.on ? 'on' : '') + '" onclick="hkToggle(\'' + id + '\')" title="是否上户"></div></div>';
+  if (person.on) {
+    h += '<div class="hk-field-row"><span class="hk-field-label">上户日期</span>'
+      + '<button class="fab-btn" type="button" onclick="openHKDatePicker(\'' + id + '\',\'start\')"><span class="fab-icon fab-emoji">📅</span>' + (person.startDate || '选择日期') + '</button></div>';
+  } else {
+    h += '<div class="hk-field-row"><span class="hk-field-label">下户日期</span>'
+      + '<button class="fab-btn" type="button" onclick="openHKDatePicker(\'' + id + '\',\'end\')"><span class="fab-icon fab-emoji">📅</span>' + (person.endDate || '选择日期') + '</button></div>'
+      + '<div class="hk-settle-tip">💰 请根据微信推送消息，结算家政当月的工资</div>';
+  }
+  // 当月休假与工作时间（上户中/已下户均展示，便于对账）
+  h += '<div class="hk-work-line">' + ym + ' 已工作 ' + hkNum(hkMonthWorkDays(person, ym)) + ' 天（本月 '
+    + hkMonthTotalDays(person, ym) + ' 天，休假 ' + hkNum(hkMonthVacDays(person, ym)) + ' 天）</div>';
+  h += '<div class="nanny-vac-row"><button class="fab-btn" type="button" onclick="openHKVacPicker(\'' + id + '\')"><span class="fab-icon fab-emoji">📅</span>添加</button></div>';
+  const monthVac = Object.keys(person.vac).filter(d => d.slice(0, 7) === ym).sort();
+  h += '<div class="nanny-vac-list">' + (monthVac.length
+    ? monthVac.map(d => '<span class="nanny-vac-chip" onclick="hkRemoveVac(\'' + id + '\',\'' + d + '\')" title="点击删除">' + d + (person.vac[d] === 0.5 ? ' <b>半天</b>' : '') + ' <b>✕</b></span>').join('')
+    : '<div class="memo-empty">' + ym + ' 尚未添加休假日期</div>') + '</div>';
+  box.innerHTML = h;
+}
+// 「是否上户」开关（样式同管理中的活动开关 .toggle-switch）
+function hkToggle(id) {
+  const hk = getHousekeeper();
+  const p0 = hk[id]; if (!p0) return;
+  p0.on = !p0.on;
+  if (p0.on) p0.endDate = '';          // 重新上户：清掉下户日期，工作时间回到「1号至今/整月」口径
+  saveHousekeeper(hk);
+  const meta = HK_PERSONS.find(p => p.id === id);
+  showToast((meta ? meta.name : id) + (p0.on ? '：上户中' : '：已下户'));
+}
+// 上户/下户日期（单选日期选择器，样式同添加休假日期的组件）
+function openHKDatePicker(id, kind) {
+  _dpMode = (kind === 'start') ? 'hkStart' : 'hkEnd';
+  _dpPerson = id;
+  const hk = getHousekeeper();
+  const cur = (kind === 'start' ? hk[id].startDate : hk[id].endDate) || '';
+  let d = cur ? new Date(cur + 'T00:00:00') : new Date();
+  if (isNaN(d.getTime())) d = new Date();
+  _dpViewYear = d.getFullYear(); _dpViewMonth = d.getMonth();
+  _dpSelected = cur || fmtDateLocal(d);
+  _dpPicked = []; _dpHalf = new Set();
+  renderHistoryDatePicker();
+  const q = document.getElementById('dpQuick'); if (q) q.style.display = 'none';
+  const mb = document.getElementById('dpMultiBar'); if (mb) mb.style.display = 'none';
+  showModal('historyDatePickerModal');
+}
+function hkSetStartDate(id, date) {
+  const hk = getHousekeeper(); const p0 = hk[id]; if (!p0) return;
+  p0.startDate = date;
+  saveHousekeeper(hk);
+}
+// 设下户日期：自动清掉超出下户日期的休假选项（下户之后不应再有更晚的休假记录）
+function hkSetEndDate(id, date) {
+  const hk = getHousekeeper(); const p0 = hk[id]; if (!p0) return;
+  p0.endDate = date;
+  let removed = 0;
+  Object.keys(p0.vac).forEach(d => { if (d > date) { delete p0.vac[d]; removed++; } });
+  saveHousekeeper(hk);
+  if (removed) showToast('已清理 ' + removed + ' 天超出下户日期的休假');
+}
+// 添加/修改当月休假（多选 + 可选半天）
+function openHKVacPicker(id) {
+  _dpMode = 'nanny';            // 复用 nanny 多选模式（存量语义不变），人员由 _dpPerson 指定
+  _dpPerson = id;
+  _dpPicked = []; _dpHalf = new Set();
   const ym = getNannyMonth();
   const mm = /^(\d{4})-(\d{2})$/.exec(ym);
   if (mm) { _dpViewYear = +mm[1]; _dpViewMonth = +mm[2] - 1; }
   else { const n = new Date(); _dpViewYear = n.getFullYear(); _dpViewMonth = n.getMonth(); }
-  _dpPicked = getNannyVacation().filter(d => d.slice(0, 7) === ym);
+  const hk = getHousekeeper();
+  const person = hk[id];
+  Object.keys(person.vac).forEach(d => {
+    if (d.slice(0, 7) === ym) { _dpPicked.push(d); if (person.vac[d] === 0.5) _dpHalf.add(d); }
+  });
+  _dpPicked.sort();
   _dpSelected = _dpPicked[_dpPicked.length - 1] || (ym + '-01');
   renderHistoryDatePicker();
   const q = document.getElementById('dpQuick'); if (q) q.style.display = 'none';
@@ -3847,47 +4058,27 @@ function openNannyVacationPicker() {
   updateDpMultiBar();
   showModal('historyDatePickerModal');
 }
-// v3.6.1 多选提示条：显示已勾选数量
+// 兼容旧入口（育儿嫂休假添加）：等价于 openHKVacPicker('nanny')
+function openNannyVacationPicker() { openHKVacPicker('nanny'); }
+// v3.6.1 多选提示条：显示已勾选数量；v3.6.45 需求②：每个已选日期带「全天/半天」切换按钮（按 1/0.5 计数）
 function updateDpMultiBar() {
   const h = document.getElementById('dpMultiHint');
-  if (h) h.textContent = _dpPicked.length ? ('已选 ' + _dpPicked.length + ' 天：' + _dpPicked.map(d => d.slice(5)).join('、')) : '点选日期，可多选';
-}
-function dpClearPicked() { _dpPicked = []; _dpSelected = ''; renderHistoryDatePicker(); updateDpMultiBar(); }
-function removeNannyVacation(date) {
-  const list = getNannyVacation().filter(x => x !== date);
-  saveNannyVacation(list);
-}
-function renderNannyVacation() {
-  const list = getNannyVacation().slice().sort();
-  const ym = getNannyMonth();
-  const cntEl = document.getElementById('nannyVacDays');
-  if (cntEl) cntEl.textContent = list.filter(d => d.slice(0, 7) === ym).length;
-  const monthEl = document.getElementById('nannyMonthLabel');
-  if (monthEl) monthEl.textContent = ym;
-  const workEl = document.getElementById('nannyWorkDays');
-  if (workEl) {
-    const daysInMonth = daysInNannyMonth(ym);
-    const todayStr = getTodayDateStr();
-    const todayYm = todayStr.slice(0, 7);
-    const todayDay = parseInt(todayStr.slice(8, 10), 10) || 1;
-    if (ym === todayYm) {
-      // v3.6.3 本月已工作 = 本月1号至当天的日历天数 − 本月中≤今天的休假天数
-      const vacCount = list.filter(d => {
-        if (d.slice(0, 7) !== ym) return false;
-        const dd = parseInt(d.slice(8, 10), 10);
-        return dd <= todayDay;
-      }).length;
-      workEl.textContent = `本月已工作 ${todayDay - vacCount} 天（本月 1 号至今 ${todayDay} 天，休假 ${vacCount} 天）`;
-    } else {
-      const vacThisMonth = list.filter(d => d.slice(0, 7) === ym).length;
-      workEl.textContent = `本月已工作 ${daysInMonth - vacThisMonth} 天（本月 ${daysInMonth} 天，休假 ${vacThisMonth} 天）`;
-    }
+  if (!h) return;
+  if (_dpMode === 'nanny' && _dpPicked.length) {
+    h.innerHTML = _dpPicked.map(d =>
+      '<button type="button" class="dp-half-btn' + (_dpHalf.has(d) ? ' half' : '') + '" onclick="dpToggleHalf(\'' + d + '\')" title="点击切换全天/半天">'
+      + d.slice(5) + ' ' + (_dpHalf.has(d) ? '半天' : '全天') + '</button>').join('');
+  } else if (_dpPicked.length) {
+    h.textContent = '已选 ' + _dpPicked.length + ' 天：' + _dpPicked.map(d => d.slice(5)).join('、');
+  } else {
+    h.textContent = '点选日期，可多选';
   }
-  const wrap = document.getElementById('nannyVacList');
-  if (!wrap) return;
-  const monthList = list.filter(d => d.slice(0, 7) === ym);
-  if (!monthList.length) { wrap.innerHTML = '<div class="memo-empty">' + ym + ' 尚未添加休假日期</div>'; return; }
-  wrap.innerHTML = monthList.map(d => `<span class="nanny-vac-chip" onclick="removeNannyVacation('${d}')" title="点击删除">${d} <b>✕</b></span>`).join('');
+}
+function dpClearPicked() { _dpPicked = []; _dpHalf = new Set(); _dpSelected = ''; renderHistoryDatePicker(); updateDpMultiBar(); }
+function hkRemoveVac(id, date) {
+  const hk = getHousekeeper(); const p0 = hk[id]; if (!p0) return;
+  delete p0.vac[date];
+  saveHousekeeper(hk);
 }
 // v3.6.1 展开/收起（同已办事项）
 function toggleNannyVacExpand() {
@@ -3895,49 +4086,78 @@ function toggleNannyVacExpand() {
   if (h && b) { h.classList.toggle('open'); b.classList.toggle('open'); }
 }
 // v3.6.1 月度归档：工资结算推送成功后调用
-// ①把当前年月的休假日写进备忘录「已办事项」；②清空当月休假；③当前年月切到下个月
+// ①把育儿嫂当前年月的休假日写进备忘录「已办事项」；②清空当月休假；③当前年月切到下个月
 function archiveNannyMonth(monthKey) {
   const ym = monthKey || getNannyMonth();
-  const list = getNannyVacation();
-  const monthList = list.filter(d => d.slice(0, 7) === ym);
-  const rest = list.filter(d => d.slice(0, 7) !== ym);
+  const hk = getHousekeeper();
+  const person = hk.nanny;
+  const monthList = Object.keys(person.vac).filter(d => d.slice(0, 7) === ym).sort();
+  const rest = Object.keys(person.vac).filter(d => d.slice(0, 7) !== ym);
   if (monthList.length) {
+    const total = monthList.reduce((s, d) => s + (person.vac[d] === 0.5 ? 0.5 : 1), 0);
     const items = getMemos();
     items.unshift({ id: _memoNextId(), done: true, date: getTodayDateStr(),
-      text: '👩 育儿嫂休假 ' + ym + '：' + monthList.join('、') + '（共 ' + monthList.length + ' 天）' });
+      text: '👩 育儿嫂休假 ' + ym + '：' + monthList.join('、') + '（共 ' + hkNum(total) + ' 天）' });
     saveMemos(items);
   }
-  saveNannyVacation(rest);
+  const newVac = {};
+  rest.forEach(d => { newVac[d] = person.vac[d]; });
+  person.vac = newVac;
+  saveHousekeeper(hk);
   setNannyMonth(nextNannyMonth(ym));
-  renderNannyVacation();
+  renderHousekeeper();
   return monthList.length;
 }
-async function saveNannyVacationCloud() {
+async function saveHousekeeperCloud() {
   if (!isSyncReady()) return;
   try {
     const key = await getCryptoKey(); if (!key) return;
-    const { data, iv } = await encrypt(key, JSON.stringify(getNannyVacation()));
-    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: NANNY_VACATION_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
-  } catch (e) { console.warn('[Nanny] 云端保存失败:', e); }
+    const { data, iv } = await encrypt(key, JSON.stringify(getHousekeeper()));
+    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: HOUSEKEEPER_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
+  } catch (e) { console.warn('[家政考勤] 云端保存失败:', e); }
 }
-async function loadNannyVacationCloud() {
+// 云端家政考勤合并：本地优先（同日期本地有则保留本地值），并集合并；
+// 旧云键 `_nanny_vacation`（平铺数组）在无新键时兼容读取，合并进 nanny.vac。
+async function loadHousekeeperCloud() {
   if (!isSyncReady()) return false;
   try {
     const key = await getCryptoKey(); if (!key) return false;
-    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${NANNY_VACATION_CLOUD_KEY}&select=encrypted_data,iv`);
+    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${HOUSEKEEPER_CLOUD_KEY}&select=encrypted_data,iv`);
+    const hk = getHousekeeper();
     if (rows.length > 0 && rows[0].encrypted_data && rows[0].iv) {
       const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
-      const arr = JSON.parse(json);
-      if (Array.isArray(arr)) {
-        const merged = [...new Set(getNannyVacation().concat(arr.filter(d => typeof d === 'string')))].sort();
-        localStorage.setItem(NANNY_VACATION_KEY, JSON.stringify(merged));
-        if (document.getElementById('memoModal') && document.getElementById('memoModal').classList.contains('show')) renderNannyVacation();
+      const remote = JSON.parse(json);
+      if (remote && typeof remote === 'object') {
+        HK_PERSONS.forEach(p => {
+          const rp = hkPersonDef(remote[p.id]);
+          const lp = hk[p.id];
+          Object.keys(rp.vac).forEach(d => { if (!(d in lp.vac)) lp.vac[d] = rp.vac[d]; });
+          if (rp.startDate && !lp.startDate) lp.startDate = rp.startDate;
+          if (rp.endDate && !lp.endDate) lp.endDate = rp.endDate;
+          lp.on = lp.on && rp.on;   // 任一端标记已下户 → 合并为已下户（保守：避免给已下户的人多算工时）
+        });
+        saveHousekeeper(hk);
         return true;
       }
     }
-  } catch (e) { console.warn('[Nanny] 云端加载失败:', e); }
+    // 无新键：尝试旧云键（v3.6.45 之前的育儿嫂休假）
+    const oldRows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${NANNY_VACATION_CLOUD_KEY}&select=encrypted_data,iv`);
+    if (oldRows.length > 0 && oldRows[0].encrypted_data && oldRows[0].iv) {
+      const arr = JSON.parse(await decrypt(key, oldRows[0].encrypted_data, oldRows[0].iv));
+      if (Array.isArray(arr)) {
+        const merged = hkVacFromList(arr);
+        Object.keys(merged).forEach(d => { if (!(d in hk.nanny.vac)) hk.nanny.vac[d] = 1; });
+        saveHousekeeper(hk);
+        return true;
+      }
+    }
+  } catch (e) { console.warn('[家政考勤] 云端加载失败:', e); }
   return false;
 }
+// 兼容旧名（v3.6.45 前调用方）
+async function loadNannyVacationCloud() { return loadHousekeeperCloud(); }
+// 兼容旧渲染名（存量测试/旧调用方）
+function renderNannyVacation() { renderHousekeeper(); }
 
 /* ==================== 数据分析 ==================== */
 function getBodyHistory() {
@@ -7397,6 +7617,9 @@ async function generatePlanForTask(task, trig) {
 
 /* ---------- 推送（复用今日成就的 PushPlus 配置） ---------- */
 async function pushTask(task, trig, pk) {
+  // v3.6.45 需求③：关闭任务不再推送消息——即使本周期已被认领（并发/宽限窗口内），
+  // 推送前终检任务是否仍处于开启态，关闭后一律不推。
+  if (task && task.enabled === false) return false;
   // v3.5.148 防重复推送①：进入函数后立即"同步认领"本周期并落盘（await 之前），
   // 这样并发/多次触发的 runScheduler 在推送尚未返回时也会看到已认领，从而跳过，避免同一条任务重复发送。
   if (task.pushPeriod === pk) return true;      // 本周期已被认领（并发重复调用）
@@ -7408,7 +7631,8 @@ async function pushTask(task, trig, pk) {
   try { if (await _cloudSchedDup(_sig)) return true; } catch (e) {}
 
   let title, content;
-  // v3.6.0 育儿嫂工资任务：触发时按周期(上次结算日~本次触发)算工作天数与工资，自动生成推送内容
+  // v3.6.0 育儿嫂工资任务 / v3.6.45 需求③：触发时按「满勤月工资÷满勤天数×当月工作天数」算工资，自动生成推送内容
+  // （当月工作天数取家政考勤·育儿嫂，见 computeWage）
   if (task.type === 'wage') {
     const w = computeWage(task, trig);
     title = '👩 育儿嫂工资结算';
@@ -7498,7 +7722,18 @@ async function runScheduler(forceGen) {
     // 触发推送：触发时刻起、宽限 3 小时内（仅"由本设备负责推送"的设备执行，避免多设备重复推送）
     // v3.5.144 修复：原先用 next（永远在未来）导致 now>=trig 恒为 false，定时任务推送从不触发。改用 prev（刚过去的触发点）。
     if (!canPush) continue;
-    const trig = prev;
+    // v3.6.45 需求③：工资任务当月有下户日期时，推送提前至下户日期当天同一时刻
+    // （如原定 10月30日 12:00、下户 10月20日 → 10月20日 12:00 推，10月30日不推）
+    let trig = prev;
+    if (task.type === 'wage') {
+      try {
+        const p0 = getHousekeeper().nanny;
+        if (!p0.on && p0.endDate && task.startTime) {
+          const shifted = new Date(p0.endDate + 'T' + task.startTime + ':00');
+          if (!isNaN(shifted.getTime()) && shifted < trig) trig = shifted;
+        }
+      } catch (e) {}
+    }
     if (trig && now >= trig && now < new Date(trig.getTime() + SCHED_PUSH_GRACE)) {
       const pk = periodKey(task, trig);
       if (task.pushPeriod !== pk) {
@@ -7697,18 +7932,31 @@ function openTaskEditor(id) {
     curInt = t.interval || 1;
     document.getElementById('taskName').value = t.name || '';
     document.getElementById('taskCustom').value = t.content || '';
+    // v3.6.45 需求③：满勤月工资/满勤天数（默认 10000 元 / 26 天，旧任务无此字段时回落默认）
+    document.getElementById('taskBaseSalary').value = (t.baseSalary > 0) ? t.baseSalary : NANNY_BASE_SALARY;
+    document.getElementById('taskPayDays').value = (t.payDays > 0) ? t.payDays : NANNY_PAY_DIVISOR;
   } else {
     setRadio('taskFreq', 'daily'); setRadio('taskMode', 'ai');
     setTaskStartDateValue(getTodayDateStr());
     setTaskTimeVal('08:00');
     document.getElementById('taskName').value = '';
     document.getElementById('taskCustom').value = '';
+    document.getElementById('taskBaseSalary').value = NANNY_BASE_SALARY;
+    document.getElementById('taskPayDays').value = NANNY_PAY_DIVISOR;
   }
   const ivEl = document.getElementById('taskInterval'); if (ivEl) ivEl.value = curInt;
   // v3.5.137 AI 推荐任务最多一个：新建时若已存在 AI 任务，禁用该选项并自动切到「自定义」
   setAIModeDisabled(hasOtherAITask(id || ''), !id);
   onFreqChange(); onModeChange();
   showModal('taskEditorModal');
+}
+// v3.6.45 需求③：读取工资结算的满勤月工资/满勤天数（0 或非法 → 回落默认 10000/26）
+function getTaskWageVals() {
+  const bsEl = document.getElementById('taskBaseSalary');
+  const pdEl = document.getElementById('taskPayDays');
+  const bs = parseFloat((bsEl && bsEl.value) || '');
+  const pd = parseInt((pdEl && pdEl.value) || '', 10);
+  return { baseSalary: (bs > 0) ? bs : NANNY_BASE_SALARY, payDays: (pd > 0 && pd <= 31) ? pd : NANNY_PAY_DIVISOR };
 }
 function saveTask() {
   const id = document.getElementById('taskEditId').value;
@@ -7723,17 +7971,20 @@ function saveTask() {
   if (!startDate) { showToast('请选择开始日期'); return; }
   // v3.5.137 兜底校验：AI 推荐任务只允许存在一个
   if (mode === 'ai' && hasOtherAITask(id || '')) { showToast('已有 AI 推荐任务，最多只能添加一个'); return; }
+  // v3.6.45 需求③：工资结算参数（满勤月工资/满勤天数）
+  const wageVals = getTaskWageVals();
   if (id) {
     const t = SCHED_TASKS.find(x => x.id === id);
     t.name = name;
     t.freq = freq; t.interval = interval; t.startDate = startDate; t.startTime = startTime; t.mode = mode;
     t.type = (mode === 'wage') ? 'wage' : 'normal';
     if (mode === 'custom') t.content = document.getElementById('taskCustom').value;
-    else if (mode === 'wage') { t.content = ''; if (!t.lastWageDate) t.lastWageDate = ''; }
+    else if (mode === 'wage') { t.content = ''; if (!t.lastWageDate) t.lastWageDate = ''; t.baseSalary = wageVals.baseSalary; t.payDays = wageVals.payDays; }
   } else {
     const isWage = (mode === 'wage');
     SCHED_TASKS.push({ id: 't_' + Date.now(), name: name, freq: freq, interval: interval, startDate: startDate, startTime: startTime, mode: mode, type: isWage ? 'wage' : 'normal',
       content: mode === 'custom' ? document.getElementById('taskCustom').value : '', enabled: true, lastWageDate: isWage ? '' : undefined,
+      baseSalary: isWage ? wageVals.baseSalary : undefined, payDays: isWage ? wageVals.payDays : undefined,
       genPeriod: '', pushPeriod: '', genTryTs: 0 });
   }
   const isNew = !id;

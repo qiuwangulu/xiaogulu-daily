@@ -1138,6 +1138,34 @@
   .nanny-month-label { font-size: 13px; font-weight: 700; color: #74b9ff; margin-right: 8px; }
   body.theme-day .nanny-month-label { color: #0984e3; }
   .nanny-month-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  /* ===== v3.6.45 需求② 家政考勤：钟点工/育儿嫂两个子区块 ===== */
+  .hk-person { border-top: 1px dashed rgba(255,255,255,0.12); padding: 10px 0 6px; }
+  body.theme-day .hk-person { border-top-color: rgba(61,72,82,0.18); }
+  .hk-person:first-of-type { border-top: none; padding-top: 2px; }
+  .hk-sub-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .hk-sub-name { font-size: 14px; font-weight: 700; color: #dfe6e9; }
+  body.theme-day .hk-sub-name { color: #3d4852; }
+  .hk-field-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .hk-field-label { font-size: 13px; color: #b2bec3; }
+  body.theme-day .hk-field-label { color: #636e72; }
+  .hk-work-line { font-size: 13px; color: #dfe6e9; margin-bottom: 8px; }
+  body.theme-day .hk-work-line { color: #3d4852; }
+  .hk-settle-tip {
+    font-size: 13px; color: #ffeaa7; background: rgba(253,203,110,0.12);
+    border: 1px solid rgba(253,203,110,0.35); border-radius: 10px;
+    padding: 7px 10px; margin-bottom: 8px; line-height: 1.5;
+  }
+  body.theme-day .hk-settle-tip { color: #b8860b; background: rgba(214,162,26,0.12); border-color: rgba(214,162,26,0.4); }
+  /* v3.6.45 日期选择器半天切换按钮（多选提示条内，每个已选日期一个） */
+  .dp-half-btn {
+    border: 1px solid rgba(116,185,255,0.5); background: rgba(116,185,255,0.12); color: #74b9ff;
+    border-radius: 12px; padding: 3px 9px; font-size: 12px; margin: 0 6px 4px 0; cursor: pointer;
+  }
+  .dp-half-btn.half { border-color: rgba(253,203,110,0.55); background: rgba(253,203,110,0.16); color: #fdcb6e; }
+  body.theme-day .dp-half-btn { border-color: rgba(9,132,227,0.45); background: rgba(9,132,227,0.08); color: #0984e3; }
+  body.theme-day .dp-half-btn.half { border-color: rgba(214,162,26,0.5); background: rgba(214,162,26,0.12); color: #b8860b; }
+  /* 日历单元格：半天假日用半透明高亮区分全天 */
+  .dp-cell.selected.half { opacity: .55; }
   /* v3.6.1 日期选择器多选提示条 */
   .dp-multi-bar {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -2379,18 +2407,19 @@
     <div class="memo-done-body" id="memoDoneBody"></div>
     <!-- v3.6.0 育儿嫂休假：记录休假日期，自动算当月已工作天数，并供工资任务扣减 -->
     <!-- v3.6.1 改为可展开收起（同已办事项，默认收起）；月份显示当前年月如 2026-10；日期支持多选 -->
+    <!-- v3.6.45 需求②：育儿嫂休假改为「家政考勤」——下含钟点工/育儿嫂两个子标题，各带「是否上户」开关（样式同管理中的活动开关，默认开启）；
+         上户中→显示上户日期（日期选择组件，样式同添加休假日期的组件）+ 当月休假和工作时间；
+         已下户→显示下户日期 + 自动清掉超出下户日期的休假 + 结算提示「请根据微信推送消息，结算家政当家的工资」；
+         当月工作时间 = 当月1号至下户日期或当月最后一天的总天数 − 休假天数；日期选择组件支持选半天（按 0.5 计数） -->
     <div class="nanny-vac-head" id="nannyVacHead" onclick="toggleNannyVacExpand()">
-      <span class="chev">▶</span><span class="nanny-ico">👩</span><span>育儿嫂休假</span><span class="cnt" id="nannyVacDays">0</span>
+      <span class="chev">▶</span><span class="nanny-ico">&#127968;</span><span>家政考勤</span><span class="cnt" id="nannyVacDays">0</span>
     </div>
     <div class="nanny-vac-body" id="nannyVacBody">
       <div class="nanny-month-row">
         <span class="nanny-month-label" id="nannyMonthLabel">—</span>
-        <span class="nanny-work-days" id="nannyWorkDays"></span>
       </div>
-      <div class="nanny-vac-row">
-        <button class="fab-btn" type="button" onclick="openNannyVacationPicker()"><span class="fab-icon fab-emoji">📅</span>添加</button>
-      </div>
-      <div id="nannyVacList" class="nanny-vac-list"></div>
+      <div class="hk-person" id="hkPersonHourly"></div>
+      <div class="hk-person" id="hkPersonNanny"></div>
     </div>
   </div>
 </div>
@@ -2653,7 +2682,7 @@
       <div class="te-seg" id="taskModeSeg">
         <label class="cat-tag"><input type="radio" name="taskMode" value="ai" checked onchange="syncSeg(this);onModeChange()"><span>🤖 AI 推荐</span></label>
         <label class="cat-tag"><input type="radio" name="taskMode" value="custom" onchange="syncSeg(this);onModeChange()"><span>✏️ 自定义</span></label>
-        <label class="cat-tag"><input type="radio" name="taskMode" value="wage" onchange="syncSeg(this);onModeChange()"><span>👩 工资结算</span></label>
+        <label class="cat-tag"><input type="radio" name="taskMode" value="wage" onchange="syncSeg(this);onModeChange()"><span>💰 工资结算</span></label>
       </div>
     </div>
     <div class="te-field" id="taskCustomField" style="display:none;">
@@ -2661,10 +2690,18 @@
       <textarea id="taskCustom" class="te-textarea" placeholder="输入要推送的消息内容"></textarea>
     </div>
     <!-- v3.6.1 工资结算：无需填写内容，推送时自动按默认格式生成（只读） -->
+    <!-- v3.6.45 需求③：新增「满勤月工资 / 满勤天数」输入（默认 10000 元 / 26 天）；工资 = 满勤月工资 ÷ 满勤天数 × 当月工作天数（当月工作天数取 备忘录 → 家政考勤 · 育儿嫂） -->
     <div class="te-field" id="taskWageField" style="display:none;">
-      <div class="te-label">推送内容（自动生成，无需填写）</div>
+      <div class="te-label">满勤月工资 / 满勤天数</div>
+      <div class="te-time-row">
+        <input type="number" id="taskBaseSalary" min="0" step="100" value="10000" inputmode="numeric" class="te-interval-input" style="width:88px;">
+        <span class="te-prefix">元 /</span>
+        <input type="number" id="taskPayDays" min="1" max="31" step="1" value="26" inputmode="numeric" class="te-interval-input" style="width:64px;">
+        <span class="te-unit">天</span>
+      </div>
+      <div class="te-hint">工资 = 满勤月工资 ÷ 满勤天数 × 当月工作天数；当月工作天数取 备忘录 → 家政考勤（育儿嫂）：当月 1 号至下户日期或当月最后一天的总天数 − 休假天数。</div>
+      <div class="te-label" style="margin-top:8px;">推送内容（自动生成，无需填写）</div>
       <div class="te-wage-preview" id="taskWagePreview">年-月：休假 天，工作 天，应发工资 元，请转账。</div>
-      <div class="te-hint">按「月薪 ÷ 26 天 × 实际工作天数」计算；工作天数 = 周期总天数 − 备忘录中的休假天数。结算成功后会清空当月休假并切换到下个月。</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-success" onclick="saveTask()">确定</button>
@@ -2909,6 +2946,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.44"></script>
+<script src="app.js?v=v3.6.45"></script>
 </body>
 </html>

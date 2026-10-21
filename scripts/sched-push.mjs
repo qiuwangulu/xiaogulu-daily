@@ -49,7 +49,8 @@ const WEATHER_CACHE_TTL = 3 * 3600000;
 // 注意：prompt 内容变化时须前后端同步升级此版本号（前端 app.js PLAN_PROMPT_VERSION）。
 const PLAN_PROMPT_VERSION = '13';
 
-// v3.6.0 育儿嫂休假 / 工资结算常量（与前端一致）
+// v3.6.0 育儿嫂休假 / v3.6.45 家政考勤 / 工资结算常量（与前端一致）
+const HOUSEKEEPER_CLOUD_KEY = '_housekeeper';
 const NANNY_VACATION_CLOUD_KEY = '_nanny_vacation';
 const NANNY_BASE_SALARY = 10000;
 const NANNY_PAY_DIVISOR = 26;
@@ -302,47 +303,121 @@ function splitPlan(full) {
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
-/* ==================== 育儿嫂休假 / 工资（v3.6.0） ==================== */
+/* ==================== 家政考勤 / 工资（v3.6.0 → v3.6.45） ==================== */
 function fmtDateLocal(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
-// 拉取云端育儿嫂休假集合
-async function fetchNannyVacation(fid, key) {
+function daysInMonth(ym) {
+  const m = /^(\d{4})-(\d{2})$/.exec(ym || ''); if (!m) return 30;
+  return new Date(+m[1], +m[2], 0).getDate();
+}
+// v3.6.45 家政考勤默认结构（与前端 hkDefault 一致）
+function hkDefault() {
+  const p0 = () => ({ on: true, startDate: '', endDate: '', vac: {} });
+  return { hourly: p0(), nanny: p0() };
+}
+function hkPersonDef(v) {
+  const p0 = { on: true, startDate: '', endDate: '', vac: {} };
+  if (v && typeof v === 'object') {
+    p0.on = v.on !== false;
+    if (typeof v.startDate === 'string') p0.startDate = v.startDate;
+    if (typeof v.endDate === 'string') p0.endDate = v.endDate;
+    if (v.vac && typeof v.vac === 'object' && !Array.isArray(v.vac)) {
+      Object.keys(v.vac).forEach(d => {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) p0.vac[d] = (v.vac[d] === 0.5 || v.vac[d] === '0.5') ? 0.5 : 1;
+      });
+    }
+  }
+  return p0;
+}
+// 拉取云端家政考勤（v3.6.45）；无新键 _housekeeper 时兜底读旧键 _nanny_vacation（平铺日期数组 → nanny.vac）
+async function fetchHousekeeper(fid, key) {
+  try {
+    const rows = await sbGet(`family_config?family_id=eq.${fid}&config_key=eq.${HOUSEKEEPER_CLOUD_KEY}&select=encrypted_data,iv`);
+    if (rows.length && rows[0].encrypted_data && rows[0].iv) {
+      const remote = JSON.parse(decrypt(key, rows[0].encrypted_data, rows[0].iv));
+      if (remote && typeof remote === 'object') {
+        return { hourly: hkPersonDef(remote.hourly), nanny: hkPersonDef(remote.nanny) };
+      }
+    }
+  } catch (e) { console.warn('[家政考勤] 读取失败', e && e.message); }
+  // 旧键兜底（v3.6.45 之前的育儿嫂休假平铺数组）
   try {
     const rows = await sbGet(`family_config?family_id=eq.${fid}&config_key=eq.${NANNY_VACATION_CLOUD_KEY}&select=encrypted_data,iv`);
-    if (!rows.length || !rows[0].encrypted_data || !rows[0].iv) return [];
-    const arr = JSON.parse(decrypt(key, rows[0].encrypted_data, rows[0].iv));
-    return Array.isArray(arr) ? arr.filter(d => typeof d === 'string') : [];
-  } catch (e) { console.warn('[Nanny] 读取失败', e && e.message); return []; }
+    if (rows.length && rows[0].encrypted_data && rows[0].iv) {
+      const arr = JSON.parse(decrypt(key, rows[0].encrypted_data, rows[0].iv));
+      if (Array.isArray(arr)) {
+        const hk = hkDefault();
+        arr.forEach(d => { if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) hk.nanny.vac[d] = 1; });
+        return hk;
+      }
+    }
+  } catch (e) { console.warn('[Nanny] 旧键读取失败', e && e.message); }
+  return hkDefault();
 }
-// 计算工资任务在某触发周期内的结算明细（移植前端 computeWage）
-function computeWage(task, trig, vacList) {
-  const dailyRate = NANNY_BASE_SALARY / NANNY_PAY_DIVISOR;
-  const end = new Date(trig.getFullYear(), trig.getMonth(), trig.getDate());
-  const startStr = (task.lastWageDate && /^\d{4}-\d{2}-\d{2}$/.test(task.lastWageDate)) ? task.lastWageDate : (task.startDate || fmtDateLocal(end));
-  const start = new Date(startStr + 'T00:00:00');
-  if (isNaN(start.getTime())) start.setTime(end.getTime());
-  let totalDays = Math.round((end - start) / 86400000);
-  if (totalDays < 1) totalDays = 1;
-  let vacDays = 0;
-  for (const d of (vacList || [])) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
-    const dd = new Date(d + 'T00:00:00');
-    if (dd >= start && dd < end) vacDays++;
+// 某人当月总天数口径（与前端 hkMonthTotalDays 一致）：
+//   上户中(on)：本月=1号至今天；历史月=整月
+//   已下户(!on)：下户日期在当月=1号至下户日期（含当天）；否则整月
+function hkMonthTotalDays(person, ym, todayStr) {
+  const dim = daysInMonth(ym);
+  if (person.on) {
+    if (ym === todayStr.slice(0, 7)) return parseInt(todayStr.slice(8, 10), 10) || 1;
+    return dim;
   }
+  const end = person.endDate;
+  if (end && end.slice(0, 7) === ym) return parseInt(end.slice(8, 10), 10) || dim;
+  return dim;
+}
+function hkMonthVacDays(person, ym) {
+  let v = 0;
+  Object.keys(person.vac || {}).forEach(d => { if (d.slice(0, 7) === ym) v += (person.vac[d] === 0.5 ? 0.5 : 1); });
+  return v;
+}
+function hkNum(n) { const v = Math.round(n * 10) / 10; return Number.isInteger(v) ? String(v) : String(v); }
+// v3.6.45 需求③：工资 = 满勤月工资 ÷ 满勤天数 × 当月工作天数（与前端 computeWage 一致）。
+// 当月工作天数取家政考勤·育儿嫂；结算月 = 触发日前一天所在月（monthly 每月1号推=结算上月；
+// 下户提前推送时 trig=下户日期当天 → 结算下户当月）。
+// vacList 参数保留兼容旧签名（v3.6.45 起一律取 hk）。
+function computeWage(task, trig, hk, vacList) {
+  const base = (task && task.baseSalary > 0) ? task.baseSalary : NANNY_BASE_SALARY;
+  const div = (task && task.payDays > 0) ? task.payDays : NANNY_PAY_DIVISOR;
+  const dailyRate = base / div;
+  const end = new Date(trig.getFullYear(), trig.getMonth(), trig.getDate());
+  const ym = fmtDateLocal(new Date(end.getTime() - 86400000)).slice(0, 7);
+  const h = hk || hkDefault();
+  const person = h.nanny;
+  const todayStr = fmtDateLocal(new Date());
+  const totalDays = hkMonthTotalDays(person, ym, todayStr);
+  const vacDays = hkMonthVacDays(person, ym);
   const workDays = Math.max(0, totalDays - vacDays);
   const wage = Math.round(dailyRate * workDays);
-  return { dailyRate, totalDays, vacDays, workDays, wage, startStr, endStr: fmtDateLocal(new Date(end.getTime() - 86400000)) };
+  return { dailyRate, baseSalary: base, payDays: div, totalDays, vacDays, workDays, wage, ym,
+    startStr: ym + '-01', endStr: ym + '-' + String(totalDays).padStart(2, '0') };
 }
 function wagePushContent(w) {
   // v3.6.1 固定默认格式（前端任务编辑不再填写内容）：「YYYY-MM：休假 X 天，工作 Y 天，应发工资 Z 元，请转账。」
   const ym = (w.endStr || '').slice(0, 7);
-  return `${ym}：休假 ${w.vacDays} 天，工作 ${w.workDays} 天，应发工资 ${w.wage} 元，请转账。`;
+  return `${ym}：休假 ${hkNum(w.vacDays)} 天，工作 ${hkNum(w.workDays)} 天，应发工资 ${w.wage} 元，请转账。`;
 }
-// v3.6.1 月度归档：工资结算推送成功后，把当月休假日归档进备忘录已办事项、清空当月休假、切到下个月
-async function archiveNannyMonthCloud(fid, key, monthKey, nannyVac) {
+// v3.6.45 需求③：工资任务当月有下户日期时，推送提前至下户日期当天同一时刻
+// （如原定 10月30日 12:00、下户 10月20日 → 10月20日 12:00 推，10月30日不推）
+function wageTrigAdjusted(task, trig, hk) {
+  try {
+    const p0 = (hk || hkDefault()).nanny;
+    if (p0 && !p0.on && p0.endDate && task.startTime) {
+      const shifted = new Date(p0.endDate + 'T' + task.startTime + ':00');
+      if (!isNaN(shifted.getTime()) && shifted < trig) return shifted;
+    }
+  } catch (e) {}
+  return trig;
+}
+// v3.6.1 月度归档：工资结算推送成功后，把育儿嫂当月休假日归档进备忘录已办事项、清空当月休假
+// v3.6.45：改操作家政考勤 housekeeper.nanny.vac（保留 0.5 半天值），并写回 _housekeeper 云键
+async function archiveNannyMonthCloud(fid, key, monthKey, hk) {
   const ym = monthKey;
-  const monthList = nannyVac.filter(d => typeof d === 'string' && d.slice(0, 7) === ym);
-  const rest = nannyVac.filter(d => !(typeof d === 'string' && d.slice(0, 7) === ym));
+  const person = (hk || hkDefault()).nanny;
+  const monthList = Object.keys(person.vac).filter(d => d.slice(0, 7) === ym).sort();
+  const rest = Object.keys(person.vac).filter(d => d.slice(0, 7) !== ym);
   if (!monthList.length) return 0;
+  const total = monthList.reduce((s, d) => s + (person.vac[d] === 0.5 ? 0.5 : 1), 0);
   // ① 写备忘录已办事项（与前端 loadMemoCloud 合并策略一致：云端先入、服务端后入）
   try {
     const rows = await sbGet(`family_config?family_id=eq.${fid}&config_key=eq._memo&select=encrypted_data,iv`);
@@ -352,17 +427,21 @@ async function archiveNannyMonthCloud(fid, key, monthKey, nannyVac) {
     }
     const maxId = arr.reduce((m, x) => Math.max(m, (x && x.id) || 0), 0);
     arr.unshift({ id: maxId + 1, done: true, date: fmtDateLocal(new Date()),
-      text: '👩 育儿嫂休假 ' + ym + '：' + monthList.join('、') + '（共 ' + monthList.length + ' 天）' });
+      text: '👩 育儿嫂休假 ' + ym + '：' + monthList.join('、') + '（共 ' + hkNum(total) + ' 天）' });
     const enc = encrypt(key, JSON.stringify(arr));
     await sbUpsert('family_config', { family_id: fid, config_key: '_memo', encrypted_data: enc.data, iv: enc.iv, last_modified: Date.now() });
-    console.log('[Nanny] 已归档当月休假日到备忘录已办事项', ym, monthList.length, '天');
-  } catch (e) { console.warn('[Nanny] 备忘录归档失败', e && e.message); }
-  // ② 清空当月休假并写回云端
+    console.log('[家政考勤] 已归档当月休假日到备忘录已办事项', ym, monthList.length, '天');
+  } catch (e) { console.warn('[家政考勤] 备忘录归档失败', e && e.message); }
+  // ② 清空当月休假并写回云端（_housekeeper）
   try {
-    const enc2 = encrypt(key, JSON.stringify(rest));
-    await sbUpsert('family_config', { family_id: fid, config_key: NANNY_VACATION_CLOUD_KEY, encrypted_data: enc2.data, iv: enc2.iv, last_modified: Date.now() });
-    console.log('[Nanny] 已清空当月休假', ym, '剩余', rest.length, '天');
-  } catch (e) { console.warn('[Nanny] 休假回写失败', e && e.message); }
+    const out = hk || hkDefault();
+    const newVac = {};
+    rest.forEach(d => { newVac[d] = out.nanny.vac[d]; });
+    out.nanny.vac = newVac;
+    const enc2 = encrypt(key, JSON.stringify(out));
+    await sbUpsert('family_config', { family_id: fid, config_key: HOUSEKEEPER_CLOUD_KEY, encrypted_data: enc2.data, iv: enc2.iv, last_modified: Date.now() });
+    console.log('[家政考勤] 已清空当月休假', ym, '剩余', rest.length, '天');
+  } catch (e) { console.warn('[家政考勤] 回写失败', e && e.message); }
   return monthList.length;
 }
 
@@ -577,10 +656,10 @@ async function main() {
   const ctx = data.ctx || {};
   console.log('[Sched] 任务数 =', tasks.length, '| AI密钥 =', ctx.ai && ctx.ai.apiKey ? '有' : '无', '| 推送token =', ctx.pushToken ? '有' : '无', '| 天气地址 =', ctx.weatherAddr || '');
 
-  // v3.6.0 育儿嫂休假集合（供工资任务扣减）
-  let nannyVac = [];
-  try { nannyVac = await fetchNannyVacation(fid, key); } catch (e) { console.warn('[Nanny] 读取失败', e && e.message); }
-  console.log('[Sched] 育儿嫂休假天数 =', nannyVac.length);
+  // v3.6.0 育儿嫂休假集合（供工资任务扣减）/ v3.6.45 家政考勤（housekeeper_v1）
+  let housekeeper = hkDefault();
+  try { housekeeper = await fetchHousekeeper(fid, key); } catch (e) { console.warn('[家政考勤] 读取失败', e && e.message); }
+  console.log('[Sched] 家政考勤（育儿嫂）当月休假天数 =', hkMonthVacDays(housekeeper.nanny, fmtDateLocal(now).slice(0, 7)));
 
   const now = new Date();
   let changed = false;
@@ -611,8 +690,10 @@ async function main() {
     }
 
     // ② 到点推送
-    const trig = prev;
+    // v3.6.45 需求③：工资任务当月有下户日期 → 推送提前至下户日期当天同一时刻（原触发点不再推）
+    let trig = prev;
     if (!trig) continue;
+    if (task.type === 'wage') trig = wageTrigAdjusted(task, trig, housekeeper);
     const inWindow = now >= trig && now < new Date(trig.getTime() + SCHED_PUSH_GRACE);
     const pk = periodKey(task, trig);
     if (!inWindow) { console.log('[Sched] 未到点:', name, '下次', next ? next.toLocaleString('zh-CN') : '—'); continue; }
@@ -632,9 +713,10 @@ async function main() {
     }
 
     let title, content;
-    // v3.6.0 育儿嫂工资任务：触发时按周期(上次结算日~本次触发)算工作天数与工资
+    // v3.6.0 育儿嫂工资任务 / v3.6.45 需求③：触发时按「满勤月工资÷满勤天数×当月工作天数」算工资
+    // （当月工作天数取家政考勤·育儿嫂，见 computeWage）
     if (task.type === 'wage') {
-      const w = computeWage(task, trig, nannyVac);
+      const w = computeWage(task, trig, housekeeper);
       title = '👩 育儿嫂工资结算';
       content = '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(wagePushContent(w)) + '</pre>';
     } else if (task.mode === 'ai') {
@@ -655,10 +737,11 @@ async function main() {
       task.pushPeriod = pk; task.pushTs = Date.now();
       if (task.type === 'wage') {
         task.lastWageDate = fmtDateLocal(trig);
-        // v3.6.1 结算成功后归档：当月休假 → 备忘录已办，清空当月休假，前端切到下个月
+        // v3.6.1 结算成功后归档：当月休假 → 备忘录已办，清空当月休假
+        // v3.6.45：归档操作家政考勤 housekeeper.nanny.vac（保留 0.5 半天值）
         const ym = fmtDateLocal(new Date(trig.getTime() - 86400000)).slice(0, 7);
-        try { nannyVac = (await fetchNannyVacation(fid, key)); await archiveNannyMonthCloud(fid, key, ym, nannyVac); }
-        catch (e) { console.warn('[Nanny] 归档失败', e && e.message); }
+        try { await archiveNannyMonthCloud(fid, key, ym, housekeeper); }
+        catch (e) { console.warn('[家政考勤] 归档失败', e && e.message); }
       }
       if (task.freq === 'once') task.enabled = false;
       changed = true;
