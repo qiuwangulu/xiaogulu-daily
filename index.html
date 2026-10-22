@@ -2140,6 +2140,14 @@
   body.theme-day .ee-item .rec-del svg { stroke: #3d4852; }
   .ee-empty { font-size: 13px; color: #b2bec3; padding: 12px 0; text-align: center; }
   body.theme-day .ee-empty { color: #7b8a94; }
+  /* v3.6.54 管理页音频行：行中间显示累计播放次数 + 名次星形 */
+  .ee-item .ee-plays { flex-shrink: 0; min-width: 54px; text-align: center; font-size: 12px; color: #b2bec3; background: rgba(255,255,255,0.06); border-radius: 10px; padding: 3px 8px; }
+  body.theme-day .ee-item .ee-plays { color: #7b8a94; background: rgba(0,0,0,0.05); }
+  .ee-item .ee-star { margin-right: 4px; font-size: 13px; line-height: 1; }
+  .ee-item .ee-star.gold { color: #f1c40f; }
+  .ee-item .ee-star.gray { color: #95a5a6; }
+  body.theme-day .ee-item .ee-star.gold { color: #f39c12; }
+  body.theme-day .ee-item .ee-star.gray { color: #b2bec3; }
   /* 编辑弹窗字段 */
   .te-field { margin: 12px 0; }
   .te-label { font-size: 14px; color: #dfe6e9; margin-bottom: 6px; }
@@ -3013,6 +3021,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.53"></script>
+<script src="app.js?v=v3.6.54"></script>
 </body>
 </html>
