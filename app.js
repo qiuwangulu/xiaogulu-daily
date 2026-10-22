@@ -5993,7 +5993,10 @@ async function saveSchedCloud() {
       weight: localStorage.getItem('babyWeight') || '',
       babyName: BABY_NAME,
       birthDate: bd.getFullYear() + '-' + _pad2(bd.getMonth() + 1) + '-' + _pad2(bd.getDate()),
-      kb: planKbList(kbSrc, 50),
+      // v3.6.53：ctx.kb 落库保留完整 KB（仅用宽松上限 200 + 风速规则置顶兜底，保证云端镜像本地 KB），
+      // 不再截断到 50——旧 slice(0,50) 会在源头丢失靠后的风速规则（idx=53），导致服务端读到的 ctx.kb 本就无风速规则。
+      // 计划 prompt 文本构造仍由各端 planKbList(..., 50) 按 50 预算截断（风速规则已置顶，必在预算内）。
+      kb: planKbList(kbSrc, 200),
       promptVer: PLAN_PROMPT_VERSION,
       genLead: SCHED_GEN_LEAD
     };
