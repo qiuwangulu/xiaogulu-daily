@@ -394,6 +394,9 @@ function hkMonthVacDays(person, ym) {
   return v;
 }
 function hkNum(n) { const v = Math.round(n * 10) / 10; return Number.isInteger(v) ? String(v) : String(v); }
+/* v3.6.55 工资结算任务判定（与前端 isWageTask 同口径）：v3.6.45 起 type/mode 同步写入，
+   更早或异常数据可能只有其一，双条件兼容——避免旧工资任务被当成普通提醒推送。 */
+function isWageTask(t) { return !!t && (t.type === 'wage' || t.mode === 'wage'); }
 // v3.6.45 需求③：工资 = 满勤月工资 ÷ 满勤天数 × 当月工作天数（与前端 computeWage 一致）。
 // 当月工作天数取家政考勤·育儿嫂；结算月 = 触发日前一天所在月（monthly 每月1号推=结算上月；
 // 下户提前推送时 trig=下户日期当天 → 结算下户当月）。
@@ -716,7 +719,7 @@ async function main() {
     // v3.6.45 需求③：工资任务当月有下户日期 → 推送提前至下户日期当天同一时刻（原触发点不再推）
     let trig = prev;
     if (!trig) continue;
-    if (task.type === 'wage') trig = wageTrigAdjusted(task, trig, housekeeper);
+    if (isWageTask(task)) trig = wageTrigAdjusted(task, trig, housekeeper);   // v3.6.55 与前端同口径
     const inWindow = now >= trig && now < new Date(trig.getTime() + SCHED_PUSH_GRACE);
     const pk = periodKey(task, trig);
     if (!inWindow) { console.log('[Sched] 未到点:', name, '下次', next ? next.toLocaleString('zh-CN') : '—'); continue; }
@@ -738,9 +741,9 @@ async function main() {
     let title, content;
     // v3.6.0 育儿嫂工资任务 / v3.6.45 需求③：触发时按「满勤月工资÷满勤天数×当月工作天数」算工资
     // （当月工作天数取家政考勤·育儿嫂，见 computeWage）
-    if (task.type === 'wage') {
+    if (isWageTask(task)) {   // v3.6.55 与前端 isWageTask 同口径（旧数据可能只有其一）
       const w = computeWage(task, trig, housekeeper);
-      title = '👩 育儿嫂工资结算';
+      title = '💰 工资结算';   // v3.6.55 推送标题统一为「💰 工资结算」（去掉「👩 育儿嫂」前缀）
       content = '<pre style="white-space:pre-wrap;font-family:inherit;line-height:1.6;">' + escapeHtml(wagePushContent(w)) + '</pre>';
     } else if (task.mode === 'ai') {
       const sp = splitPlan(task.content);
@@ -758,7 +761,7 @@ async function main() {
     if (ok) {
       await cloudMark(fid, sig);
       task.pushPeriod = pk; task.pushTs = Date.now();
-      if (task.type === 'wage') {
+      if (isWageTask(task)) {
         task.lastWageDate = fmtDateLocal(trig);
         // v3.6.1 结算成功后归档：当月休假 → 备忘录已办，清空当月休假
         // v3.6.45：归档操作家政考勤 housekeeper.nanny.vac（保留 0.5 半天值）
