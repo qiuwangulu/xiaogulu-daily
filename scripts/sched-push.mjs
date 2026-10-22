@@ -47,7 +47,7 @@ const WEATHER_CACHE_TTL = 3 * 3600000;
 // 导致部署新 prompt 后今日计划永不刷新。现在改为标记服务端自己的版本号：服务端落后时，
 // 前端会按版本差重新生成，前后端任一边更新都能自愈。
 // 注意：prompt 内容变化时须前后端同步升级此版本号（前端 app.js PLAN_PROMPT_VERSION）。
-const PLAN_PROMPT_VERSION = '14'; // v3.6.50 与 app.js 逐字对齐：重写【风级换算与户外/防风】——风速档位以家庭知识库中用户自定义标准为唯一准绳（用户阈值绝对优先、严禁通用风级表/兜底数值覆盖、边界严禁四舍五入或折中），兜底仅在知识库无风速风级定义时启用且须声明；详见 app.js 同段注释
+const PLAN_PROMPT_VERSION = '15'; // v3.6.53 与 app.js 逐字对齐：新增 planKbList 把「风速/风级/防风」相关 KB 条目强制置顶、其余按预算截断，修复 v3.6.50 遗留真正根因——KB 前 50 条截断漏掉靠后风速规则（用户 KB 共 62 条、风速规则在 idx=53），导致「16km/h 仍归小风」；详见 app.js 同段注释
 
 // v3.6.0 育儿嫂休假 / v3.6.45 家政考勤 / 工资结算常量（与前端一致）
 const HOUSEKEEPER_CLOUD_KEY = '_housekeeper';
@@ -240,10 +240,21 @@ function getAgeDetail(birthStr, ds) {
   if (days < 0) days = 0;
   return { months, days };
 }
+// v3.6.53 计划用 KB 构造：与 app.js planKbList 逐字对齐——把「风速/风级/防风」相关条目永远置顶，其余按预算截断，
+// 保证靠后的风速规则（用户 KB 共 62 条、风速规则在 idx=53）不被前 50 条截断漏掉，从根上修复「16km/h 归小风」。
+// 返回结构与 KB 一致的 [{cat,text}] 数组，供 plan prompt 文本构造共用。
+function planKbList(kbArr, budget) {
+  const windRe = /km\/h|风速|风级|风小|风稍大|风大|防风|避风/i;
+  const arr = Array.isArray(kbArr) ? kbArr : [];
+  const isWind = x => windRe.test((x.text || '') + ' ' + (x.cat || ''));
+  const wind = arr.filter(isWind);
+  const other = arr.filter(x => !isWind(x));
+  return wind.concat(other).slice(0, budget || 50);
+}
 function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec, sfStreak) {
   const ad = getAgeDetail(ctx.birthDate, dateStr);
   const h = ctx.height || '', w = ctx.weight || '';
-  const kbPart = (ctx.kb || []).slice(0, 50).map(x => '- [' + x.cat + '] ' + x.text).join('\n');
+  const kbPart = planKbList(ctx.kb || [], 50).map(x => '- [' + x.cat + '] ' + x.text).join('\n');
   // v3.6.40 辅食连续添加天数（昨日=第 streak 天，今日=第 streak+1 天；streak=0 表示前一日无辅食记录）
   const _sf = (sfStreak && typeof sfStreak === 'object' && !Array.isArray(sfStreak)) ? sfStreak : null;
   const sfDay = (_sf && _sf.streak > 0) ? (_sf.streak + 1) : 0;
