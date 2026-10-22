@@ -26,6 +26,9 @@ const DRY_RUN = process.env.DRY_RUN === '1' || process.env.DRY_RUN === 'true';
 const SCHED_CLOUD_KEY = '_sched_cloud';
 const SALT_KEY = '_salt';
 const SCHED_DEDUP_KEY = '_schedpushdedup';
+/* v3.6.56 任务禁用名单（独立键，与 _sched_cloud 的 tasks 分离）——关闭状态不再只依赖 tasks.enabled，
+   避免其他设备/旧版页面把 enabled 复活成 true 时继续推送。{ ids: {任务id: 关闭时间戳} } */
+const SCHED_DISABLED_KEY = '_sched_disabled';
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内推送
 const SCHED_GEN_LEAD = 12 * 3600000;     // v3.6.3 起不再使用：改为每天 0 点生成「当天」计划
 const DEDUP_MAX_AGE = 12 * 3600000;      // 去重有效期
@@ -638,6 +641,18 @@ async function notifyPushplus(ctx, title, content) {
     return ok;
   } catch (e) { console.warn('[推送] 异常', e && e.message); return false; }
 }
+/* v3.6.56 读取禁用名单（解密）；任何异常都退化为空名单，不影响主流程。 */
+async function fetchDisabledMap(fid, key) {
+  try {
+    const rows = await sbGet(`family_config?family_id=eq.${fid}&config_key=eq.${SCHED_DISABLED_KEY}&select=encrypted_data,iv`);
+    if (!rows.length || !rows[0].encrypted_data || !rows[0].iv) return {};
+    const obj = JSON.parse(decrypt(key, rows[0].encrypted_data, rows[0].iv));
+    return (obj && obj.ids && typeof obj.ids === 'object') ? obj.ids : {};
+  } catch (e) {
+    console.warn('[Sched] 禁用名单读取失败（按空名单继续）:', e && e.message);
+    return {};
+  }
+}
 async function cloudDup(fid, sig) {
   try {
     const rows = await sbGet(`family_config?family_id=eq.${fid}&config_key=eq.${SCHED_DEDUP_KEY}&select=encrypted_data`);
@@ -690,9 +705,21 @@ async function main() {
 
   let changed = false;
   const genAttempted = new Set();   // v3.6.17 本次运行已尝试过生成的任务（避免①失败后②在同一次运行内重复调 AI+天气）
+  // v3.6.56 禁用名单：独立于 tasks 的「关闭状态」，防止某台设备/旧页面把 enabled 写回 true 后继续推送
+  const disabledMap = await fetchDisabledMap(fid, key);
+  const disabledCnt = Object.keys(disabledMap).length;
+  if (disabledCnt) console.log('[Sched] 禁用名单条数 =', disabledCnt);
 
   for (const task of tasks) {
     if (!task || !task.enabled) continue;
+    // v3.6.56 禁用名单兜底：名单里有它、且之后没有被重新开启（enabledTs 更晚）→ 一律不推
+    if (task.id != null && disabledMap[String(task.id)]) {
+      const dts = Number(disabledMap[String(task.id)] || 0);
+      if (!(Number(task.enabledTs || 0) > dts)) {
+        console.log('[Sched] 已关闭（禁用名单），跳过:', task.name || task.id);
+        continue;
+      }
+    }
     const { prev, next } = computeTriggers(task, now);
     const name = (task.name && String(task.name).trim()) ? String(task.name).trim() : (task.mode === 'ai' ? '今日计划' : '定时提醒');
     const taskKey = (task.id != null) ? String(task.id) : name;
