@@ -150,16 +150,15 @@
      v3.6.29 冒号与数值间隔改为与「下次喝奶: 02:25」一致（4px）——label/数值/单位均改为 auto 宽、数值紧跟冒号；
              item 再收紧 132→120px（右移、右缘不变）；v3.6.28 的「h 与 l 对齐」因与冒号紧凑互斥，本次移除 */
   .overview-item.ov-unit-item { width: 120px; flex-shrink: 0; gap: 4px; }
-  /* v3.6.12 今日成就：左右两栏 —— 左栏文字两端对齐(justify)，右栏为点赞按钮独占列；
-     右栏下方留白，文字不侵入（即「点赞下方的文字右侧空出来」） */
-  .overview-achievement { color: #fff; font-size: 15px; margin-top: 0; display: flex; align-items: flex-start; gap: 4px; }
+  /* v3.6.12 今日成就：文字占满整行、点赞按钮整体下移成第二行（v3.6.58 由左右两栏改为纵向堆叠） */
+  .overview-achievement { color: #fff; font-size: 15px; margin-top: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
   .overview-achievement .ov-icon { font-size: 15px; }
   .overview-achievement .ov-text { flex: 1 1 auto; min-width: 0; color: #ffeaa7; font-size: 15px; line-height: 1.6; text-align: justify; text-align-last: left; }   /* v3.6.24 14px→15px：与「下一次喝奶」行同字号 */
   .overview-achievement .ov-text .ov-label { color: #fff; }
   /* v3.6.9 今日成就整体一个赞（按天）：图标放大一倍（13px→26px）、点赞/取消区分度明显
      未赞 = 灰暗灰阶；已赞 = 高亮彩色 + 放大
      v3.6.12：作为独立右栏（flex 子项）顶对齐，其下方留白，文字不侵入 */
-  .ach-like-btn { flex: 0 0 auto; background: none; border: none; cursor: pointer; font-size: 26px; line-height: 1; padding: 0 2px; margin: 0; opacity: .45; filter: grayscale(1); transition: transform .12s, opacity .12s, filter .12s; color: inherit; }
+  .ach-like-btn { flex: 0 0 auto; background: none; border: none; cursor: pointer; font-size: 26px; line-height: 1; padding: 0 2px; margin: 2px 0 0 0; opacity: .45; filter: grayscale(1); transition: transform .12s, opacity .12s, filter .12s; color: inherit; }
   .ach-like-btn:hover { opacity: .75; }
   .ach-like-btn.liked { opacity: 1; filter: none; transform: scale(1.08); }
   .ach-like-btn:active { transform: scale(1.3); }
@@ -846,8 +845,8 @@
     color: #fff; margin-bottom: 16px;
     text-align: center;
   }
-  /* v3.5.97 编辑记录弹窗标题：取消加粗、字号 14（ID 选择器仅覆盖本弹窗，不影响其他弹窗标题） */
-  #editFormTitle { font-size: 14px; font-weight: 400; }
+  /* v3.5.97 编辑记录弹窗标题：取消加粗（ID 选择器仅覆盖本弹窗，不影响其他弹窗标题）；v3.6.58 字号 14→16 */
+  #editFormTitle { font-size: 16px; font-weight: 400; }
   .modal-version {
     font-size: 11px;
     color: rgba(178,190,195,0.6);
@@ -1410,6 +1409,9 @@
   .history-sum-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-size: 14px; }
   .history-sum-row .hs-label { color: #fff; flex-shrink: 0; }
   .history-sum-row .hs-value { color: #fff; text-align: right; word-break: break-all; font-weight: 600; }
+  /* v3.6.58 今日成就：标签占首行、内容整块换行且两端对齐（justify） */
+  .history-sum-row.hs-ach-row { flex-wrap: wrap; }
+  .hs-ach-val { flex: 1 1 100%; text-align: justify; text-align-last: left; word-break: break-all; font-weight: 400; }
 
   .custom-options-section {
     margin-top: 18px; padding-top: 14px;
@@ -3024,6 +3026,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.57"></script>
+<script src="app.js?v=v3.6.58"></script>
 </body>
 </html>

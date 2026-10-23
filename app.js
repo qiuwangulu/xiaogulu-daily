@@ -405,7 +405,7 @@ function loadHiddenActivities() {
   try { const s = JSON.parse(localStorage.getItem('hiddenActivities')); hiddenActivities = s || [...DEFAULT_HIDDEN]; }
   catch { hiddenActivities = [...DEFAULT_HIDDEN]; }
 }
-function saveHiddenActivities() { localStorage.setItem('hiddenActivities', JSON.stringify(hiddenActivities)); syncUpload('config'); }
+function saveHiddenActivities() { localStorage.setItem('hiddenActivities', JSON.stringify(hiddenActivities)); syncUpload('config'); if (typeof scheduleSchedCloudSave === 'function') scheduleSchedCloudSave(); }   // v3.6.58 需求②：关闭/开启活动同步上传计划上下文（含 hiddenActivities）
 
 function getTodayRecords() {
   try { return sanitizeRecords(JSON.parse(localStorage.getItem(getTodayKey()) || '[]')); } catch { return []; }
@@ -1518,7 +1518,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.57';
+const APP_VERSION = 'v3.6.58';
 // v3.6.57: 修复「工资结算名称还是无法修改」。真因在 normalizeWageTaskNames：v3.6.56 里它每次渲染任务页（含保存后重渲染）都会把名字匹配旧默认名模式（育儿嫂工资结算/钟点工工资结算/💰工资结算 等，甚至保留名「工资结算」）的任务强制改回「工资结算」，用户改名后一刷新即被还原。现工资名称完全自定义——normalizeWageTaskNames 只补空名默认值、绝不再动任何已有名称；saveTask 仍写 t.name=用户值、仅空名补默认；列表/副标题/推送标题一律用任务自身 name；展开仍显示只读说明条 .task-wage-note（内容自动生成，不可编辑，呼应 v3.6.56 需求②）。改名后持久、可任意命名（含「育儿嫂工资结算」「💰工资结算」等旧名）。新增 test_v3657.py；HANDOFF 同步。 // v3.6.56: 两项用户反馈——①「育儿嫂午餐费任务已关闭，但还是会推送消息，关闭没生效」：根因不是本地开关没关，而是**关闭状态只存在 tasks.enabled 里**——(a) 关闭后若当次上传未成功（同步未就绪/密钥未就绪/页面很快关掉），旧实现只把待传标记存内存（`_schedCloudPending`），页面一关就丢，云端长期停在 enabled=true，服务端 GitHub Actions 照旧到点推送（实测服务端 17:41 运行日志里该任务仍被当成启用任务遍历）；(b) 家庭里其他设备或同一个旧标签页跑的是旧版 JS/旧内存状态，它们上传的 tasks 会把云端 enabled 写回 true，本机再拉取合并时又被复活。修复：**新增独立「禁用名单」`_sched_disabled`**（本地 `sched_disabled_v1` + 云端独立加密键，与 tasks 分离，旧端不会覆盖它）——关闭任务时写入 `{任务id: 关闭时间戳}` 并即时上云；服务端推送前读名单跳过（即使 tasks 里被写回 true 也不推）；本机启动/切前台/每 5 分钟拉取名单并按 id 取较大时间戳合并，然后 `applySchedDisabled()` 把名单内任务强制置为关闭（并回写 tasks）；重新开启任务会从名单移除，恢复推送；`schedDisabledSeedFromTasks()` 把历史已关闭任务一次性补进名单（幂等）。配套加固：待上传标记改为**落盘** `sched_cloud_pending`（不在只在内存），上传成功才清除，启动/切前台/60s 轮询都会补传；`saveSchedCloud` 在密钥未就绪/加密失败/上传异常时都记 pending（旧实现 key 为空直接 return，静默丢失）；`pushTask` 终检升级为「松散判空 + 复查 SCHED_TASKS 当前状态 + 查禁用名单」三重校验。②「工资结算任务名称无法修改，只能显示工资结算；展开后文本框可编辑，应隐藏或只读」：撤销 v3.6.55 的强制改名（`saveTask` 不再写死 name，列表也用任务自身 name，仅空名时补默认「工资结算」）；`normalizeWageTaskNames` 改为**只归一旧默认名**（育儿嫂工资结算/钟点工工资结算，可带 emoji 前缀），用户自定义名原样保留；展开工资结算任务不再渲染可编辑文本框，改为只读说明条 `.task-wage-note`（双主题），`isPlanEditable` 对工资任务返回 false。索引 index.html 新增 `.task-wage-note` 双主题样式；服务端 scripts/sched-push.mjs 新增 `fetchDisabledMap` + 循环内跳过。新增 test_v3656.py；回归全量通过；双主题截图目检；HANDOFF 同步。 // v3.6.55: 用户需求「管理任务页，工资结算任务图标改为钱的图标，育儿嫂工资结算改为工资结算」——①图标：任务卡片图标由 💰/🤖/✏️ 三选一改为按 isWageTask 判定（原仅 `t.mode === 'wage'`，旧数据 mode 缺失时显示成别的图标），工资任务一律 💰；②名称：工资任务名统一为「工资结算」——新建/编辑保存时固定写入（saveTask），列表主标题与副标题同步（原副标题「👩 育儿嫂工资结算」→「工资结算」），推送标题「👩 育儿嫂工资结算」→「💰 工资结算」（前端 app.js 与服务端 scripts/sched-push.mjs 逐字对齐）；③旧数据幂等归一 normalizeWageTaskNames()：进任务页渲染时把历史工资任务名（如「👩‍💼 育儿嫂工资结算」「钟点工工资结算」）改成「工资结算」并落盘+同步家庭云，名字已正确时不写盘；④判定统一 isWageTask(t)=type==='wage'||mode==='wage'（前端与 sched-push.mjs 同口径），结算后记 lastWageDate、下户提前推送、工资内容生成、推送标题四类分支全部改走同一判定，避免旧数据只带 type 或只带 mode 时被当成普通提醒。新增 test_v3655.py；回归全量通过；双主题截图目检；HANDOFF 同步。 // v3.6.54: 管理→早教音频页新增每首累计播放次数（EARLY_EDU 条目 plays 字段）与榜单式排序：①【计数口径·未播完不计】一首完整播完（ended 事件）才 +1；几秒就切换/试听/中途切歌/加载失败都不计；个别内核不派达 ended 时，切歌或停止那一刻按真实进度补判（剩余 ≤2 秒或 ≤总时长 5% 才算播完，见 eeIsPlayDone），同一遍只计一次（_eeCountedId）；②列表按 plays 倒序、行中间显示「N 次」徽章；③Top5 名称左侧黄色★、倒数 5 首灰色★（与 Top5 不重叠）。新增 eeSortByPlays/eeStarFor/eeIsPlayDone/eeCountPlay 纯函数（可测）；回归 test_v3654.py 全绿；HANDOFF 同步。 // v3.6.53: 修复「更新完提示词、今日计划仍把 16km/h 归为小风」真正根因——根因不是盐事故（盐已恢复、服务端已跑通），而是 KB 前 50 条截断使风速规则（idx=53）漏出计划 prompt：①新增 planKbList（app.js 与 scripts/sched-push.mjs 两侧逐字对齐）把风速/风级/防风相关 KB 条目强制置顶、其余按预算截断，保证 windRules 无论位置都进计划 prompt；②同步修复 ctx.kb 落库截断（app.js saveSchedCloud 由 kbSrc.slice(0,50) 改走 planKbList），云端 ctx.kb 不再丢失靠后的风速规则；③PLAN_PROMPT_VERSION 14→15，触发当天计划按新逻辑重生成（staleVer）。新增 test_v3653.py；回归全量通过；离线版双主题 0 报错；HANDOFF 同步。// v3.6.52: 修复「家庭数据密钥(盐)被打挂导致服务端定时任务连续解密失败」事故的根因与自愈缺口——①【根因·预防】本地无 salt 且云端 _salt 查询为空时，老逻辑直接新建随机盐并上传，把家庭真实密钥打挂（服务端随后全部解密失败：今日计划停更、推送全停；前端巡检因时机缺口数小时未自愈）。新增安全闸 resolveCloudSalt/cloudFamilyHasData（app.js）：_salt 查询为空时，仅当确认家庭无任何数据行（family_records/其他 config 键全无）才允许新建（首次创建家庭）；家庭已有数据行 = 密钥异常，重试 2 次后明确失败并 toast「请用原手机打开 App 修复」，绝不新建覆盖。getCryptoKey/initSync/同步设置保存三处入口全部改走该安全闸。②【自愈缺口】setupSyncListeners 的 visibilitychange（切前台）与 online（联网恢复）补跑 checkSaltConsistency 盐巡检（节流 60s）——原 10 分钟间隔巡检在 document.hidden（锁屏/切后台）期间整段跳过，手机解锁使用过也不会修；③巡检判定 unknown（无法判定）时新增 30 分钟节流的可见 toast，不再静默；④服务端 scripts/sched-push.mjs 修 main() 的 TDZ 运行时错误（v3.6.45 引入：家政考勤日志行引用 const now 早于声明，服务端每次运行必崩——此前一直被盐解密失败挡在后面），并更新解密失败提示文案。新增 test_v3652.py（安全闸四场景 + 服务端 main() DRY_RUN+mock fetch 冒烟，抓 TDZ 类运行时错误）；回归全量通过；离线版双主题 0 报错；HANDOFF 同步。线上应急处置：已将云端 _salt 恢复为家庭真实盐值（能解密全部数据行），服务端解密恢复。// v3.6.51: 用户需求「修正当月工作天数计算：如果上户日期在当月，当天日期减上户日期」——家政考勤上户中(on)人员的当月总天数原口径为「1号至今天」（如 10-21 上户、10-22 查看显示本月 22 天），未按上户日期截断，导致当月刚开始上户就按当月已过去的天数计工作天数（工资多算）。现 hkMonthTotalDays（app.js 与服务端 scripts/sched-push.mjs 同步修改，服务端工资推送同口径）修正为：上户日期在当月 → 本月天数 = 当天 − 上户日期 + 1（含两端：上户当天即开始工作计 1 天，与已下户口径「1号至下户日期含当天」对称；如 10-21 上户、10-22 查看 = 2 天）；上户日期不在当月（更早月份上户）仍为「1号至今天」；历史月=整月；已下户口径不变（下户日期在当月=1号至下户日期）。当天上户=1 天；上户日期异常（晚于今天/格式错）回落原口径。computeWage（满勤月工资÷满勤天数×当月工作天数）与「已工作 X 天（本月 Y 天，休假 Z 天）」展示行自动跟随。新增 test_v3651.py；回归全量通过；离线版双主题 0 报错；HANDOFF 同步。// v3.6.50: 用户需求「知识库中低于15算小风，但今日计划中16归为小风，应该以知识库为准」——根因：计划 prompt【风级换算与户外/防风】段（app.js buildPlanSystemPrompt 与 scripts/sched-push.mjs 两侧逐字对齐）虽写「必须以家庭知识库为准」，但又给出兜底数值 ≤19km/h=风小，与用户知识库自定义的 ≤15km/h=风小 冲突，16km/h 落在两口径之间被更醒目的兜底数值带跑归小风。修复（两侧逐字重写规则段）：①风速档位判定改为「以家庭知识库中用户自定义的风速风级标准为唯一准绳」（通常位于知识库「穿衣/户外」条目），用户写明阈值优先于本段一切数值；②严禁使用通用气象风级表（如蒲福风级 3 级=12-19km/h）或 prompt 内兜底数值覆盖知识库定义；③边界严格按知识库原文执行、含等号一侧归属知识库写明的一档，不得四舍五入或取折中（例：KB 定义「风小 ≤15km/h」时 16km/h 必须归下一档「风稍大」）；④兜底（≤19 风小/20-38 风稍大/≥39 风大）仅在知识库完全没有风速/风级相关定义时启用，且须在正文注明「知识库未定义风速档位，按通用口径」；⑤摘要与正文的风档名称一律用知识库的档位名称。PLAN_PROMPT_VERSION 13→14，触发当天计划按新 prompt 重新生成（staleVer 重生成）。新增 test_v3650.py；回归全量通过；离线版双主题 0 报错；HANDOFF 同步。// v3.6.49: 用户需求「家政考勤后面的数字去掉」——备忘录家政考勤分区标题行右侧的当月休假天数汇总数字（#nannyVacDays .cnt，v3.6.0 起显示如「2.5」）不再渲染：renderHousekeeper 不再计算赋值、置空内容；HTML 初始值同步清空；保留空 span（无 min-width 不占位，样式规则不动），当月休假明细（各人「已工作 X 天（本月 Y 天，休假 Z 天）」行、休假 chips、月份切换）与工作天数/工资口径（hkMonthVacDays/hkMonthWorkDays/computeWage）均不受影响；待办事项/已办事项分区计数（0/33 等）保持不变。新增 test_v3649.py；回归全量通过；离线版双主题 0 报错；HANDOFF 同步。// v3.6.48: 两项用户需求——①「自定义任务在管理任务页已关闭，但仍推送消息」（v3.6.45 仅在 pushTask/runScheduler/服务端 sched-push 三处加了 enabled 终检，但漏了云同步传播链路，关闭态会被复活/延迟传播，构成三层根因）：(a)【复活漏洞·主因】mergeSchedCloudTasks 的 else 分支（计划内容不更新时）只合并 pushPeriod、不合并 enabled——他端/服务端回写后，本机周期性 saveSchedCloud 会把本地陈旧 enabled=true 覆盖回云端，关闭被复活，服务端 cron 每 5 分钟读到 true 继续推；现 enabled 按 enabledTs（开关操作时间戳，toggleTask 切换时记 Date.now()，同早教音频 name/type 的 updatedAt 冲突合并语义）取新端裁决：云端 enabledTs 更新→本地采纳云端 enabled（关闭/开启都正确传播），本地 enabledTs 更新→保留本地；(b)【传播延迟】saveSchedTasks→scheduleSchedCloudSave 有 5s 防抖，且 isSyncReady() 不就绪（无网/无密钥）时静默 return 且不补传——关闭后 5s 内遇服务端 cron 到点，或关页面/断网导致同步从未发生，云端仍 true 继续推；现 toggleTask 开关操作后 scheduleSchedCloudSave(0) 即时上云，未就绪时记 _schedCloudPending 标记，由 runScheduler（60s 轮询+切前台）在就绪后补传；(c)【陈旧覆盖】页面常开时周期性上传不重新拉取云端，长期运行会把陈旧的 enabled=true 推回云；现 saveSchedCloud 上传前若距上次成功拉取云端超过 3 分钟，先 loadSchedCloud() 拉取合并再上传。②家政考勤「下户状态的添加按钮也置灰」（v3.6.47 需求③的延续）：renderHKPerson 中已下户(!on)时，添加休假日期的「添加」按钮（openHKVacPicker 入口）也加 .hk-date-btn-end 置灰类（与下户日期按钮同款双主题置灰），上户中保持 .fab-btn 原色不变。新增 test_v3648.py；回归全量通过；离线版双主题 0 报错；HANDOFF 同步。// v3.6.47: 三项用户需求——①「指定循环」改名「多曲循环」（v3.6.46 需求①的后续调整）：首页播放下拉菜单项「📋 指定循环」→「📋 多曲循环」，弹窗标题「指定音频循环放」→「多曲音频循环放」，首页连播提示语「或『指定』循环播放」→「或『多曲』循环播放」，管理页播放音频数 hint 同步；播放/循环/队列/自动记录等逻辑语义不变（函数名 openEePickModal/eeStartPick/_eeLoop 等不改，避免动存量测试与调用方）。②管理音频编辑弹窗新增「默认加入多曲循环」开关（v3.6.47 需求②，.toggle-switch 样式同管理活动开关，默认关）：开启后该音频条目标记 loop=true（随 _early_edu 云同步传播，同 name/type 的 updatedAt 冲突合并语义）；首页「播放 → 多曲循环」弹窗打开时，所有 loop 音频自动勾选（eePickSet 预填）并在列表内置顶显示（renderEePickList 稳定排序：loop 组在前、组内 addedAt 倒序，与管理页「新添加在前」一致）；确定起播时队列顺序同样 loop 优先（confirmEePick），即默认循环曲目排在最前；开关状态在编辑弹窗打开时回显（eeEdit），保存时读写（eeSaveEdit）。③家政考勤「下户日期」按钮置灰（v3.6.47 需求③）：renderHKPerson 中已下户(!on)状态的下户日期按钮加 .hk-date-btn-end 类（深色 rgba(127,140,141,.22) 底/灰字/无投影，浅色 rgba(99,110,114,.14) 底/灰字，emoji 降透明度），上户日期按钮保持 .fab-btn 原色不变，双主题生效。新增 test_v3647.py；存量 test_v3646 断言随文案更新（下拉两项/弹窗标题/提示语）；回归全量通过；离线版双主题 0 报错；HANDOFF 同步。// v3.6.46: 用户需求「首页放音乐：点击播放增加下拉框（随机/指定）」——①未播放时点「播放」不再直接随机开播，先出「随机/指定循环」下拉菜单（.ee-play-menu，播放中再点一次仍=停止，恢复/防抖/亮屏续播等既有逻辑不变；点菜单外区域自动关闭）；②「随机」=原逻辑（随机连播管理中的播放音频数 N 首，播完即停，eePlayN 明确 _eeLoop=false）；③「指定循环」=打开「指定音频循环放」弹窗（eePickModal）：标题「指定音频循环放」，显示管理音频中所有音频名称（仅名称、无试听），上方左侧类别多选下拉（同管理音频页交互）+同一行右侧关键字搜索，每首前勾选框（.add-check 样式同添加记录），已勾选跨筛选/搜索保留，底部显示「已选 N 首」；多选确定后返回首页起播并全局 toast「循环播放 N 首」；④指定循环语义：队列=勾选音频（按列表顺序：新添加在前，与管理页一致，重复打开顺序稳定），播完自动回队首循环（eeAdvanceQueue 的 _eeLoop 分支；随机模式仍播完即停），预取下一首时循环模式取队首（eePrefetchNext），「切换」按钮在循环模式下改为队列内下一首（到队尾回队首、跳过已删墓碑条目），随机模式下切换仍为当天已播降权的加权随机；播放中文案前缀区分模式（eeNowPrefix：循环播放：/正在播放：）；停止即退出循环模式（eeStop 清 _eeLoop）；指定队列同样记当天已播（降权仅影响随机挑曲）与播放自动记录（听歌/听故事，同随机模式）；空音频池时随机/指定均提示「请先在管理 → 早教添加音频」。index.html：播放按钮外包 .ee-play-wrap + 下拉菜单、新增 eePickModal 弹窗与 CSS（.ee-play-menu/.ee-pick-foot，深浅双主题）、连播提示语文案改「点『播放』可选『随机』连播N首歌或『指定』循环播放」、管理页播放音频数 hint 同步补充指定循环说明。// v3.6.45: 两项用户需求——①备忘录「育儿嫂休假」升级为「家政考勤」（v3.6.45 需求②）：分区标题改「家政考勤」（🏠），下含钟点工/育儿嫂两个子标题；每个子标题带「是否上户」开关（样式同管理中的活动开关 .toggle-switch，默认开启）；上户中→显示上户日期（日期选择组件，样式同添加休假日期的组件）+ 当月休假和工作时间；已下户→显示下户日期 + 自动清掉超出下户日期的休假 + 提示「请根据微信推送消息，结算家政当月的工资」；当月工作时间 = 当月1号至下户日期或当月最后一天的总天数 − 休假天数（上户中：当月=1号至今天、历史月=整月；已下户：下户日期在当月=1号至下户日期）；日期选择组件支持选半天（多选提示条内每个已选日期带「全天/半天」切换按钮，按 1/0.5 计数），日历中超出下户日期的日期置灰不可选；数据模型 housekeeper_v1：每人 {on,startDate,endDate,vac:{日期:1|0.5}}，云键 _housekeeper（本地优先并集合并）；旧数据自动迁移：旧 nanny_vacation_v1 平铺数组 → 育儿嫂.vac（值1），旧云键 _nanny_vacation 兼容读取；保留 getNannyVacation/addNannyVacation/removeNannyVacation/renderNannyVacation/openNannyVacationPicker 兼容旧调用方。②任务工资结算改造（v3.6.45 需求③）：任务编辑新增「满勤月工资/满勤天数」输入（默认 10000 元/26 天，getTaskWageVals 读写、旧任务回落默认）；computeWage 改为「满勤月工资÷满勤天数×当月工作天数」，当月工作天数取家政考勤·育儿嫂（当月总天数−当月休假，0.5计数），结算月=触发日前一天所在月（下户提前推送时=下户当月）；添加/编辑弹窗工资结算图标 👩→💰；关闭任务不再推送（pushTask 入口终检 task.enabled===false 直接不推，覆盖已认领/并发窗口场景）；当月有下户日期时推送提前至下户日期当天同一时刻（runScheduler 中 wage 任务的 trig 用「下户日期+任务开始时刻」替换原触发点，原日期不再推；periodKey 随调整后 trig 计算，不重复推）；服务端 scripts/sched-push.mjs 同步：fetchHousekeeperCloud（新键+旧键兜底）、computeWage 新口径、下户提前推送、archiveNannyMonthCloud 改操作 housekeeper.nanny.vac（保留 0.5 值）。// v3.6.44: 六项用户需求——①备忘录三个分区标题（待办事项/已办事项/育儿嫂休假）字号 14px→16px（.memo-todo-head/.memo-done-head/.nanny-vac-head 共用规则，v3.6.44 需求①）②首页身高/体重输入按天清空（v3.6.44 需求④：loadHeight/loadWeight 改为只回填「当天」bodyHistory 记录，新的一天从空开始——前几天的记录完整保留在 bodyHistory（曲线/历史/AI 上下文不受影响）；saveHeight/saveWeight 输入为空时不再写空 babyHeight/babyWeight、不触发同步（保留「最新录入值」供 AI 引用）；新增 60s 跨天巡检（业务日 1 点翻页检测到日期变化即重载两个输入，load 自带焦点保护不会打断正在输入的用户））③成长里程碑编辑类型单选改多选（v3.6.44 需求⑥：openMsEdit 的 select 改为 checkbox-group（样式同添加记录），覆盖存储 ms_override_v1 新格式 {domainIds:[...], isFirst}，读兼容旧格式 domainId；collectMilestones 生成 it.domains 数组（it.domain=domains[0] 主类型，徽章缓存快照/LLM enrich 等无 domains 字段的路径经 msDomainsOf 回退）；时间轴卡片渲染多个类型标签；三大徽章组匹配改为「条目任一类型命中组 domains」）④AI育儿知识库编辑分类单选改多选（v3.6.44 需求⑦：editKb 的 select 改为 checkbox-group；保存时用户勾选与原集合不同→写 cats 数组（cat=cats[0] 保旧消费方兼容），相同→沿用关键词自动重分类（旧行为）；renderKb 筛选改「条目任一分类被选中」、列表渲染多个分类标签；reTagKb/LLM 精分回填同步维护 cats）⑤音频管理页「试听中」文案红改蓝（v3.6.44 需求⑧的上传图1：.ee-aud-tag 深色 #e17055→#74b9ff、白天 #d63031→#0984e3，与播放按钮蓝色系统一；按钮图标红色不变）⑥锁屏/通知媒体信息（v3.6.44 需求⑧的上传图2：artwork 固定为小咕噜深色模式头像 assets/photo-data-sq.webp 406x406 不再跟随主题（原浅色主题用 photo-day-v3 320x320）；主标题=音频名（title=it.name 本就如此，回归锁定）；副标题固定「小咕噜音频」（原「小咕噜音频 · 类型」）；title/artist/album/绝对URL 语义不变）。test_v3636.py 同步更新为新语义（浅色主题下 artwork 仍为深色头像、切主题不换 artwork、artist=小咕噜音频）。// v3.6.43: 三项用户反馈——①总览睡眠时长无记录时「暂无记录」改为「-」（与夜间「下次睡觉」的「-」占位风格统一；「下次睡觉」列保持「暂无记录」不变，体温/历史列表等其它暂无记录占位一律不动）；②总览「详情」胶囊由今日计划标题行下移一行至第二行最右侧（.ov-plan-detail-btn top:0→24px=一行行高 15px×1.6，right:0 贴右不变；卡片 min-height:48px 两行高，保证单行摘要时第二行也有空间放胶囊、不溢出到日报胶囊区域）；③备忘录待办勾选后停顿时长 3s→2s（_memoPendingDone 定时器 3000→2000，视觉 pending 标记/「已完成1件事」提示/二次点击撤销逻辑不变）。// v3.6.42: 去掉首页总览体温行 // v3.6.42: 去掉首页总览体温行（用户反馈「总览中去掉体温这一行」——v3.6.41 新增的「🌡️ 体温: 36.5℃ ● 20:30」整行移除，总览恢复为「下次喝奶+水奶量 / 下次睡觉+睡眠时长」两行结构；体温记录仍可在历史列表与添加弹窗正常查看/记录，仅总览不再展示。无 CSS 变动（.temp-normal/.temp-high 为既有样式类，历史列表仍在用，保留）。// v3.6.41: 首页总览新增体温行 // v3.6.41: 首页总览新增体温行（用户要求「首页测体温显示具体温度和正常/发烧的图标」）——总览在「下次睡觉/睡眠时长」行后新增「🌡️ 体温: 36.5℃ ● 20:30」：显示当天最后一次体温记录的具体数值+单位+状态图标+测量时间；状态口径与历史列表/添加弹窗实时指示完全一致（≤37.5℃ 正常=绿● / >37.5℃ 发烧=红⚠️，旧记录无 tempStatus 时按阈值现算）；当天无有效体温记录（temperature>0）则不占位——体温非每日必测，避免每天显示「暂无记录」拥挤总览。无新增 CSS（复用 overview-item/ov-value 与既有 .temp-normal/.temp-high）。// v3.6.40: 新增「辅食第N天食谱推荐」（用户要求「AI推荐今日计划：如果前一天添加了辅食，计为第一天，查询知识库，按添加辅食的时间和最相近的月龄，推荐当天的辅食食谱和制作方法，需要比较具体，比如多少度的水冲泡多少米粉」）——①collectPlanDayStats 的辅食记录补昨日添加时间(solidFoodTime/recTime)/克数(solidFoodAmount)/饭后情况(afterMeal)；②新增 solidFoodStreak()：从目标日往前逐日查辅食记录、遇空档即止（最多回看 60 天），streak=1 即昨日为辅食第1天（首次添加）、今日计划目标日=第 streak+1 天；③buildPlanSystemPrompt 在【辅食提醒】后新增【辅食第N天食谱推荐】规则——前一日有辅食记录时要求【喂养】辅食项给出当天具体食谱与制作方法，必须具体到：吃什么（观察未满2-3天仍吃同一种）/多少克多少毫升（比昨日增不超2成）/什么温度的水（如50-60℃温开水）与冲调蒸煮步骤稀稠程度/喂食时段（参考昨日添加时间，如上午10点）/过敏观察要点，并须结合知识库「辅食」条目与宝宝月龄，知识库无对应月龄食谱时按通用原则（6月龄高铁米粉稀糊、7-8月龄蛋黄肉泥、9-10月龄稠粥手指食物、11-12月龄软饭小丁）；④KB_EG_SEED_VER 2→3 新增 2 条「辅食」种子：按月龄食谱（具体到水温与克数：6月龄约50-60℃水、15g米粉+150ml水冲成缓慢滴落稀糊；7-8月龄20g+170ml稍稠+蛋黄肉泥；9-10月龄稠粥碎末+手指食物；11-12月龄小馄饨蒸糕软饭小丁）与添加观察原则；⑤PLAN_PROMPT_VERSION 12→13（服务端 sched-push.mjs 同步：collectPlanDayStats 同款增强 + solidFoodStreakCloud 一次拉 60 天记录逐日找辅食 + prompt 规则段逐字对齐 + 版本号 13）。// v3.6.39: 修复「将日报字体大小改为与AI育儿字体一样大」——实测两胶囊文字本就同为 12px/800（像素墨迹高 12.0 vs 11.8，基本相同），用户观感差异来自 v3.6.38 放大的 📈（15px）与 12px 文字的反差：AI育儿胶囊 12px 图标+12px 文字均匀显「正常大小」，日报胶囊 15px 图标+12px 文字显字小。若只调大日报则会变成日报反比AI育儿大、仍不一致，故两胶囊文字同步 12px→14px（.ov-report-pill 与 .ai-chip 两条规则），盒高均保持 25px 锁死不变——两胶囊文字真正一样大且更醒目；胶囊宽度各增约 8px（日报为右对齐、AI育儿为居中于头像下，均不破坏布局）。双主题截图验证两胶囊文字同大同醒目。// v3.6.38: 修复「把首页日报胶囊高度调大，和AI育儿胶囊高度调成一样」——实测两胶囊盒模型本就完全一致（均 height:25px、box-sizing:border-box、同 12px/800 字、同 1px 外框、内容盒均 23px，v3.5.153 起即锁死相同高度），观感差异来自 emoji 字形墨迹占比：👆（AI育儿）为竖向实心大手、墨迹占满字形箱；📈（日报）为方形网格、内置留白多，在部分设备 emoji 字体（如苹果/三星）下渲染更小，致日报胶囊显矮。修复：日报胶囊内 📈 用 span.pill-emoji 单独放大 12px→15px（flex-shrink:0 防压缩），视觉体量与 👆 拉齐；盒高保持 25px 不变（与 AI育儿胶囊真正一致），胶囊仅宽约 3px，位置与布局无变化。双主题截图验证视觉高度一致。// v3.6.36: 锁屏/通知媒体信息补 artwork——用户反馈「放音乐，锁屏时，左上角的音频图标改为小咕噜的头像（深色模式的）」，截图显示通知左上角是 PWA 默认图标（星星月亮）：MediaMetadata 从未设置 artwork，系统回退显示应用图标。修复：深色主题 artwork=assets/photo-data-sq.webp（从深色头像 photo-data.webp 居中裁切的 406x406 方形版，系统通知不裁切变形）；浅色主题=assets/photo-day-v3.webp（本身 320x320 方形）；artwork 一律转绝对 URL（系统通知只认绝对地址）；抽公共函数 eeSetMediaMetadata(it)，首页连播起播与管理页改名刷新共用；播放中切换主题（手动/跨时段自动）→ applyTheme 里即时刷新 artwork，头像跟随主题。title/artist/album 语义不变。新增 test_v3636.py 15/15（深色播放→方形深色头像+绝对URL+sizes 406x406+webp/浅色播放→photo-day-v3+320x320/播放中切主题 artwork 双向刷新/标题副标题专辑保持/改名同步锁屏标题且 artwork 不丢/方形头像资源可加载且 406x406）。// v3.6.35: 修复「设置连播5首，但还是2首就停止，无法继续播放」（用户第三次反馈，同一根因横跨 v3.6.30/v3.6.31/v3.6.34 三版）——根因是切歌时序竞态：eePlayItem 里 `_eeInternalPause=true; a.pause()` 在 finally 中同步复位，而 pause 事件是异步派达的——派达时标志已失效、eeCurrentId 还是旧曲，pause 处理器把 UI 误打成「已暂停：旧曲」+按钮「播放」+释放唤醒锁；新曲加载慢（play promise 未 resolve、eeAudio.paused 已因 play() 调用变 false）时该假状态持续数秒，用户看到「已暂停」点「播放」→ eeToggle 判定 !paused=正在播放 → eeStop() 真停，再点只能重开新队列——即「连播2首就停且无法继续」，全程无 toast。修复：①pause 事件处理器加「!eeAudio.paused → return」守卫（pause 后已恢复播放=切歌/恢复竞态，不是系统暂停，不更新 UI，从根上消除假「已暂停」）②eePlayItem 换 src 前先撤旧失败监控（_eeFailArmed=false+撤看门狗），武装延后一个 macrotask 且仅当仍未开播才武装——防旧 src 的 abort/error 噪声（X5 特性）命中新曲 armed 状态导致连续几首切歌凑满失败 3 首误停整条链；play() 早期 reject（同步/微任务早于武装）补 armed 再走失败处理，不漏同步 reject 死停 ③eePlayQueueItem 跳过已删墓碑条目，避免起播已删云端文件 404 触发失败链 ④eeAutoRecordOnPlay 包 try/catch，记录异常（云同步失败）不得阻断起播 ⑤亮屏续播：黑屏期间资源被系统收回（readyState=0 且无进度）直接重载当前曲，不断链。新增 test_v3635.py（切歌加载中不得假「已暂停」+pause 事件不破坏连播状态/真暂停→点播放恢复当前队列不清空不重开/src 切换 error 噪声不打断 5 首连播/墓碑条目跳过且队列继续/亮屏续播两路回归/停止后可重开/记录异常不阻断起播/播放数 5 队列 5）。// v3.6.34: 修复「点击成长里程碑徽章，详情显示 undefined月龄」——根因：v3.6.29 徽章固化后，renderMilestoneBadges 给固化徽章构造的 hit 只有 text/label/date/domain，缺 ageMonths/ageDays/isFirst，renderBadgeDetail 直接渲染 ${it.ageMonths} → 「undefined月龄」且不标「首次」（非固化路径从 items 现找不受影响，故只在徽章固化后的设备上复现）。修复：固化 hit 补 isFirst=true 与月龄——优先取 items 中同 text（同 date 优先）的完整条目，取不到按出生日期 getAgeDetail 现算（try/catch 兜底）；renderBadgeDetail 对缺失月龄不渲染该段，双保险绝不再出现 undefined。// v3.6.33: 修复「配好 AI 密钥、测试通过，但徽章仍是规则值」的剩余断链——用户确认密钥已配且测试通过，徽章却仍像没调 AI。定位四漏洞：①「测试」按钮假通过——classifyMilestoneLLM 缓存键 msllm:provider:model:hash 不含 apiKey，以前用有效密钥测过之后，即使密钥失效/输错，点「测试」仍命中旧缓存显示「✓ 返回」；现测试前先删测试文本的缓存键，保证通过来自真实 API 调用。②保存配置不清补救节流——之前打开分析时补救失败写过 ms_badge_ai_try（24h 节流），用户之后配好密钥，24h 内再打开分析也不会重试；现 saveAITagConfig 检测到配置真正变化（ms_badge_cfg_sig 签名比较）时清除该节流键并立即补救（配置没变则不重置，避免反复点保存反复打 API）。③补救触发依赖打开分析——用户配好密钥后不再打开分析页，徽章永远不更新；现 saveAITagConfig 保存成功后立即对无 AI label 的徽章组尝试补救一次（不在分析页时成功弹「徽章已更新为 AI 概括」）。④期内补救全失败时静默无声——现全部组仍无 label 时弹温和 toast「徽章 AI 概括失败，暂按规则显示（可到 管理 → AI 设置 点「测试」检查密钥）」（ms_badge_ai_fail_tip 24h 节流）；openAnalysis 路径的补救仍静默（用户正看着徽章变化）。v3.6.32 的期内补救/不重置刷新锚/已有 AI label 组绝不变/未配置 toast 指引等行为均不变。// v3.6.32: 修复「成长里程碑徽章像没调用 AI 大模型」——根因是固化设计漏洞：徽章一旦在无 AI label 的情况下固化（旧格式缓存升级时按规则结果即时固化 / 无密钥时进刷新窗口 / AI 调用失败），而 15 天刷新窗口只补「新解锁的组」，这些已固化的无 label 组永远等不到 AI 美化（截图中「妈妈出门休检半天…」正是规则回退的 slice(0,8)+省略号）。修复：①打开分析时若存在无 AI label 的徽章组且已配置 AI → 立即尝试 AI 美化一次（enrichMilestonesWithLLM 美化范围从「仅 fresh 组」扩大到「fresh 组 + 无 label 组」；已有 AI label 的已固化组仍绝不变；不重置 15 天刷新锚；失败 24h 节流）②AI 未配置时 toast 明确提示「请到 管理 → AI 设置 配置密钥（可先点测试）」，不再无声回退规则 ③刷新窗口 AI 调用失败有 toast 提示。15 天周期、期内固化、编辑不重算等既有语义均不变。// v3.6.31: 修复「设 5 首连播只播 2 首、手机黑屏就自动停」的收尾因素——黑屏/锁屏期间系统暂停音频（v3.6.30 已做到只暂停不散队），但连播链在黑屏期间断裂且亮屏后不会自动续播，用户看到的就是「没操作却停了」。现两层防护：①播放期间申请屏幕唤醒锁（Wake Lock API），尽量阻止自动熄屏——屏幕亮着页面就不冻结、音频焦点不丢、连播不断；页面切后台/系统暂停/用户停止时按规范释放（省电），亮屏或恢复播放时重新申请；微信 X5 等旧内核不支持时静默降级。②亮屏自动续播（visibilitychange→visible）：队列还在且音频处于暂停态 → 自动从当前这首继续（UI 恢复「正在播放」）；若当前首在黑屏期间已播完（X5/页面冻结丢 ended）→ 直接下一首；恢复失败（音频资源被收）→ 重载当前曲；用户经媒体通知/锁屏控件主动暂停（_eeUserPaused）时不自动续播，尊重意图，点 App 内播放按钮仍可随时恢复。另修：锁屏媒体通知的「播放」旧实现只 play() 不刷新 App 界面（通知续播后 App 仍显示「已暂停」）——现同步 UI 与唤醒锁。// v3.6.30: ①徽章更新策略按用户明确调整——仍每 15 天刷新窗口更新一次、期内固化，且「更新里程碑记录/编辑里程碑」都不再重新更新徽章（v3.6.29 的「编辑即重推」已回退：saveMsEdit 保留徽章固化快照不动，仅刷新缓存 items 供时间轴/分类即时生效，且不重置 15 天刷新锚）②修复「播放音频数设为 5 却只连播 2 首」多重因素：(a) 播放数云同步旧逻辑无条件用云端值覆盖本地——某次保存上传失败/他端旧值后写，本地设置就被顶掉且每次开 App/切前台复发；现本地保存记时间戳，仅当云端 last_modified 更新才覆盖；(b) 连播看门狗 10s→15s 且加载超时改为只跳过本首、不计入连续失败（慢网络下 3 首慢歌误杀整条链是「播 2 首就停」的误停机制；真正无法播放的文件仍走 error/play reject 连续 3 首停+toast；整队超时有 toast 兜底）；(c) 系统/锁屏暂停旧逻辑直接 eeStop 清队列（mediaSession pause 与音频焦点丢失）——现只暂停不散队、UI 显示「已暂停」、点按钮从当前这首继续；(d) 防同一 src 重复 ended（微信 X5 pause/currentTime 归零后重发会导致莫名跳首）；(e) 连播提示语诚实显示实际可连播数=min(设置数, 现有音频数)，不足则明说「不足则全放」。// v3.6.29: ①成长里程碑徽章固化——双根因导致徽章「突然改乱」：(a) v3.6.17 起 enrichMilestonesWithLLM 内 Promise.allSettled(_mapPool(...)) 包住 async 函数的 Promise，每次必抛 "object is not iterable" → AI label 从未落盘；(b) 徽章每 15 天周期重算且刷新时先把无 AI 标签的规则结果存缓存（AI 异步返回前离开即被污染）→ 徽章标题从 AI 概括退化为规则截断。现徽章一经确定即永久固化（缓存新增 badges 快照，renderMilestoneBadges 优先用固化徽章；刷新窗口只补未解锁组，AI label 仅美化本次新固化组一次；旧格式缓存首次打开即时推导固化；手动编辑里程碑属用户显式意图，重推并固化）②总览右列冒号与数值间隔改为与「下次喝奶: 02:25」一致（4px）——label/数值/单位均 auto 宽、数值紧跟冒号，item 132→120px（右移右缘不变）；v3.6.28 的 h 与 l 对齐因与冒号紧凑互斥移除。// v3.6.28: ①总览「下次睡觉」图标 🌙→😴（与 ACTIVITY_TYPES/日报/图表的睡眠图标体系统一）②睡眠时长单位「h」右移约一个字符宽与上一行「ml」的「l」对齐（.ov-unit.unit-h padding-left:0.83em，unit 框 20→22px，item 总宽 132 不变）；「睡」与「水」第一个字对齐、数值右端对齐保持不变（两端对齐）。// v3.6.27: 总览「下一次睡觉」→「下次睡觉」，与「下次喝奶」口径统一（toast 早已是「距下次喝奶/睡觉」）。// v3.6.26: ①toast 与总览口径统一「距下一次喝奶」→「距下次喝奶」（总览 label 早已是「下次喝奶:」）②总览右列（水+奶量/睡眠时长）整体收紧往右移——item 156→132px、label 76→66px（冒号与数值间隔减少）、数值 42→36px、单位 26→20px、gap 5→4px，第一个字与单位仍保持对齐③「放音乐」标题字重 700→400——与「🎵 听歌/🎧 听故事」（.ee-sub-head）及「🍼 喝奶」等卡片标题（.card-name，均 16px/400）视觉一致（用户反馈 700 观感偏大）。// v3.6.24: ①首页总览「今日计划 / 今日成就」字号 14px→15px，与「下一次喝奶」行一致（水+奶量等同比例统一）②「放音乐」标题 14px→16px 与「🎵 听歌」标题同尺寸；连播提示语从按钮下方移到「放音乐」与按钮之间，且「几首」改为管理里的实际播放音频数（如 5 首，动态渲染）③总览「下次喝奶」下方新增「下一次睡觉 / 睡眠时长」行——5-19 点按「上一次睡眠开始时间+睡眠时长+2 小时」预估下次睡觉时间，19-凌晨 5 点显示「-」，右侧显示上一次睡眠时长（如 13.5 h）；刷新网页的「距下一次喝奶」toast 增加距睡觉倒计时，简化提示语为「距下一次喝奶/睡觉：h min / h min」。// v3.6.23: 播放自动记录改为「每次播放新增去重后的记录」——v3.6.22 的「每类每天仅 1 条」不符合预期（用户反馈：点一次播放就应记一次，同一天可多次播放多次记录）；去重维度改为「同一次播放队列内」：多首故事（中文/英文/古诗）仍合并 1 条听故事、多首儿歌合并 1 条听歌；提示语改为「已添加1条听故事/听歌记录」；切换（eeSwitch）与连播自动接歌仍不记录。// v3.6.22: ①首页「放音乐」手指图标放大 12px→16px（与听歌/听故事图标同尺寸）②修复管理弹窗滚到底时最后一项音频被吸底「确定」条遮住（选项面板底部留白 72px）③播放自动记录去重——每类每天仅 1 条（中文/英文/古诗合并为 1 条听故事、儿歌 1 条听歌），今日已有同类型记录则只高亮已有记录并提示「已添加」，停止后再播放 / 切换不再重复添加 ④早教音频云同步改手动——只有点「立即同步」才加密上云共享（按钮改 .btn 样式置左、状态词与提示移至按钮下方），本地改动只存本机并标记「有改动未同步」，云端拉取仍自动（启动 + 切回前台），家人设备刷新 / 重开即可看到。// v3.6.21: ①修复首页连播「播了几首就莫名停止」——音频元素 error 事件此前无处理（加载失败即死停）、起播无看门狗（加载挂起会卡在「加载中」）、播放/停止按钮无防抖（连击/幽灵点击会误停）；现三路归一失败处理（error/play reject/10s 看门狗）：单曲失败自动跳下一首，连续 3 首失败才停止并明确 toast 原因，按钮加 400ms 防抖 ②修复「管理里删除/新增音频，家人手机不同步」——旧合并逻辑是并集且本地优先，删除直接 splice 导致他端把已删歌曲复活、改名/改分类也不传播；现改墓碑式删除（deleted 标记随云同步，30 天后压缩清理）+ 同 id 按 updatedAt 取新版冲突合并 + 云端保存失败不再静默（管理页早教页新增云同步状态行，失败 toast + 自动重试 + 手动「立即同步」）+ 切回前台节流补拉云端列表 ③首页音频卡新增「放音乐」指引——切换/播放上方左侧指向下手指（尺寸颜色同 AI育儿 图标）+ 右侧加粗黄色「放音乐」，按钮下方灰色小字提示连播与停止方式。// v3.6.20: ①管理音频「试听」改用独立播放器——与管理页列表按钮联动（再点一次=停止、播放中按钮变红+显示「试听中」），与首页播放器（eeAudio/eeQueue/eeCurrentId）完全隔离，首页音频卡片不再被试听占用，停止就在管理当前页点；关管理弹窗/删除试听项自动停 ②管理音频去掉「选免版权」功能（按钮/弹窗/Wikimedia 预设与解析函数全删，已添加的免版权条目保留在列表仍可播放/改名/删除） ③「本地音频」上传链路由「选择音频文件」改名「选文件」并去掉 input 的 accept="audio/*"（该过滤会让 Android 系统选择器先扫描媒体库、实测慢好几秒才弹窗，且并未挡住「照片和视频」入口；类型改由前端 eeFileKind 校验拦截，选择器秒开） ④上传时若转码/解析失败：保留提示且该文件不加入音频列表（原先降级为原格式上传，会传入播不了的条目）。// v3.6.19: 早教音频「编辑」从只能改分类升级为可修改名称+分类——上传前自动转码为 MP3（本地 lamejs 编码，无外部依赖），解决微信 X5/iOS 等内核「Failed to load because no supported source was found」播不出的问题；同时修正上传 Content-Type 按扩展名精确判定（修复 m4a/wav 等被误标 audio/mpeg）；对列表里已存在的无法播放的旧格式给出明确提示。②今日计划推送详情标题去掉「小咕噜 」前缀，只保留任务名称（前后端同步）。// v3.6.17: ①修复「部署后今日计划不刷新」双根因——服务端计划 prompt 与前端 v3.6.14 逐字对齐并改用服务端自己的版本号(PLAN_PROMPT_VERSION=12，不再冒用前端版本号)，服务端落后时前端按版本差重新生成自愈；服务端加 30 分钟生成冷却(task.genTryTs 持久化)防每5分钟重试风暴、同运行防双生成(genAttempted)；②降低天气 API 超限——服务端加云端天气缓存(3小时TTL、只缓存成功结果)，Open-Meteo 超限自动切 wttr.in 备用源(v3.6.16已有)；③降低 DeepSeek token 消耗——AI 问答每次只带最近12条历史上行(界面仍展示全部)、知识库按权威优先+12000字预算截断、里程碑 LLM  enrich 并发限4；④修复家庭密钥(盐)被打挂的根因——前端盐一致性改多行试解多数决判定(_judgeSalt)，无法判定绝不覆盖云端，getCryptoKey 拉取失败绝不新建盐，开App后10秒+每10分钟云端巡检(checkSaltConsistency)自动修复；服务端解密失败明确报错并以退出码1结束。配套：pg_cron 触发间隔5→15分钟。// v3.6.16: ①天气获取健壮化——Open-Meteo 增加 hourly 兜底风速/气温（修复「温度有/风速未知」半失败）、增加 wttr.in 备用源（解决定时任务撞每日配额导致的「天气获取失败」）、app.js 增加 3 小时天气缓存降低请求频率；②成长里程碑徽章刷新间隔 14 天→15 天并锚定刷新时间（未配 AI 也刷新，避免不足间隔就变）、徽章标题硬截断≤10 字改善概括。v3.6.15: 早教音频新增云存储容量闸门——总上限 800MB（Supabase 免费版 Storage 1GB 预留余量，按儿歌约 4MB/首 ≈ 200 首），早教页实时显示「已用/上限/约还可添加 N 首」，本地上传与录音上传前校验，超限即拦截并提示先删除旧音频；上传元数据记录 size 以精确统计。v3.6.14: ①今日计划风级换算改为以家庭知识库为准（新增户外风速风级换算种子，不再用通用气象推算）②穿衣列出同一厚薄档位所有合适衣物（含多件）③备忘录编辑「保存」由绿色改蓝色（#74b9ff/#0984e3）。v3.6.13: 今日计划「详情」胶囊由卡片右下角上移至「📅 今日计划」标题所在行的最右侧（.ov-plan-detail-btn 定位 bottom:0 → top:0）。v3.6.12: ①今日成就改左右两栏——左栏文字两端对齐(justify)，右栏为点赞按钮独占列，其下方留白、文字不侵入；②今日计划标题与摘要同行内联，换行第二行从最左侧开始；③成就推送标题改为「本次更新内容」（去掉「新增N条：」），点开后展示今日成就全部内容并高亮本次新增项。v3.6.11: 首页今日成就点赞按钮 float:right 上移至文字块右上、标签行下一行最右侧。v3.6.10: 点赞按钮从「同行右侧」上移至「成就文字下方第二行右对齐」（.ov-ach-main 包图标+文字占满整行，点赞按钮 flex-wrap 换行到右对齐）。v3.6.9: ①今日成就只保留1个赞（按天存储，图标放大1倍、点赞/取消区分度明显、点赞提示「已点赞，真棒！」取消不提示）②备忘录待办勾选后停留3s提示「已完成1件事」再归入已办 ③计划prompt：前一日无辅食记录时按辅食添加条件判断可否试辅食、穿衣精确到知识库具体衣物名称。v3.6.8: 计划prompt风级换算
 let _addModalOpening = false;
 let _addTargetDate = null;   // 添加目标日期：null=今天；历史页传所选日期
@@ -2988,7 +2988,7 @@ function loadHistory() {
   const _achVal = achArr.length > 0
     ? achArr.map(n => escapeHtml(n)).join(' | ') + (isAchLiked(ds) ? ' <span class="ach-like-icon" title="已点赞">👍</span>' : '')
     : '无';
-  sHtml += `<div class="history-sum-row"><span class="hs-label" style="color:${_hvc}">🏆 今日成就</span><span class="hs-value" style="color:${_hvVal};font-weight:400">${_achVal}</span></div>`;
+  sHtml += `<div class="history-sum-row hs-ach-row"><span class="hs-label" style="color:${_hvc}">🏆 今日成就</span><span class="hs-ach-val" style="color:${_hvVal};font-weight:400">${_achVal}</span></div>`;
   if (summary) { summary.innerHTML = sHtml; summary.style.display = 'flex'; }
   // 按活动开始时间正序排列
   const sorted = [...records].sort((a, b) => {
@@ -5925,7 +5925,7 @@ const SCHED_GEN_COOLDOWN = 30 * 60000;   // AI 生成失败重试冷却 30 分�
 // v3.6.40 升 13：新增【辅食第N天食谱推荐】规则（前后端逐字对齐 + 辅食按月龄食谱种子）。
 // 注意：prompt 内容变化时须前后端同步升级此版本号（服务端 PLAN_PROMPT_VERSION）。
 // 比较用数值单调语义（见 runScheduler staleVer）：云端版本更新时不本地回退重生成。
-const PLAN_PROMPT_VERSION = '15'; // v3.6.53 计划prompt: 新增 planKbList 把「风速/风级/防风」相关 KB 条目强制置顶、其余按预算截断，修复 v3.6.50 遗留真正根因——KB 前 50 条截断漏掉靠后风速规则（用户 KB 共 62 条、风速规则在 idx=53），导致「16km/h 仍归小风」；两侧（app.js/sched-push.mjs）逐字对齐 planKbList，并同步修复 ctx.kb 落库截断（app.js: saveSchedCloud 改走 planKbList）。触发当天计划按新 prompt 重新生成（staleVer）。
+const PLAN_PROMPT_VERSION = '16'; // v3.6.58 需求②：AI 今日计划按当前开启活动过滤（已关闭活动如读书不纳入统计与推荐）；ctx 新增 hiddenActivities 下发服务端；两侧逐字对齐。 把「风速/风级/防风」相关 KB 条目强制置顶、其余按预算截断，修复 v3.6.50 遗留真正根因——KB 前 50 条截断漏掉靠后风速规则（用户 KB 共 62 条、风速规则在 idx=53），导致「16km/h 仍归小风」；两侧（app.js/sched-push.mjs）逐字对齐 planKbList，并同步修复 ctx.kb 落库截断（app.js: saveSchedCloud 改走 planKbList）。触发当天计划按新 prompt 重新生成（staleVer）。
 let SCHED_TASKS = [];
 const _pad2 = n => String(n).padStart(2, '0');
 
@@ -6060,6 +6060,8 @@ async function saveSchedCloud() {
       weight: localStorage.getItem('babyWeight') || '',
       babyName: BABY_NAME,
       birthDate: bd.getFullYear() + '-' + _pad2(bd.getMonth() + 1) + '-' + _pad2(bd.getDate()),
+      // v3.6.58 需求②：把「当前关闭的活动」带进计划上下文，让服务端 0 点生成时也按开启活动过滤
+      hiddenActivities: Array.isArray(hiddenActivities) ? hiddenActivities.slice() : [],
       // v3.6.53：ctx.kb 落库保留完整 KB（仅用宽松上限 200 + 风速规则置顶兜底，保证云端镜像本地 KB），
       // 不再截断到 50——旧 slice(0,50) 会在源头丢失靠后的风速规则（idx=53），导致服务端读到的 ctx.kb 本就无风速规则。
       // 计划 prompt 文本构造仍由各端 planKbList(..., 50) 按 50 预算截断（风速规则已置顶，必在预算内）。
@@ -6265,10 +6267,92 @@ const EE_PLAY_COUNT_TS_KEY = 'ee_play_count_ts';   // v3.6.30 本地最近一次
 const EE_PLAY_COUNT_CLOUD_KEY = '_ee_play_count';
 const EE_PLAY_COUNT_DEFAULT = 5;
 
+/* v3.6.58 需求⑤：播放次数跨用户云聚合（所有家庭成员的播放总和，而非本机次数）
+ * 设计：每个设备以稳定的「设备 id」拥有云端专属分片（config_key=_ee_plays_<dev>，互不影响、无丢失更新），
+ *       分片内记录「本机已提交到云端的各首累计播放数」；显示次数 = 云端各设备分片之和 + 本机尚未提交的本地增量。
+ *       plays 字段只存本机、绝不上传（推送/合并列表时一律剥离），避免跨设备冲突与重复计数。
+ *       每首的本地播放只按「本地 plays − 已提交锚点」把增量提交一次。 */
+const EE_PLAYS_KEY_PREFIX = '_ee_plays_';
+const EE_PLAYS_PUSH_KEY = 'ee_play_push';          // 本地锚点：每首已提交到云端的 plays 值
+const EE_PLAYS_CLOUD_CACHE_KEY = 'ee_plays_cloud'; // 本地缓存：{ [dev]: { [songId]: n } }
+const EE_DEVICE_ID_KEY = 'ee_device_id';
+let _eePlaysCloud = {};     // 运行期缓存：{ [dev]: { [songId]: n } }
+let _eePlayPush = {};       // { [songId]: n }
+let _eePlaysPushTimer = null;
+function eeGetDeviceId() {
+  let id = '';
+  try { id = localStorage.getItem(EE_DEVICE_ID_KEY); } catch (e) {}
+  if (!id) { id = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); try { localStorage.setItem(EE_DEVICE_ID_KEY, id); } catch (e) {} }
+  return id;
+}
+function eeLoadPlaysState() {
+  try { _eePlayPush = JSON.parse(localStorage.getItem(EE_PLAYS_PUSH_KEY) || '{}') || {}; } catch (e) { _eePlayPush = {}; }
+  try { _eePlaysCloud = JSON.parse(localStorage.getItem(EE_PLAYS_CLOUD_CACHE_KEY) || '{}') || {}; } catch (e) { _eePlaysCloud = {}; }
+}
+function eeCloudPlaysFor(songId) {
+  let s = 0; for (const dev in _eePlaysCloud) { const m = _eePlaysCloud[dev]; if (m && m[songId]) s += m[songId]; } return s;
+}
+// v3.6.58 显示次数 = 云端各设备之和 + 本机尚未提交的本地增量（max(0, 本地plays − 已提交锚点)）
+function eeDisplayPlays(it) {
+  if (!it) return 0;
+  return eeCloudPlaysFor(it.id) + Math.max(0, (it.plays || 0) - (Number(_eePlayPush[it.id]) || 0));
+}
+// 剥离 plays/playTs：列表上传/合并时绝不携带本机播放次数，避免跨设备冲突与重复计数
+function eeStripPlays(arr) {
+  if (!Array.isArray(arr)) return arr;
+  return arr.map(x => { const c = Object.assign({}, x); delete c.plays; delete c.playTs; return c; });
+}
+async function eePushPlays() {
+  if (typeof isSyncReady !== 'function' || !isSyncReady()) return;
+  try {
+    const dev = eeGetDeviceId();
+    const slice = {};
+    for (const it of EARLY_EDU) { if (!it || it.deleted) continue; const d = (it.plays || 0) - (Number(_eePlayPush[it.id]) || 0); if (d > 0) slice[it.id] = d; }
+    const key = await getCryptoKey(); if (!key) return;
+    // 只读写本机自己的分片（config_key=_ee_plays_<dev>），绝不动他机，避免丢失更新
+    let mySlice = {};
+    try {
+      const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&config_key=eq.${EE_PLAYS_KEY_PREFIX}${dev}&select=encrypted_data,iv`);
+      if (rows.length && rows[0].encrypted_data && rows[0].iv) mySlice = JSON.parse(await decrypt(key, rows[0].encrypted_data, rows[0].iv)) || {};
+    } catch (e) {}
+    if (typeof mySlice !== 'object' || !mySlice) mySlice = {};
+    for (const sid in slice) mySlice[sid] = (mySlice[sid] || 0) + slice[sid];
+    const { data, iv } = await encrypt(key, JSON.stringify(mySlice));
+    await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: EE_PLAYS_KEY_PREFIX + dev, encrypted_data: data, iv, last_modified: Date.now() });
+    // 更新本地锚点：本机每首已提交值 = 当前本地 plays
+    for (const it of EARLY_EDU) { if (!it || it.deleted) continue; _eePlayPush[it.id] = (it.plays || 0); }
+    try { localStorage.setItem(EE_PLAYS_PUSH_KEY, JSON.stringify(_eePlayPush)); } catch (e) {}
+    _eePlaysCloud[dev] = mySlice;
+    try { localStorage.setItem(EE_PLAYS_CLOUD_CACHE_KEY, JSON.stringify(_eePlaysCloud)); } catch (e) {}
+    console.log('[早教] 播放次数本机增量已同步云端（' + Object.keys(slice).length + ' 首）');
+  } catch (e) { console.warn('[早教] 播放次数云端同步失败', e); }
+}
+async function eePullPlays() {
+  if (typeof isSyncReady !== 'function' || !isSyncReady()) return;
+  try {
+    const key = await getCryptoKey(); if (!key) return;
+    // 拉取全家 config 行，客户端按前缀筛出各设备分片（避免 like 通配符歧义），汇总得到跨用户总播放数
+    const rows = await supabaseGet(`family_config?family_id=eq.${getFamilyId()}&select=config_key,encrypted_data,iv`);
+    const cloud = {};
+    if (Array.isArray(rows)) {
+      for (const row of rows) {
+        if (!row.config_key || row.config_key.indexOf(EE_PLAYS_KEY_PREFIX) !== 0) continue;
+        if (!row.encrypted_data || !row.iv) continue;
+        try { const m = JSON.parse(await decrypt(key, row.encrypted_data, row.iv)) || {}; if (m && typeof m === 'object') Object.assign(cloud, m); } catch (e) {}
+      }
+    }
+    _eePlaysCloud = cloud;
+    try { localStorage.setItem(EE_PLAYS_CLOUD_CACHE_KEY, JSON.stringify(_eePlaysCloud)); } catch (e) {}
+    try { renderEarlyEduList(); } catch (e) {}
+  } catch (e) { console.warn('[早教] 播放次数云端拉取失败', e); }
+}
+
+
 function eeStorageBase() { return (SYNC_CONFIG.supabaseUrl || '').replace(/\/+$/, '') + '/storage/v1'; }
 
 async function loadEarlyEdu() {
   eeLoadSyncTs();
+  eeLoadPlaysState();   // v3.6.58 需求⑤：加载播放次数云聚合本地状态
   try { const raw = localStorage.getItem('early_edu'); if (raw) EARLY_EDU = JSON.parse(raw) || []; } catch (e) {}
   eeNormalizeTypes(EARLY_EDU); eeBackfillUpdated(EARLY_EDU);
   if (isSyncReady()) {
@@ -6287,13 +6371,14 @@ async function loadEarlyEdu() {
           EARLY_EDU = eeMergeEarlyEdu(EARLY_EDU, cloud);
           const after = JSON.stringify(EARLY_EDU);
           if (after !== before) { try { localStorage.setItem('early_edu', after); } catch (e) {} _eeDirty = true; }
-          if (eeSameList(EARLY_EDU, cloud)) { _eeLast = after; _eeDirty = false; }   // 内容与云端一致：无需再推
+          if (eeSameList(EARLY_EDU, cloud)) { _eeLast = JSON.stringify(eeStripPlays(EARLY_EDU)); _eeDirty = false; }   // v3.6.58 内容与云端一致（忽略 plays）：无需再推
         }
       }
       // v3.6.22 启动不自动上云，仅按需提示：从未同步过显示 idle，有改动显示 pending
       eeSetSyncState(_eeDirty ? 'pending' : (rowFound ? 'ok' : 'idle'));
     } catch (e) { console.warn('[早教] 云端读取失败', e); eeSetSyncState('fail'); }
     await loadEePlayCountCloud().catch(() => {});
+    await eePullPlays().catch(() => {});   // v3.6.58 需求⑤：启动拉取全家播放次数
   } else { eeSetSyncState('off'); }
 }
 /* ---------- 播放音频数（默认 5，可改，随家庭云同步） ---------- */
@@ -6342,6 +6427,7 @@ async function loadEePlayCountCloud() {
 /* v3.6.21 合并：同 id 取 updatedAt 更新的一版（改名/改分类可跨设备传播，旧逻辑本地优先导致他端改名被吞）；
  * 墓碑粘性——一端标记删除、另一端没有更新的改动时，删除结果传播（修复家人手机复活已删歌曲） */
 function eeMergeEarlyEdu(local, cloud) {
+  cloud = eeStripPlays(cloud);   // v3.6.58 需求⑤：云端列表不携带本机播放次数，避免冲突/重复计数
   const map = {};
   const put = (x) => {
     if (!x || !x.id) return;
@@ -6377,14 +6463,18 @@ function eeSetSyncState(state) {
 function eeCloudSyncNow() {
   if (!isSyncReady()) { showToast('请先在「管理 → 家庭云同步」开启同步'); return; }
   showToast('正在同步音频列表…');
-  Promise.resolve(eePushEarlyEdu()).catch(() => {}).then(() => eePullCloud());
+  Promise.resolve(eePushEarlyEdu()).catch(() => {})
+    .then(() => eePushPlays().catch(() => {}))   // v3.6.58 需求⑤：同步时一并上云播放次数
+    .then(() => eePullCloud())
+    .then(() => eePullPlays().catch(() => {}))
+    .then(() => { try { renderEarlyEduList(); } catch (e) {} });
 }
 /* v3.6.22 推送本地音频列表上云（加密 upsert；失败 toast + 自动重试上限 2 次；成功记录同步时间戳） */
 async function eePushEarlyEdu() {
   if (!isSyncReady()) { eeSetSyncState('off'); return; }
   try {
     const key = await getCryptoKey(); if (!key) { eeSetSyncState('nokey'); return; }
-    const body = JSON.stringify(EARLY_EDU);
+    const body = JSON.stringify(eeStripPlays(EARLY_EDU));   // v3.6.58 需求⑤：列表 payload 不含 plays（播放次数走独立云聚合键）
     if (body === _eeLast) { _eeDirty = false; eeSetSyncState('ok'); return; }
     const { data, iv } = await encrypt(key, body);
     await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: EARLY_EDU_KEY, encrypted_data: data, iv, last_modified: Date.now() });
@@ -6403,8 +6493,8 @@ async function eePushEarlyEdu() {
 /* v3.6.22 列表内容比对（忽略键顺序/条目顺序）：判定本地与云端是否一致，避免误报「有改动未同步」 */
 function eeSameList(a, b) {
   if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-  const canon = arr => arr.slice().sort((x, y) => String(x.id).localeCompare(String(y.id)))
-    .map(x => JSON.stringify(x, Object.keys(x).sort())).join('\u0000');
+  const canon = arr => eeStripPlays(arr).slice().sort((x, y) => String(x.id).localeCompare(String(y.id)))
+    .map(x => JSON.stringify(x, Object.keys(x).sort())).join('\u0000');   // v3.6.58 忽略 plays/playTs 再比对（播放次数独立同步）
   return canon(a) === canon(b);
 }
 /* v3.6.22 拉取云端列表并合并（墓碑 + updatedAt），只更新本地不反推，避免覆盖他端新数据；
@@ -6430,11 +6520,12 @@ async function eePullCloud() {
           renderEarlyEduList(); renderEarlyEduCard();
           showToast('☁️ 音频列表已更新（来自其他设备）');
         }
-        if (eeSameList(EARLY_EDU, cloud)) { _eeLast = after; _eeDirty = false; }   // 内容与云端一致：无需再推
+        if (eeSameList(EARLY_EDU, cloud)) { _eeLast = JSON.stringify(eeStripPlays(EARLY_EDU)); _eeDirty = false; }   // v3.6.58 内容与云端一致（忽略 plays）：无需再推
       }
     }
     eeSetSyncState(_eeDirty ? 'pending' : (rowFound ? 'ok' : 'idle'));
   } catch (e) { console.warn('[早教] 云端拉取失败', e); eeSetSyncState('fail'); }
+  eePullPlays().catch(() => {});   // v3.6.58 需求⑤：拉完列表顺带刷新全家播放次数
 }
 /* v3.6.21 切回前台补拉云端列表（家人手机不刷新网页也能收到新增/删除，节流 60s） */
 let _eeLastPullTs = 0;
@@ -6446,6 +6537,7 @@ document.addEventListener('visibilitychange', () => {
   if (now - _eeLastPullTs < 60000) return;
   _eeLastPullTs = now;
   if (isSyncReady()) eePullCloud().catch(() => {});
+  if (isSyncReady()) eePullPlays().catch(() => {});   // v3.6.58 需求⑤：切回前台刷新全家播放次数
 });
 /* v3.6.22 本地保存：只写本机 + 标记「有改动未同步」——不再自动上云，上云只能点「立即同步」 */
 async function saveEarlyEdu() {
@@ -6507,12 +6599,14 @@ function eeCountPlay(it, force) {
   _eeCountedId = it.id;
   scheduleEarlyEduSave();                                 // v3.6.54 持久化 + 标「有改动未同步」
   try { renderEarlyEduList(); } catch (e) {}              // 管理页开着时即时刷新次数与排序
+  // v3.6.58 需求⑤：计次后防抖自动把增量同步云端（跨用户共享），不必手动点同步
+  if (typeof isSyncReady === 'function' && isSyncReady()) { if (_eePlaysPushTimer) clearTimeout(_eePlaysPushTimer); _eePlaysPushTimer = setTimeout(() => { _eePlaysPushTimer = null; eePushPlays().catch(() => {}); }, 5000); }
   return true;
 }
 /* v3.6.54 管理页音频列表排序：按每首累计播放次数(plays)倒序；plays 相同则按添加时间倒序（稳定排序，新添加在前） */
 function eeSortByPlays(items) {
   const arr = items.slice().sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));   // 先按 addedAt 倒序打底
-  arr.sort((a, b) => (b.plays || 0) - (a.plays || 0));                              // 再按 plays 倒序（稳定：同 plays 保持 addedAt 次序）
+  arr.sort((a, b) => eeDisplayPlays(b) - eeDisplayPlays(a));                        // v3.6.58 再按「跨用户显示次数」倒序（稳定：同次数保持 addedAt 次序）
   return arr;
 }
 /* v3.6.54 星形标记：前 5 名金★，倒数 5 名灰★（与 Top5 不重叠：idx>=5 且 idx>=len-5 才灰） */
@@ -6543,7 +6637,7 @@ function renderEarlyEduList() {
       + (eeIsVideoItem(it) ? ' · 视频(仅声音)' : '')
       + (it.playable === false ? ' · <span class="ee-warn">⚠️ 可能无法播放</span>' : '')
       + '</div></div>'
-      + '<div class="ee-plays" title="累计播放次数">' + (it.plays || 0) + ' 次</div>'   // v3.6.54 行中间显示累计播放次数
+      + '<div class="ee-plays" title="累计播放次数（全家人合计）">' + eeDisplayPlays(it) + ' 次</div>'   // v3.6.58 显示「全家人合计」播放次数（跨用户云聚合）
       + '<div class="ee-actions">'
       + '<button class="ee-edit" onclick="eeEdit(\'' + it.id + '\')" title="编辑名称/分类"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>'
       + '<button class="ee-play' + (auditioning ? ' ee-aud-ing' : '') + '" onclick="eePreview(\'' + it.id + '\')" title="' + (auditioning ? '停止试听' : '试听') + '">' + (auditioning ? '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></svg>' : '<svg viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20"/></svg>') + '</button>'
@@ -7827,15 +7921,24 @@ const PLAN_EE_TYPES = {
   learnLanguage: '学语言', readBook: '读书', learnLogic: '学算术',
   fineMotor: '精细动作', grossMotor: '大运动', listenStory: '听故事', listenMusic: '听歌'
 };
+// v3.6.58 需求②：AI 今日计划按「当前开启的活动」过滤——PLAN_EE_TYPES 中 key 不在 hiddenActivities 的子集。
+// 例：已关闭「读书」，则早教统计与推荐都不含读书，已关闭活动不纳入今日计划。
+function getEnabledPlanTypes() {
+  const out = {};
+  Object.keys(PLAN_EE_TYPES).forEach(k => { if (hiddenActivities.indexOf(k) < 0) out[k] = PLAN_EE_TYPES[k]; });
+  return out;
+}
 // v3.6.0 采集某天记录里的早教/大便/辅食/户外统计（供 AI 排次日计划参考）
+// v3.6.58 需求②：早教统计只统计「当前开启的活动」(getEnabledPlanTypes)，已关闭的不计入
 function collectPlanDayStats(dateStr) {
   const recs = (typeof getRecordsByDate === 'function') ? (getRecordsByDate(dateStr) || []) : [];
-  const counts = {}; Object.keys(PLAN_EE_TYPES).forEach(k => counts[k] = 0);
+  const enabled = getEnabledPlanTypes();
+  const counts = {}; Object.keys(enabled).forEach(k => counts[k] = 0);
   let poop = 0, outdoorMin = 0;
   const foods = [];
   for (const r of recs) {
     if (!r || !r.type) continue;
-    if (Object.prototype.hasOwnProperty.call(PLAN_EE_TYPES, r.type)) counts[r.type]++;
+    if (Object.prototype.hasOwnProperty.call(enabled, r.type)) counts[r.type]++;
     if (r.type === 'poop') poop++;
     if (r.type === 'outdoor' && r.duration) outdoorMin += r.duration;
     if (r.type === 'solidFood') foods.push({ names: Array.isArray(r.solidFoods) ? r.solidFoods.slice() : [], note: (r.note || '').trim(),
@@ -7863,6 +7966,8 @@ function solidFoodStreak(targetDateStr) {
 }
 const PLAN_DOW = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 function buildPlanSystemPrompt(dateStr, wText, stats, sfStreak) {
+  // v3.6.58 需求②：已关闭的早教活动（家园里被隐藏），用于提示 AI 不纳入推荐
+  const _eeDisabled = Object.keys(PLAN_EE_TYPES).filter(k => hiddenActivities.indexOf(k) >= 0).map(k => PLAN_EE_TYPES[k]);
   const ad = getAgeDetail(dateStr);
   const birthStr = BIRTH_DATE.getFullYear() + '-' + _pad2(BIRTH_DATE.getMonth() + 1) + '-' + _pad2(BIRTH_DATE.getDate());
   const h = localStorage.getItem('babyHeight') || '';
@@ -7879,7 +7984,7 @@ function buildPlanSystemPrompt(dateStr, wText, stats, sfStreak) {
   let dayPart = '';
   if (stats) {
     const c = stats.counts;
-    const eeLine = Object.keys(PLAN_EE_TYPES).map(k => PLAN_EE_TYPES[k] + c[k] + '次').join('、');
+    const eeLine = Object.keys(c).map(k => PLAN_EE_TYPES[k] + c[k] + '次').join('、');   // v3.6.58 仅列已开启活动的次数
     // v3.6.1 统计口径改为「目标日期的前一天」：如 10-14 早上生成的计划，按 10-13 的记录
     dayPart = '\n【前一日已记录的早教/起居数据（用于安排今日计划）】\n'
       + '- 早教各项次数：' + eeLine + '\n'
@@ -7912,7 +8017,9 @@ function buildPlanSystemPrompt(dateStr, wText, stats, sfStreak) {
     + '【辅食试吃条件】若上方为「前一日无辅食记录」（或辅食很少），请在【喂养】的辅食项按辅食添加条件判断今日是否可试新辅食：月龄是否已达 6 月龄且已开始添加辅食、是否处于健康状态且非接种当日、每次只引入一种新食物并连续观察 2-3 天无过敏再加下一种、由稀到稠由少到多；据此明确写出「今日可试 XX（某种具体食物，如米粉/南瓜泥/蛋黄）」或「暂不添加，原因：…」。\n'
     + '【补剂判定】营养补剂是否为补剂日（周一/三/五），一律按本计划日（即上方"目标日期"、任务触发当天）的星期判断；不得按"第二天"或其他任何日期判断。\n'
     + '【统计口径】天气与营养补剂一律按「本计划日（上方目标日期、任务触发当天）」判断；大便次数与早教一律按「前一日」的记录判断。两者口径不得混用。\n'
-    + '【早教】放在最后一段输出。结合上方"前一日早教数据"：次数<1 的项目必须纳入今日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。\n'
+    + '【早教】放在最后一段输出。结合上方"前一日早教数据"（仅含当前已开启的活动）：次数<1 的项目必须纳入今日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。'
+    + (_eeDisabled.length ? ('\n【早教·已关闭】以下早教活动已在家园关闭，今日计划不纳入推荐：' + _eeDisabled.join('、') + '。') : '')
+    + '\n'
     // v3.6.50 用户需求「知识库中低于15算小风，但今日计划中16归为小风，应该以知识库为准」——原段落虽写「以知识库为准」，
     // 但又给出兜底数值 ≤19km/h=风小，与用户知识库自定义的 ≤15km/h=风小 冲突，16km/h 落在两口径之间被兜底带跑归小风。
     // 现改为：知识库自定义风速风级标准为唯一准绳（用户阈值绝对优先、严禁通用风级表/兜底数值覆盖、边界严禁四舍五入或折中），

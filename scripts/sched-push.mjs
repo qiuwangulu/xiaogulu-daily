@@ -50,7 +50,7 @@ const WEATHER_CACHE_TTL = 3 * 3600000;
 // 导致部署新 prompt 后今日计划永不刷新。现在改为标记服务端自己的版本号：服务端落后时，
 // 前端会按版本差重新生成，前后端任一边更新都能自愈。
 // 注意：prompt 内容变化时须前后端同步升级此版本号（前端 app.js PLAN_PROMPT_VERSION）。
-const PLAN_PROMPT_VERSION = '15'; // v3.6.53 与 app.js 逐字对齐：新增 planKbList 把「风速/风级/防风」相关 KB 条目强制置顶、其余按预算截断，修复 v3.6.50 遗留真正根因——KB 前 50 条截断漏掉靠后风速规则（用户 KB 共 62 条、风速规则在 idx=53），导致「16km/h 仍归小风」；详见 app.js 同段注释
+const PLAN_PROMPT_VERSION = '16'; // v3.6.58 与 app.js 逐字对齐：AI 今日计划按当前开启活动过滤（已关闭活动如读书不纳入统计与推荐）；ctx.hiddenActivities 下发；详见 app.js 同段注释
 
 // v3.6.0 育儿嫂休假 / v3.6.45 家政考勤 / 工资结算常量（与前端一致）
 const HOUSEKEEPER_CLOUD_KEY = '_housekeeper';
@@ -167,13 +167,15 @@ async function fetchDayRecords(fid, key, dateStr) {
   } catch (e) { console.warn('[记录] 当日记录读取失败', dateStr, e && e.message); return []; }
 }
 // v3.6.0 采集某天记录的早教/大便/辅食/户外统计（移植前端 collectPlanDayStats）
-function collectPlanDayStats(recs) {
-  const counts = {}; Object.keys(PLAN_EE_TYPES).forEach(k => counts[k] = 0);
+// v3.6.58 需求②：早教统计只统计「当前开启的活动」(enabledTypes)，已关闭的不计入
+function collectPlanDayStats(recs, enabledTypes) {
+  enabledTypes = enabledTypes || PLAN_EE_TYPES;
+  const counts = {}; Object.keys(enabledTypes).forEach(k => counts[k] = 0);
   let poop = 0, outdoorMin = 0;
   const foods = [];
   for (const r of recs) {
     if (!r || !r.type) continue;
-    if (Object.prototype.hasOwnProperty.call(PLAN_EE_TYPES, r.type)) counts[r.type]++;
+    if (Object.prototype.hasOwnProperty.call(enabledTypes, r.type)) counts[r.type]++;
     if (r.type === 'poop') poop++;
     if (r.type === 'outdoor' && r.duration) outdoorMin += r.duration;
     if (r.type === 'solidFood') foods.push({ names: Array.isArray(r.solidFoods) ? r.solidFoods.slice() : [], note: (r.note || '').trim(),
@@ -255,6 +257,9 @@ function planKbList(kbArr, budget) {
   return wind.concat(other).slice(0, budget || 50);
 }
 function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec, sfStreak) {
+  // v3.6.58 需求②：已关闭的早教活动（来自 ctx.hiddenActivities），提示 AI 不纳入推荐
+  const _hidden = Array.isArray(ctx.hiddenActivities) ? ctx.hiddenActivities : [];
+  const _eeDisabled = Object.keys(PLAN_EE_TYPES).filter(k => _hidden.indexOf(k) >= 0).map(k => PLAN_EE_TYPES[k]);
   const ad = getAgeDetail(ctx.birthDate, dateStr);
   const h = ctx.height || '', w = ctx.weight || '';
   const kbPart = planKbList(ctx.kb || [], 50).map(x => '- [' + x.cat + '] ' + x.text).join('\n');
@@ -267,7 +272,7 @@ function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec, sfStreak) {
   let dayPart = '';
   if (stats) {
     const c = stats.counts;
-    const eeLine = Object.keys(PLAN_EE_TYPES).map(k => PLAN_EE_TYPES[k] + c[k] + '次').join('、');
+    const eeLine = Object.keys(c).map(k => PLAN_EE_TYPES[k] + c[k] + '次').join('、');   // v3.6.58 仅列已开启活动的次数
     dayPart = '\n【前一日已记录的早教/起居数据（用于安排今日计划）】\n'
       + '- 早教各项次数：' + eeLine + '\n'
       + '- 大便次数：' + stats.poop + ' 次\n'
@@ -300,7 +305,9 @@ function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec, sfStreak) {
     + '【辅食试吃条件】若上方为「前一日无辅食记录」（或辅食很少），请在【喂养】的辅食项按辅食添加条件判断今日是否可试新辅食：月龄是否已达 6 月龄且已开始添加辅食、是否处于健康状态且非接种当日、每次只引入一种新食物并连续观察 2-3 天无过敏再加下一种、由稀到稠由少到多；据此明确写出「今日可试 XX（某种具体食物，如米粉/南瓜泥/蛋黄）」或「暂不添加，原因：…」。\n'
     + '【补剂判定】营养补剂是否为补剂日（周一/三/五），一律按本计划日（即上方"目标日期"、任务触发当天）的星期判断；不得按"第二天"或其他任何日期判断。\n'
     + '【统计口径】天气与营养补剂一律按「本计划日（上方目标日期、任务触发当天）」判断；大便次数与早教一律按「前一日」的记录判断。两者口径不得混用。\n'
-    + '【早教】放在最后一段输出。结合上方"前一日早教数据"：次数<1 的项目必须纳入今日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。\n'
+    + '【早教】放在最后一段输出。结合上方"前一日早教数据"（仅含当前已开启的活动）：次数<1 的项目必须纳入今日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。'
+    + (_eeDisabled.length ? ('\n【早教·已关闭】以下早教活动已在家园关闭，今日计划不纳入推荐：' + _eeDisabled.join('、') + '。') : '')
+    + '\n'
     // v3.6.50 与 app.js buildPlanSystemPrompt 逐字对齐：知识库自定义风速风级标准为唯一准绳（详见 app.js 同段注释）
     + '【风级换算与户外/防风】天气中的「最大风速」(km/h)换算风大/风小，**一律以家庭知识库中用户自定义的风速风级标准为唯一准绳**（通常位于知识库「穿衣/户外」条目，如「风小 ≤15km/h」「风稍大 15-30km/h」「风大 ≥30km/h」）。用户写明的阈值优先于本段一切数值、优先于任何通用气象风级表（如蒲福风级 3 级=12-19km/h）——**严禁使用通用风级表或四舍五入、取折中等方式自行改判档位**。边界严格按知识库原文执行：知识库写明「≤15km/h 为风小」时，16km/h 不属于风小，必须按知识库的下一档（风稍大）执行；含等号的一侧归属知识库写明的那一档。仅当知识库完全没有风速/风级相关定义时，才采用兜底：≤19km/h（≤4级，风小）→ 正常户外、可不戴帽或只戴薄帽、鼓励适当增加户外时长；20-38km/h（5-6级，风稍大）→ 戴帽防风、婴儿车加防风罩、选避风时段与地点、适当缩短户外；≥39km/h（≥7级，风大）→ 减少户外活动或改室内、必须戴帽并防风、避开风口与广告牌（参考：上海大风蓝色预警≈平均风力6级≈39km/h）；采用兜底时须在正文注明「知识库未定义风速档位，按通用口径」。该判断请写入【健康·出行】的户外时段、戴帽与避风建议中，并可在摘要点出"风大注意防风"或"风小宜多户外"（摘要与正文的风档名称一律用知识库的档位名称）。注意风有风寒效应、体感更冷，户外穿衣在气温档基础上：风稍大升半档、风大升一档。\n'
     + '【温度要求】上方天气已给出当日最高温和最低温，请在「起居护理·穿衣」与「健康·出行」中明确写出具体温度数值（如"今日 28℃/19℃，短袖即可"），不要只写"根据天气"。\n'
@@ -608,7 +615,11 @@ async function generatePlan(task, trig, ctx, fid, key) {
       const prev = new Date(trig.getTime() - 86400000);
       const prevStr = prev.getFullYear() + '-' + pad2(prev.getMonth() + 1) + '-' + pad2(prev.getDate());
       const recs = await fetchDayRecords(fid, key, prevStr);
-      stats = collectPlanDayStats(recs);
+      // v3.6.58 需求②：按「当前开启的活动」过滤统计（已关闭的不计入）
+      const _hidden = Array.isArray(ctx.hiddenActivities) ? ctx.hiddenActivities : [];
+      const enabledTypes = {};
+      Object.keys(PLAN_EE_TYPES).forEach(k => { if (_hidden.indexOf(k) < 0) enabledTypes[k] = PLAN_EE_TYPES[k]; });
+      stats = collectPlanDayStats(recs, enabledTypes);
       sfStreak = await solidFoodStreakCloud(fid, key, dateStr);
       supRec = await recentSupplement(fid, key);
       console.log('[计划] 前一日统计', prevStr, '早教=', JSON.stringify(stats && stats.counts), '大便=', stats && stats.poop, '户外=', stats && stats.outdoorMin, '补剂=', supRec, '辅食连续天数=', sfStreak && sfStreak.streak);
