@@ -151,7 +151,8 @@
              item 再收紧 132→120px（右移、右缘不变）；v3.6.28 的「h 与 l 对齐」因与冒号紧凑互斥，本次移除 */
   .overview-item.ov-unit-item { width: 120px; flex-shrink: 0; gap: 4px; }
   /* v3.6.12 今日成就：文字占满整行、点赞按钮整体下移成第二行（v3.6.58 由左右两栏改为纵向堆叠） */
-  .overview-achievement { color: #fff; font-size: 15px; margin-top: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; position: relative; padding-right: 44px; min-height: 44px; }   /* v3.6.60 点赞按钮绝对定位到右对齐：容器需 position:relative + 右侧预留空间避免文字与按钮重叠；min-height 保证第二行高度（与详情胶囊同高） */
+  .overview-achievement { color: #fff; font-size: 15px; margin-top: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; position: relative; }   /* v3.6.60 点赞按钮绝对定位到右对齐：容器需 position:relative 作为定位上下文 */
+  .overview-achievement.has-like { padding-right: 44px; min-height: 44px; }   /* v3.6.60 仅「有成就/有点赞按钮」时右侧预留 44px 防重叠 + 预留第二行高度（与详情胶囊同高）；「今日成就: 无」不加，避免多出空白行 */
   .overview-achievement .ov-icon { font-size: 15px; }
   .overview-achievement .ov-text { flex: 1 1 auto; min-width: 0; color: #ffeaa7; font-size: 15px; line-height: 1.6; text-align: justify; text-align-last: left; }   /* v3.6.24 14px→15px：与「下一次喝奶」行同字号 */
   .overview-achievement .ov-text .ov-label { color: #fff; }

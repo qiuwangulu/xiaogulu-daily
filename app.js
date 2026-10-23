@@ -1101,7 +1101,7 @@ function updateOverview(skipPush) {
     // v3.6.9 今日成就整体只保留一个赞（按天）：图标放大一倍、点赞/取消区分度明显
     const _liked = isAchLiked(_achDs);
     const _likeBtn = `<button class="ach-like-btn${_liked ? ' liked' : ''}" data-ds="${escapeHtml(_achDs)}" onclick="toggleAchLike(this.dataset.ds, event)" title="${_liked ? '取消点赞' : '点赞'}" aria-label="${_liked ? '取消点赞' : '点赞'}">👍</button>`;
-    achHtml = `<div class="overview-achievement"><span class="ov-text"><span class="ov-icon">🏆</span> <span class="ov-label">今日成就:</span> ${achArr.map(n => escapeHtml(n)).join(' | ')}</span>${_likeBtn}</div>`;
+    achHtml = `<div class="overview-achievement has-like"><span class="ov-text"><span class="ov-icon">🏆</span> <span class="ov-label">今日成就:</span> ${achArr.map(n => escapeHtml(n)).join(' | ')}</span>${_likeBtn}</div>`;
   } else {
     achHtml = `<div class="overview-achievement"><span class="ov-text"><span class="ov-icon">🏆</span> <span class="ov-label">今日成就:</span> 无</span></div>`;
   }
