@@ -151,14 +151,14 @@
              item 再收紧 132→120px（右移、右缘不变）；v3.6.28 的「h 与 l 对齐」因与冒号紧凑互斥，本次移除 */
   .overview-item.ov-unit-item { width: 120px; flex-shrink: 0; gap: 4px; }
   /* v3.6.12 今日成就：文字占满整行、点赞按钮整体下移成第二行（v3.6.58 由左右两栏改为纵向堆叠） */
-  .overview-achievement { color: #fff; font-size: 15px; margin-top: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+  .overview-achievement { color: #fff; font-size: 15px; margin-top: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; position: relative; padding-right: 44px; min-height: 44px; }   /* v3.6.60 点赞按钮绝对定位到右对齐：容器需 position:relative + 右侧预留空间避免文字与按钮重叠；min-height 保证第二行高度（与详情胶囊同高） */
   .overview-achievement .ov-icon { font-size: 15px; }
   .overview-achievement .ov-text { flex: 1 1 auto; min-width: 0; color: #ffeaa7; font-size: 15px; line-height: 1.6; text-align: justify; text-align-last: left; }   /* v3.6.24 14px→15px：与「下一次喝奶」行同字号 */
   .overview-achievement .ov-text .ov-label { color: #fff; }
   /* v3.6.9 今日成就整体一个赞（按天）：图标放大一倍（13px→26px）、点赞/取消区分度明显
      未赞 = 灰暗灰阶；已赞 = 高亮彩色 + 放大
      v3.6.12：作为独立右栏（flex 子项）顶对齐，其下方留白，文字不侵入 */
-  .ach-like-btn { flex: 0 0 auto; background: none; border: none; cursor: pointer; font-size: 26px; line-height: 1; padding: 0 2px; margin: 2px 0 0 0; opacity: .45; filter: grayscale(1); transition: transform .12s, opacity .12s, filter .12s; color: inherit; }
+  .ach-like-btn { position: absolute; right: 0; top: 24px; background: none; border: none; cursor: pointer; font-size: 26px; line-height: 1; padding: 0 2px; margin: 0; opacity: .45; filter: grayscale(1); transition: transform .12s, opacity .12s, filter .12s; color: inherit; }   /* v3.6.60 点赞挪到最右侧、与「详情」胶囊对齐（right:0）、高度落在今日成就第二行（top:24px=一行行高） */
   .ach-like-btn:hover { opacity: .75; }
   .ach-like-btn.liked { opacity: 1; filter: none; transform: scale(1.08); }
   .ach-like-btn:active { transform: scale(1.3); }
@@ -3034,6 +3034,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.59"></script>
+<script src="app.js?v=v3.6.60"></script>
 </body>
 </html>
