@@ -1583,7 +1583,17 @@
   .sf-abnormal { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 10px; }
   .sf-ab-chip { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 9px; background: rgba(255,118,117,0.16); color: #ff7675; border: 1px solid rgba(255,118,117,0.45); }
   .sf-ab-chip::before { content: "⚠ "; }
-  .sf-donut { width: 180px; height: 180px; }
+  .sf-donut { width: 180px; height: 180px; cursor: pointer; }
+  /* v3.6.62 需求③：点击圆环查看食物清单 */
+  .sf-ring-wrap { cursor: pointer; }
+  .sf-ring-hint { font-size: 11px; color: #74b9ff; margin-top: 6px; opacity: 0.85; }
+  .sf-foods { width: 100%; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(116,185,255,0.08); border: 1px solid rgba(116,185,255,0.25); }
+  .sf-foods-title { font-size: 12px; font-weight: 600; color: rgba(223,230,233,0.8); margin-bottom: 8px; }
+  .sf-foods-list { font-size: 13px; line-height: 1.9; color: #dfe6ed; word-break: break-word; }
+  .sf-food-chip { display: inline; }
+  .sf-food-chip.is-bad { color: #ff7675; font-weight: 600; }
+  .sf-food-sep { color: rgba(223,230,233,0.45); margin: 0 1px; }
+  .sf-foods-empty { font-size: 12px; color: rgba(223,230,233,0.5); }
   /* v3.5.83 环形配色改为 CSS class 驱动（原先内联白，浅色模式下看不见） */
   .sf-arc-un { stroke: rgba(255,255,255,0.16); }
   .sf-center-num { font-size: 30px; font-weight: 800; fill: #fff; }
@@ -1910,6 +1920,14 @@
   body.theme-day .sf-legend { color: #5b6b78; }
   body.theme-day .sf-legend .sf-lg-un { background: rgba(61,72,82,0.28); }
   body.theme-day .sf-ab-chip { background: rgba(214,48,49,0.1); color: #d63031; border-color: rgba(214,48,49,0.4); }
+  /* v3.6.62 需求③：点击圆环食物清单 浅色配色 */
+  body.theme-day .sf-ring-hint { color: #0984e3; }
+  body.theme-day .sf-foods { background: rgba(9,132,227,0.07); border-color: rgba(9,132,227,0.25); }
+  body.theme-day .sf-foods-title { color: rgba(61,72,82,0.8); }
+  body.theme-day .sf-foods-list { color: #3d4852; }
+  body.theme-day .sf-food-chip.is-bad { color: #d63031; }
+  body.theme-day .sf-food-sep { color: rgba(61,72,82,0.4); }
+  body.theme-day .sf-foods-empty { color: rgba(61,72,82,0.5); }
   /* 辅食卡片内联色标签：浅色下加深，保证对比度 */
   body.theme-day .ms-tag[style*="#2ecc71"] { color: #0b8a55 !important; background: rgba(46,204,113,0.16) !important; }
   body.theme-day .ms-tag[style*="#ff7675"] { color: #d63031 !important; background: rgba(255,118,117,0.16) !important; }
@@ -3035,6 +3053,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.61"></script>
+<script src="app.js?v=v3.6.62"></script>
 </body>
 </html>

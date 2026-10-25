@@ -131,10 +131,16 @@ function computeTriggers(task, now) {
     return { prev: first.getTime() <= now.getTime() ? first : null, next: first.getTime() > now.getTime() ? first : null };
   }
   const iv = taskInterval(task);
-  let prev = new Date(first.getTime());
-  if (prev.getTime() > now.getTime()) { while (prev.getTime() > now.getTime()) prev = stepBack(prev, task.freq, iv); }
-  else { while (stepFwd(prev, task.freq, iv).getTime() <= now.getTime()) prev = stepFwd(prev, task.freq, iv); }
-  return { prev: prev, next: stepFwd(prev, task.freq, iv) };
+  let prev;
+  if (first.getTime() > now.getTime()) {
+    // v3.6.62 需求②修复「开始日期之前就推送」：任务尚未到达开始时间，不存在已触发的 prev，
+    // 也绝不允许回退到 start 之前产生历史触发点（旧逻辑会 stepBack 到 start 前并触发提前推送）。
+    prev = null;
+  } else {
+    prev = new Date(first.getTime());
+    while (stepFwd(prev, task.freq, iv).getTime() <= now.getTime()) prev = stepFwd(prev, task.freq, iv);
+  }
+  return { prev: prev, next: prev ? stepFwd(prev, task.freq, iv) : first };
 }
 function periodKey(task, trig) {
   const y = trig.getFullYear();
