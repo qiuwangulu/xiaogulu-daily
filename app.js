@@ -1555,7 +1555,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.65';
+const APP_VERSION = 'v3.6.66';
 // v3.6.64: 修复「放音乐后，播放记录（管理→音频页的「N 次」）还是没有更新」的真因——不在计数环节，而在**拉取**环节：
 //   eePullPlays 汇总云端各设备分片时用 `Object.assign(cloud, m)` 把 {歌曲id:次数} 直接拍平进了同一层，
 //   而 eeCloudPlaysFor 读的是两层结构 {设备id:{歌曲id:次数}}（`m[songId]`）——m 已是数字，恒取到 undefined → 次数恒 0。
@@ -1666,24 +1666,42 @@ function sfCloseAllPanels() {
 function sfTogglePanel(p, id) {
   const panel = document.getElementById(`${p}panel_${id}`);
   if (!panel) return;
-  const willOpen = panel.style.display === 'none';
+  const willOpen = (panel.style.display === 'none' || panel.style.display === '');
   sfCloseAllPanels();
   if (!willOpen) return;
   panel.style.display = '';
   sfRenderList(p, id);
-  // 下方空间不足时向上展开，避免被弹窗容器裁剪
+  // v3.6.66 固定定位 + 触发框视口坐标，彻底避开 .modal-box(overflow:auto) 对下拉的裁切（显示不全）
   try {
     const sel = document.getElementById(`${p}sel_${id}`);
     const rect = (sel && sel.getBoundingClientRect) ? sel.getBoundingClientRect() : null;
     const vh = (typeof window !== 'undefined' && window.innerHeight) || 0;
-    const need = 240;   // 面板大致高度
-    if (rect && vh && (vh - rect.bottom) < need && rect.top > need) {
-      panel.style.top = 'auto'; panel.style.bottom = 'calc(100% + 4px)';
+    const vw = (typeof window !== 'undefined' && window.innerWidth) || 0;
+    if (rect && vh && vw) {
+      const w = Math.round(rect.width);
+      const panelH = 260;                                   // 面板预估高度（搜索框 + 列表 max-height）
+      const downSpace = vh - rect.bottom, upSpace = rect.top;
+      let top = (downSpace < panelH && upSpace > downSpace)
+        ? rect.top - panelH                                 // 下方不足且上方更宽 → 向上展开
+        : rect.bottom + 4;                                  // 否则向下展开
+      // v3.6.66 兜底：无论向上/向下，都保证面板完整落在视口内（不超出顶/底，避免仍被截掉）
+      if (top < 4) top = 4;
+      if (top + panelH > vh - 4) top = Math.max(4, vh - 4 - panelH);
+      let left = rect.left;
+      if (left + w > vw - 4) left = Math.max(4, vw - 4 - w); // 不出右边界
+      if (left < 4) left = 4;                               // 不出左边界
+      panel.style.left = left + 'px';
+      panel.style.top = top + 'px';
+      panel.style.width = w + 'px';
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
     } else {
-      panel.style.top = 'calc(100% + 4px)'; panel.style.bottom = 'auto';
+      panel.style.left = '0px'; panel.style.top = '0px'; panel.style.width = '100%';
+      panel.style.right = 'auto'; panel.style.bottom = 'auto';
     }
   } catch (e) {
-    panel.style.top = 'calc(100% + 4px)'; panel.style.bottom = 'auto';
+    panel.style.left = '0px'; panel.style.top = '0px'; panel.style.width = '100%';
+    panel.style.right = 'auto'; panel.style.bottom = 'auto';
   }
 }
 function sfFilter(p, id, val) {
@@ -1716,6 +1734,8 @@ function _sfOutsideClose(e) {
 }
 document.addEventListener('click', _sfOutsideClose);
 document.addEventListener('touchstart', _sfOutsideClose, { passive: true });
+// v3.6.66 弹窗（.modal-box）滚动时关闭固定定位的下拉，避免面板与触发框错位（fixed 不再随弹窗滚动）
+document.addEventListener('scroll', () => { try { sfCloseAllPanels(); } catch (e) {} }, true);
 // iOS 事件委托兜底：让 body 具备可点击性，click 才会冒泡到 document
 if (document.body && !document.body.hasAttribute('onclick')) {
   document.body.setAttribute('onclick', 'void(0)');
