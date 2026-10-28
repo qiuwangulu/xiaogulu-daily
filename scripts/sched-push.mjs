@@ -510,6 +510,22 @@ async function geocode(addr) {
   } catch { /* ignore */ }
   return { lat: 31.2304, lon: 121.4737, name: '上海' };
 }
+// v3.6.67 服务端天气取数加固：fetch 加超时 + 自动重试，避免偶发网络抖动 / 连接挂起导致天气失败
+async function fetchWithTimeout(url, ms) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => { try { ctrl.abort(); } catch (e) {} }, ms);
+  try { return await fetch(url, { signal: ctrl.signal }); }
+  finally { clearTimeout(id); }
+}
+async function fetchWeatherRetry(url, ms, tries) {
+  tries = tries || 2;
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try { return await fetchWithTimeout(url, ms); }
+    catch (e) { lastErr = e; if (i < tries - 1) await new Promise(r => setTimeout(r, 700 * (i + 1))); }
+  }
+  throw (lastErr || new Error('fetch failed'));
+}
 // v3.6.16 主源 Open-Meteo（daily + hourly 兜底风速/气温）；失败/配额超限返回 null 交由备用源
 async function openMeteoText(addr, dateStr) {
   try {
@@ -518,7 +534,7 @@ async function openMeteoText(addr, dateStr) {
       + '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max'
       + '&hourly=wind_speed_10m,temperature_2m'
       + '&timezone=Asia%2FShanghai&start_date=' + dateStr + '&end_date=' + dateStr;
-    const res = await fetch(url);
+    const res = await fetchWeatherRetry(url, 8000, 2);   // v3.6.67 8s 超时 + 重试
     const j = await res.json();
     if (j && j.error) return null;                                   // 「Daily API request limit exceeded」等 → 触发备用源
     const d = j && j.daily;
@@ -543,7 +559,7 @@ async function openMeteoText(addr, dateStr) {
 async function wttrText(addr, dateStr) {
   try {
     const geo = await geocode(addr);
-    const res = await fetch('https://wttr.in/' + geo.lat + ',' + geo.lon + '?format=j1');
+    const res = await fetchWeatherRetry('https://wttr.in/' + geo.lat + ',' + geo.lon + '?format=j1', 8000, 2);   // v3.6.67 8s 超时 + 重试
     const j = await res.json();
     const w = (j && j.weather || []).find(x => x.date === dateStr) || (j && j.weather && j.weather[0]);
     if (!w) return null;

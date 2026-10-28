@@ -1555,7 +1555,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.66';
+const APP_VERSION = 'v3.6.67';
 // v3.6.64: 修复「放音乐后，播放记录（管理→音频页的「N 次」）还是没有更新」的真因——不在计数环节，而在**拉取**环节：
 //   eePullPlays 汇总云端各设备分片时用 `Object.assign(cloud, m)` 把 {歌曲id:次数} 直接拍平进了同一层，
 //   而 eeCloudPlaysFor 读的是两层结构 {设备id:{歌曲id:次数}}（`m[songId]`）——m 已是数字，恒取到 undefined → 次数恒 0。
@@ -5987,6 +5987,7 @@ const SCHED_DEFAULT_ADDR = '上海市闵行区七宝镇宝南路55弄九星家�
 const SCHED_GEN_LEAD = 12 * 3600000;     // v3.6.3 起不再使用：改为每天 0 点生成「当天」计划（保留字段仅兼容旧云端 ctx）
 const SCHED_PUSH_GRACE = 3 * 3600000;    // 触发后宽限 3 小时内才推送（避免补推历史）
 const SCHED_GEN_COOLDOWN = 30 * 60000;   // AI 生成失败重试冷却 30 分钟
+const SCHED_WEATHER_MAX_RETRY = 4;       // v3.6.67 天气自愈：单日最多重试 4 次（约 2 小时），避免「天气永久失败」长期占坑，也避免无限刷 AI
 // AI 计划 prompt 版本：内容与分类结构变化时递增，可强制所有 AI 任务用最新 prompt 重新生成
 // v3.6.17 升 12：与服务端 scripts/sched-push.mjs 对齐（服务端 prompt 内容同步到 v3.6.14，
 // 并修复「服务端用旧 prompt 生成却标记前端版本号」导致部署后不更新的问题）。
@@ -7978,6 +7979,23 @@ async function geoSearchOne(q) {
 /* v3.6.16 天气缓存：按「地址|日期」缓存 3 小时，减少 Open-Meteo 调用、缓解每日配额限流 */
 const WEATHER_CACHE_KEY = 'weather_cache_v1';
 const WEATHER_CACHE_TTL = 3 * 3600 * 1000;
+/* v3.6.67 天气取数加固：国内网络偶发超时/丢包会让 fetch 永久挂起（无 timeout）或瞬时失败，
+ * 导致天气取不到、失败文案被写进当日计划且一整天不自愈。此处统一加「超时 + 自动重试」。 */
+async function _fetchWithTimeout(url, ms) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => { try { ctrl.abort(); } catch (e) {} }, ms);
+  try { return await fetch(url, { signal: ctrl.signal }); }
+  finally { clearTimeout(id); }
+}
+async function _fetchWeatherRetry(url, ms, tries) {
+  tries = tries || 2;
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try { return await _fetchWithTimeout(url, ms); }
+    catch (e) { lastErr = e; if (i < tries - 1) await new Promise(r => setTimeout(r, 700 * (i + 1))); }
+  }
+  throw (lastErr || new Error('fetch failed'));
+}
 async function _openMeteoWeather(addr, dateStr) {
   const geo = await geocodeAddr(addr); if (!geo) return null;
   try {
@@ -7985,7 +8003,7 @@ async function _openMeteoWeather(addr, dateStr) {
       + '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max'
       + '&hourly=wind_speed_10m,temperature_2m'
       + '&timezone=Asia%2FShanghai&start_date=' + dateStr + '&end_date=' + dateStr;
-    const res = await fetch(url);
+    const res = await _fetchWeatherRetry(url, 8000, 2);   // v3.6.67 8s 超时 + 重试（主源）
     const j = await res.json();
     if (j && j.error) return null;
     const d = j && j.daily;
@@ -8002,7 +8020,7 @@ async function _openMeteoWeather(addr, dateStr) {
 async function _wttrWeather(addr, dateStr) {
   const geo = await geocodeAddr(addr); if (!geo) return null;
   try {
-    const res = await fetch('https://wttr.in/' + geo.lat + ',' + geo.lon + '?format=j1');
+    const res = await _fetchWeatherRetry('https://wttr.in/' + geo.lat + ',' + geo.lon + '?format=j1', 8000, 2);   // v3.6.67 8s 超时 + 重试（备用源）
     const j = await res.json();
     const w = (j && j.weather || []).find(x => x.date === dateStr) || (j && j.weather && j.weather[0]);
     if (!w) return null;
@@ -8239,8 +8257,9 @@ async function generatePlanForTask(task, trig) {
   const cfg = await getAITagConfigWait();
   if (!cfg) { console.warn('[计划] 未配置 AI 密钥，跳过生成'); return; }
   const dateStr = trig.getFullYear() + '-' + _pad2(trig.getMonth() + 1) + '-' + _pad2(trig.getDate());
-  let wText = '（未获取）';
-  try { wText = weatherText(await fetchWeather(getWeatherAddr(), dateStr)); } catch (e) {}
+  let w = null;
+  try { w = await fetchWeather(getWeatherAddr(), dateStr); } catch (e) {}   // v3.6.67 取不到返回 null（不抛）
+  let wText = weatherText(w);
   // v3.6.1 统计前一天（目标日期 -1 天）的记录
   const stats = (typeof collectPlanDayStats === 'function') ? collectPlanDayStats(planStatsDateStr(dateStr)) : null;
   // v3.6.40 辅食连续添加天数（昨日=第N天→今日=第N+1天），供「辅食第N天食谱推荐」规则使用
@@ -8251,6 +8270,9 @@ async function generatePlanForTask(task, trig) {
   ]);
   if (typeof r === 'string' && r.indexOf('__FAIL__:') === 0) { console.warn('[计划] AI 生成失败', r); return; }
   task.content = String(r).trim();
+  // v3.6.67 天气自愈：成功拿到天气则清失败标记；失败则标记，交给 runScheduler 在冷却后重新生成
+  if (w) { task.weatherFailed = false; task.weatherRetryCount = 0; }
+  else { task.weatherFailed = true; task.weatherRetryCount = (task.weatherRetryCount || 0) + 1; }
   task.genPeriod = periodKey(task, trig);
   task.genDate = dateStr;
   task.planVer = PLAN_PROMPT_VERSION;   // v3.5.142 记录生成本内容所用的 prompt 版本
@@ -8362,7 +8384,10 @@ async function runScheduler(forceGen) {
       // 内容版本过期也重生成：已有内容但用的是旧 prompt 版本，用户主动查看(forceGen)时立即刷新
       // v3.6.17 数值单调比较：云端版本 >= 本地时不重生成（防止服务端新 prompt 生成的内容被本地旧版本回退覆盖，高低版本乒乓）
       const staleVer = Number(task.planVer || 0) < Number(PLAN_PROMPT_VERSION);
-      if ((task.genDate !== todayStr || staleVer) && (!cooling || (forceGen && (!task.content || staleVer)))) {
+      // v3.6.67 天气自愈：当日计划因天气失败而生成过（weatherFailed），且未超过单日重试上限时，
+      // 在冷却结束后自动重新生成，直到天气成功或到达重试上限，避免失败文案被一整天固化。
+      const weatherFailed = !!task.weatherFailed && (task.weatherRetryCount || 0) < SCHED_WEATHER_MAX_RETRY;
+      if ((task.genDate !== todayStr || staleVer || weatherFailed) && (!cooling || (forceGen && (!task.content || staleVer || weatherFailed)))) {
         const _beforeGen = task.genDate;
         task.genTryTs = Date.now(); saveSchedTasks();
         await generatePlanForTask(task, new Date(todayStr + 'T00:00:00'));
