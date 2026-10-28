@@ -1555,7 +1555,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.67';
+const APP_VERSION = 'v3.6.68';
 // v3.6.64: 修复「放音乐后，播放记录（管理→音频页的「N 次」）还是没有更新」的真因——不在计数环节，而在**拉取**环节：
 //   eePullPlays 汇总云端各设备分片时用 `Object.assign(cloud, m)` 把 {歌曲id:次数} 直接拍平进了同一层，
 //   而 eeCloudPlaysFor 读的是两层结构 {设备id:{歌曲id:次数}}（`m[songId]`）——m 已是数字，恒取到 undefined → 次数恒 0。
@@ -6083,6 +6083,7 @@ let _schedCloudPullSettled = false;      // v3.6.6 首次拉取已结束（成�
 let _schedCloudPending = false;          // v3.6.48 需求①：有待同步变更但 sync 未就绪（无网/无密钥）——旧逻辑静默丢弃且不补传，
                                           // 导致关闭任务后同步从未发生、服务端照旧数据推送；就绪后由 runScheduler 补传
 let _schedCloudLastPull = 0;             // v3.6.48 需求①：最近一次成功拉到云端数据的时刻（上传前陈旧检查用）
+let _schedCloudTasksSnap = null;         // v3.6.68 最近一次拉到的云端任务快照（上传前防「失败内容覆盖云端好计划」）
 function scheduleSchedCloudSave(delay) {
   if (typeof isSyncReady === 'function' && !isSyncReady()) { _schedMarkPending(); return; }
   if (_schedCloudTimer) clearTimeout(_schedCloudTimer);
@@ -6142,9 +6143,28 @@ async function saveSchedCloud() {
       promptVer: PLAN_PROMPT_VERSION,
       genLead: SCHED_GEN_LEAD
     };
-    const body = JSON.stringify({ tasks: SCHED_TASKS, ctx: ctx });
+    // v3.6.68 上传前防回退：本地这次取天气失败（内容含失败文案）而云端同一天已有正常计划时，
+    // 以云端内容上传，避免国内网络差的设备把服务端刚生成好的计划覆盖成「天气获取失败」。
+    const _snap = Array.isArray(_schedCloudTasksSnap) ? _schedCloudTasksSnap : null;
+    const upTasks = !_snap ? SCHED_TASKS : SCHED_TASKS.map(t => {
+      if (!t || t.id == null) return t;
+      const ct = _snap.find(x => x && String(x.id) === String(t.id));
+      if (!ct || !ct.content) return t;
+      const localBad = PLAN_WEATHER_BAD_RE.test(String(t.content || ''));
+      const cloudOk = !PLAN_WEATHER_BAD_RE.test(String(ct.content || ''));
+      if (localBad && cloudOk && (ct.genDate || '') === (t.genDate || '')) {
+        return Object.assign({}, t, {
+          content: ct.content,
+          planUpdatedAt: Math.max(Number(ct.planUpdatedAt || 0), Number(t.planUpdatedAt || 0)),
+          weatherFailed: false,
+          weatherRetryCount: 0
+        });
+      }
+      return t;
+    });
+    const body = JSON.stringify({ tasks: upTasks, ctx: ctx });
     if (body === _schedCloudLast) return;   // 无变化则跳过，避免频繁写云端
-    const { data, iv } = await encrypt(key, JSON.stringify({ tasks: SCHED_TASKS, ctx: ctx, ts: Date.now() }));
+    const { data, iv } = await encrypt(key, JSON.stringify({ tasks: upTasks, ctx: ctx, ts: Date.now() }));
     await supabaseUpsert('family_config', { family_id: getFamilyId(), config_key: SCHED_CLOUD_KEY, encrypted_data: data, iv, last_modified: Date.now() });
     _schedCloudLast = body;
     _schedClearPending();   // v3.6.56 上传成功：清待上传标记（含落盘）
@@ -6189,8 +6209,19 @@ async function loadSchedCloud() {
     if (!obj || !Array.isArray(obj.tasks)) return false;
     _schedCloudLastPull = Date.now();   // v3.6.48 需求①：拉到云端数据的时刻（saveSchedCloud 上传前陈旧检查）
     _schedCloudCtx = (obj.ctx && typeof obj.ctx === 'object') ? obj.ctx : null;
+    // v3.6.68 留一份云端任务快照：上传时用它拦住「本地天气失败内容覆盖云端正常计划」
+    try { _schedCloudTasksSnap = JSON.parse(JSON.stringify(obj.tasks)); } catch (e) { _schedCloudTasksSnap = obj.tasks; }
     return mergeSchedCloudTasks(obj.tasks);
   } catch (e) { console.warn('[Sched] 定时任务云端加载失败:', e); return false; }
+}
+/* v3.6.68 计划内容「天气是否没取到」判定：兼容 v3.6.67 之前的旧数据——
+ * 旧版生成失败时不会写 task.weatherFailed 标记，只把失败文案写进内容，
+ * 单看标记会让这类历史失败内容永远等不到自愈。 */
+const PLAN_WEATHER_BAD_RE = /天气获取失败|未获取到天气|天气未获取/;
+function planWeatherMissing(task) {
+  if (!task) return false;
+  if (task.weatherFailed) return true;
+  return PLAN_WEATHER_BAD_RE.test(String(task.content || ''));
 }
 function mergeSchedCloudTasks(cloudTasks) {
   if (!Array.isArray(cloudTasks) || !cloudTasks.length) return false;
@@ -6206,9 +6237,27 @@ function mergeSchedCloudTasks(cloudTasks) {
     const cg = ct.genDate || '', lg = lt.genDate || '';
     // v3.6.17 云端 genDate 更新 **或 prompt 版本更新**（如服务端用对齐后的新 prompt 重新生成）都采纳云端整任务
     const cVer = Number(ct.planVer || 0), lVer = Number(lt.planVer || 0);
-    if (ct.content && (cg > lg || cVer > lVer)) {
+    // v3.6.68 同一天内服务端「重新生成」计划时 genDate/planVer 都不变（如 0 点天气取失败、
+    // 早上网络恢复后服务端再生成一份正常计划），旧判定会把它当「无更新」丢弃 —— 首页/任务页
+    // 便一直停留在旧失败内容（用户反馈「推送的消息正常了，但首页和任务里没更新」）。
+    // 现新增 planUpdatedAt（计划内容写入时刻）做内容级比较，并叠加「天气质量优先」兜底。
+    const cUpd = Number(ct.planUpdatedAt || 0), lUpd = Number(lt.planUpdatedAt || 0);
+    const cContent = String(ct.content || '');
+    const lContent = String(lt.content || '');
+    const cloudWeatherOk = !!cContent && !PLAN_WEATHER_BAD_RE.test(cContent);
+    // 本地内容天气失败、云端拿到了真实天气 → 无条件采纳云端（不看时间戳，避免国内取不到天气的
+    // 设备把失败内容一直顶在上面）
+    const qualityWin = cloudWeatherOk && planWeatherMissing(lt);
+    // 反向保护：同一天内本地内容正常、云端却是失败文案（多半是国内网络差的设备后写覆盖了云端）
+    // → 拒绝这份劣化内容，保留本地；跨天（云端是今天的新计划）仍正常采纳。
+    const degradeGuard = !!cContent && PLAN_WEATHER_BAD_RE.test(cContent)
+      && !!lContent && !PLAN_WEATHER_BAD_RE.test(lContent)
+      && (cg === lg || !cg);
+    if (ct.content && !degradeGuard && (cg > lg || cVer > lVer || cUpd > lUpd || qualityWin)) {
       // 服务端 0 点生成了更新的当天计划 → 整任务以云端为准
       Object.assign(lt, ct);
+      // Object.assign 不会清掉云端没有的字段：天气已正常则顺手解除本地自愈标记，避免继续空转重生成
+      if (cloudWeatherOk) { lt.weatherFailed = false; lt.weatherRetryCount = 0; }
       changed = true;
     } else {
       // v3.6.48 需求①：enabled 开关按 enabledTs 取新端裁决（关闭/开启均为用户显式操作）——
@@ -8276,6 +8325,7 @@ async function generatePlanForTask(task, trig) {
   task.genPeriod = periodKey(task, trig);
   task.genDate = dateStr;
   task.planVer = PLAN_PROMPT_VERSION;   // v3.5.142 记录生成本内容所用的 prompt 版本
+  task.planUpdatedAt = Date.now();      // v3.6.68 内容写入时刻：同一天内多次生成时供云端合并判新旧
   saveSchedTasks();
   // v3.6.0 生成仅写任务页，不刷新首页（首页只在推送时更新）
 }
@@ -8386,14 +8436,26 @@ async function runScheduler(forceGen) {
       const staleVer = Number(task.planVer || 0) < Number(PLAN_PROMPT_VERSION);
       // v3.6.67 天气自愈：当日计划因天气失败而生成过（weatherFailed），且未超过单日重试上限时，
       // 在冷却结束后自动重新生成，直到天气成功或到达重试上限，避免失败文案被一整天固化。
-      const weatherFailed = !!task.weatherFailed && (task.weatherRetryCount || 0) < SCHED_WEATHER_MAX_RETRY;
+      // v3.6.68 兼容旧数据：v3.6.67 之前的内容没有 weatherFailed 标记，按内容里的失败文案判定。
+      const weatherFailed = planWeatherMissing(task) && (task.weatherRetryCount || 0) < SCHED_WEATHER_MAX_RETRY;
       if ((task.genDate !== todayStr || staleVer || weatherFailed) && (!cooling || (forceGen && (!task.content || staleVer || weatherFailed)))) {
+        // v3.6.68 自愈先向云端要一次：服务端跑在 GitHub Actions（境外网络，天气基本都能取到），
+        // 若云端已有「天气正常」的当天计划就直接采纳，既立刻修好首页/任务页，也不让国内取不到
+        // 天气的设备反复白调 AI、把失败内容重新推回云端。
+        let _cloudFixed = false;
+        if (weatherFailed) {
+          try { await loadSchedCloud(); } catch (e) {}
+          const _cur = SCHED_TASKS.find(x => x && String(x.id) === String(task.id)) || task;
+          if (!planWeatherMissing(_cur)) { _cloudFixed = true; planGenThisRun = true; }
+        }
+        if (!_cloudFixed) {
         const _beforeGen = task.genDate;
         task.genTryTs = Date.now(); saveSchedTasks();
         await generatePlanForTask(task, new Date(todayStr + 'T00:00:00'));
         // v3.6.5 0 点生成当天计划后立即刷新首页计划卡（此前只在实际推送时刷新，
         // 会导致跨 0 点在线的用户首页卡片停留/消失，直到 06:30 推送才更新）
         if (task.genDate !== _beforeGen && task.genDate === todayStr) planGenThisRun = true;
+        }
       }
     }
     // 触发推送：触发时刻起、宽限 3 小时内（仅"由本设备负责推送"的设备执行，避免多设备重复推送）
@@ -8636,7 +8698,9 @@ function renderSchedTasks() {
 }
 function onPlanInput(id, val) {
   const t = SCHED_TASKS.find(x => x.id === id); if (!t) return;
-  t.content = val; saveSchedTasks();
+  t.content = val;
+  t.planUpdatedAt = Date.now();   // v3.6.68 编辑也算内容更新，防止被云端旧计划覆盖回去
+  saveSchedTasks();
 }
 function onPlanFocus(id) {
   const t = SCHED_TASKS.find(x => x.id === id); if (!t) return;

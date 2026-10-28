@@ -653,9 +653,18 @@ async function generatePlan(task, trig, ctx, fid, key) {
   ]);
   if (!r) { console.warn('[计划] 生成失败，跳过'); return false; }
   task.content = String(r).trim();
+  // v3.6.68 天气成败标记（与前端同口径）：失败时允许前端/服务端在冷却后重试，成功后清标记
+  if (/天气获取失败|未获取到天气|天气未获取/.test(String(wText || ''))) {
+    task.weatherFailed = true;
+    task.weatherRetryCount = Number(task.weatherRetryCount || 0) + 1;
+  } else {
+    task.weatherFailed = false;
+    task.weatherRetryCount = 0;
+  }
   task.genPeriod = periodKey(task, trig);
   task.genDate = dateStr;
   task.planVer = PLAN_PROMPT_VERSION;   // v3.6.17 标记服务端自己的版本号（不再冒用 ctx.promptVer）：服务端落后时前端会按版本差重新生成，自愈
+  task.planUpdatedAt = Date.now();      // v3.6.68 内容写入时刻：同一天内重新生成时前端靠它识别「云端有新计划」
   return true;
 }
 
@@ -766,7 +775,11 @@ async function main() {
       const todayTrg = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const staleVer = Number(task.planVer || 0) < Number(PLAN_PROMPT_VERSION);   // v3.6.17 数值单调比较，防高低版本乒乓
       const cooling = (now.getTime() - (task.genTryTs || 0)) <= SCHED_GEN_COOLDOWN;
-      if ((task.genDate !== todayStr || staleVer || !task.content) && !cooling) {
+      // v3.6.68 云端已有当天计划但天气是「获取失败」→ 服务端（境外网络）冷却后重生成一次正常计划，
+      // 供前端合并时自愈首页/任务页；单日最多补 3 次，避免反复烧 token。
+      const weatherBad = !!task.content && /天气获取失败|未获取到天气|天气未获取/.test(String(task.content));
+      const weatherRetry = weatherBad && Number(task.weatherRetryCount || 0) < 3;
+      if ((task.genDate !== todayStr || staleVer || !task.content || weatherRetry) && !cooling) {
         console.log('[Sched] 生成今日计划:', name, 'for', todayStr);
         task.genTryTs = now.getTime();   // 冷却起点（成功/失败都记，失败后 30 分钟内不重试）
         genAttempted.add(taskKey);
