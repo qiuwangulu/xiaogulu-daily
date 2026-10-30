@@ -470,11 +470,16 @@ function wageTrigAdjusted(task, trig, hk) {
   } catch (e) {}
   return trig;
 }
-// v3.6.1 月度归档：工资结算推送成功后，把育儿嫂当月休假日归档进备忘录已办事项、清空当月休假
+// v3.6.1 月度归档：工资结算推送成功后，把当月休假日归档进备忘录已办事项、清空当月休假
 // v3.6.45：改操作家政考勤 housekeeper.nanny.vac（保留 0.5 半天值），并写回 _housekeeper 云键
-async function archiveNannyMonthCloud(fid, key, monthKey, hk) {
+// v3.6.69：按「任务对应人员」归档 —— 旧实现固定 nanny，钟点工工资推送成功后会清空育儿嫂的休假
+//          （实测日志「到点推送: 💰 工资结算」紧跟「已归档…2026-10 3 天 / 已清空当月休假」）。
+async function archiveNannyMonthCloud(fid, key, monthKey, hk, task) {
   const ym = monthKey;
-  const person = (hk || hkDefault()).nanny;
+  const wk = wageWho(task);
+  const whoLabel = (wk === 'hourly') ? '🧹 钟点工' : '👩 育儿嫂';
+  const h = hk || hkDefault();
+  const person = wagePerson(task, h);
   const monthList = Object.keys(person.vac).filter(d => d.slice(0, 7) === ym).sort();
   const rest = Object.keys(person.vac).filter(d => d.slice(0, 7) !== ym);
   if (!monthList.length) return 0;
@@ -488,20 +493,20 @@ async function archiveNannyMonthCloud(fid, key, monthKey, hk) {
     }
     const maxId = arr.reduce((m, x) => Math.max(m, (x && x.id) || 0), 0);
     arr.unshift({ id: maxId + 1, done: true, date: fmtDateLocal(new Date()),
-      text: '👩 育儿嫂休假 ' + ym + '：' + monthList.join('、') + '（共 ' + hkNum(total) + ' 天）' });
+      text: whoLabel + '休假 ' + ym + '：' + monthList.join('、') + '（共 ' + hkNum(total) + ' 天）' });
     const enc = encrypt(key, JSON.stringify(arr));
     await sbUpsert('family_config', { family_id: fid, config_key: '_memo', encrypted_data: enc.data, iv: enc.iv, last_modified: Date.now() });
-    console.log('[家政考勤] 已归档当月休假日到备忘录已办事项', ym, monthList.length, '天');
+    console.log('[家政考勤] 已归档当月休假日到备忘录已办事项', whoLabel, ym, monthList.length, '天');
   } catch (e) { console.warn('[家政考勤] 备忘录归档失败', e && e.message); }
   // ② 清空当月休假并写回云端（_housekeeper）
   try {
     const out = hk || hkDefault();
     const newVac = {};
-    rest.forEach(d => { newVac[d] = out.nanny.vac[d]; });
-    out.nanny.vac = newVac;
+    rest.forEach(d => { newVac[d] = out[wk].vac[d]; });
+    out[wk].vac = newVac;
     const enc2 = encrypt(key, JSON.stringify(out));
     await sbUpsert('family_config', { family_id: fid, config_key: HOUSEKEEPER_CLOUD_KEY, encrypted_data: enc2.data, iv: enc2.iv, last_modified: Date.now() });
-    console.log('[家政考勤] 已清空当月休假', ym, '剩余', rest.length, '天');
+    console.log('[家政考勤] 已清空当月休假', whoLabel, ym, '剩余', rest.length, '天');
   } catch (e) { console.warn('[家政考勤] 回写失败', e && e.message); }
   return monthList.length;
 }
@@ -862,8 +867,9 @@ async function main() {
         task.lastWageDate = fmtDateLocal(trig);
         // v3.6.1 结算成功后归档：当月休假 → 备忘录已办，清空当月休假
         // v3.6.45：归档操作家政考勤 housekeeper.nanny.vac（保留 0.5 半天值）
+        // v3.6.69：改为按任务对应人员归档（钟点工 → hourly、育儿嫂 → nanny），避免钟点工结算清空育儿嫂休假
         const ym = fmtDateLocal(new Date(trig.getTime() - 86400000)).slice(0, 7);
-        try { await archiveNannyMonthCloud(fid, key, ym, housekeeper); }
+        try { await archiveNannyMonthCloud(fid, key, ym, housekeeper, task); }
         catch (e) { console.warn('[家政考勤] 归档失败', e && e.message); }
       }
       if (task.freq === 'once') task.enabled = false;

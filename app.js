@@ -1555,7 +1555,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.69';
+const APP_VERSION = 'v3.6.70';
 // v3.6.64: 修复「放音乐后，播放记录（管理→音频页的「N 次」）还是没有更新」的真因——不在计数环节，而在**拉取**环节：
 //   eePullPlays 汇总云端各设备分片时用 `Object.assign(cloud, m)` 把 {歌曲id:次数} 直接拍平进了同一层，
 //   而 eeCloudPlaysFor 读的是两层结构 {设备id:{歌曲id:次数}}（`m[songId]`）——m 已是数字，恒取到 undefined → 次数恒 0。
@@ -4213,24 +4213,31 @@ function toggleNannyVacExpand() {
 }
 // v3.6.1 月度归档：工资结算推送成功后调用
 // ①把育儿嫂当前年月的休假日写进备忘录「已办事项」；②清空当月休假；③当前年月切到下个月
-function archiveNannyMonth(monthKey) {
+/* v3.6.69 工资结算成功后的月度归档：把「该任务对应人员」当月休假日写进备忘录已办、并清空其当月休假。
+   旧实现固定操作 hk.nanny（育儿嫂）——钟点工工资任务结算时会把育儿嫂的休假归档清空（实测服务端日志
+   「到点推送: 💰 工资结算」后紧跟「已归档…2026-10 3 天 / 已清空当月休假」），张冠李戴。
+   who 缺省 'nanny'，历史调用行为不变。 */
+function archiveNannyMonth(monthKey, who) {
   const ym = monthKey || getNannyMonth();
+  const wk = (who === 'hourly') ? 'hourly' : 'nanny';
+  const whoLabel = (wk === 'hourly') ? '🧹 钟点工' : '👩 育儿嫂';
   const hk = getHousekeeper();
-  const person = hk.nanny;
+  const person = hk[wk] || hk.nanny;
   const monthList = Object.keys(person.vac).filter(d => d.slice(0, 7) === ym).sort();
   const rest = Object.keys(person.vac).filter(d => d.slice(0, 7) !== ym);
   if (monthList.length) {
     const total = monthList.reduce((s, d) => s + (person.vac[d] === 0.5 ? 0.5 : 1), 0);
     const items = getMemos();
     items.unshift({ id: _memoNextId(), done: true, date: getTodayDateStr(),
-      text: '👩 育儿嫂休假 ' + ym + '：' + monthList.join('、') + '（共 ' + hkNum(total) + ' 天）' });
+      text: whoLabel + '休假 ' + ym + '：' + monthList.join('、') + '（共 ' + hkNum(total) + ' 天）' });
     saveMemos(items);
   }
   const newVac = {};
   rest.forEach(d => { newVac[d] = person.vac[d]; });
   person.vac = newVac;
   saveHousekeeper(hk);
-  setNannyMonth(nextNannyMonth(ym));
+  // 月份切换只对育儿嫂视图生效（家政考勤月份选择是育儿嫂分区共用的），钟点工归档不动它
+  if (wk === 'nanny') setNannyMonth(nextNannyMonth(ym));
   renderHousekeeper();
   return monthList.length;
 }
@@ -8415,7 +8422,10 @@ async function pushTask(task, trig, pk) {
     // v3.6.1 结算成功后：把当月休假日归档到备忘录已办、清空当月休假、切到下个月
     if (isWageTask(task)) {   // v3.6.55 与列表/推送同口径（旧数据可能只有 mode 或只有 type）
       task.lastWageDate = fmtDateLocal(trig); saveSchedTasks();
-      try { archiveNannyMonth(getNannyMonth()); } catch (e) { console.warn('[Nanny] 归档失败', e); }
+      // v3.6.69 归档两处对齐服务端：①月份取「结算月」= 触发日前一天所在月（旧实现用当前查看的月份，
+      // 跨月查看时归档错月）；②归档对象取任务对应人员（钟点工任务不能清育儿嫂的休假）。
+      const _wageYm = fmtDateLocal(new Date(trig.getTime() - 86400000)).slice(0, 7);
+      try { archiveNannyMonth(_wageYm, wageWho(task)); } catch (e) { console.warn('[Nanny] 归档失败', e); }
     }
     if (task.freq === 'once') { task.enabled = false; saveSchedTasks(); }
   } else {
