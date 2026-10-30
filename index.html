@@ -2792,16 +2792,24 @@
       <textarea id="taskCustom" class="te-textarea" placeholder="输入要推送的消息内容"></textarea>
     </div>
     <!-- v3.6.1 工资结算：无需填写内容，推送时自动按默认格式生成（只读） -->
-    <!-- v3.6.45 需求③：新增「满勤月工资 / 满勤天数」输入（默认 10000 元 / 26 天）；工资 = 满勤月工资 ÷ 满勤天数 × 当月工作天数（当月工作天数取 备忘录 → 家政考勤 · 育儿嫂） -->
+    <!-- v3.6.45 需求③：新增「满勤月工资 / 满勤天数」输入（默认 10000 元 / 26 天）；工资 = 满勤月工资 ÷ 满勤天数 × 当月工作天数 -->
+    <!-- v3.6.69：新增「对应人员」——工资任务按选定人员读家政考勤（钟点工 / 育儿嫂）。
+         真因：此前所有工资任务一律读育儿嫂考勤，育儿嫂一下户，钟点工任务的触发点就被改成育儿嫂下户日，
+         该日期早已过去 → 落在 3 小时宽限窗外 → 整月不推（用户反馈「钟点工 10/30 12:00 没触发」）。 -->
     <div class="te-field" id="taskWageField" style="display:none;">
-      <div class="te-label">满勤月工资 / 满勤天数</div>
+      <div class="te-label">对应人员</div>
+      <div class="te-seg te-wage-who">
+        <label class="cat-tag active"><input type="radio" name="taskWageWho" value="nanny" checked onchange="syncSeg(this)"><span>👩 育儿嫂</span></label>
+        <label class="cat-tag"><input type="radio" name="taskWageWho" value="hourly" onchange="syncSeg(this)"><span>🧹 钟点工</span></label>
+      </div>
+      <div class="te-label" style="margin-top:8px;">满勤月工资 / 满勤天数</div>
       <div class="te-time-row">
         <input type="number" id="taskBaseSalary" min="0" step="100" value="10000" inputmode="numeric" class="te-interval-input" style="width:88px;">
         <span class="te-prefix">元 /</span>
         <input type="number" id="taskPayDays" min="1" max="31" step="1" value="26" inputmode="numeric" class="te-interval-input" style="width:64px;">
         <span class="te-unit">天</span>
       </div>
-      <div class="te-hint">工资 = 满勤月工资 ÷ 满勤天数 × 当月工作天数；当月工作天数取 备忘录 → 家政考勤（育儿嫂）：当月 1 号至下户日期或当月最后一天的总天数 − 休假天数。</div>
+      <div class="te-hint">工资 = 满勤月工资 ÷ 满勤天数 × 当月工作天数；当月工作天数取 备忘录 → 家政考勤中「对应人员」的当月数据（当月 1 号至下户日期或当月最后一天的总天数 − 休假天数）。</div>
       <div class="te-label" style="margin-top:8px;">推送内容（自动生成，无需填写）</div>
       <div class="te-wage-preview" id="taskWagePreview">年-月：休假 天，工作 天，应发工资 元，请转账。</div>
     </div>
@@ -3054,6 +3062,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.68"></script>
+<script src="app.js?v=v3.6.69"></script>
 </body>
 </html>

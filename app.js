@@ -1555,7 +1555,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.68';
+const APP_VERSION = 'v3.6.69';
 // v3.6.64: 修复「放音乐后，播放记录（管理→音频页的「N 次」）还是没有更新」的真因——不在计数环节，而在**拉取**环节：
 //   eePullPlays 汇总云端各设备分片时用 `Object.assign(cloud, m)` 把 {歌曲id:次数} 直接拍平进了同一层，
 //   而 eeCloudPlaysFor 读的是两层结构 {设备id:{歌曲id:次数}}（`m[songId]`）——m 已是数字，恒取到 undefined → 次数恒 0。
@@ -4024,8 +4024,42 @@ const NANNY_PAY_DIVISOR = 26;
 function fmtDateLocal(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
+/* v3.6.69 工资任务对应「家政考勤」里的哪个人：'hourly'=钟点工 / 'nanny'=育儿嫂。
+   真因（用户反馈「钟点工工资结算 10 月 30 日 12:00 到点没触发」）：v3.6.45 起工资任务的
+   「下户提前推送」与「当月工作天数」一律写死读 housekeeper.nanny（育儿嫂），而两个工资任务
+   （育儿嫂/钟点工）共用这一份数据 —— 育儿嫂一下户，钟点工任务的触发点就被改成「育儿嫂下户日」，
+   该日期早已过去 → 落在 3 小时宽限窗外 → 整月不推（服务端日志实测：钟点工任务 10-30 不推、
+   直接跳到「下次 11/30」）。现每个工资任务带 who 字段，各读各的考勤。
+   旧数据没有 who：按任务名推断（含「钟点」→ 钟点工），其余默认育儿嫂，历史行为不变。 */
+function wageWho(t) {
+  const w = t && t.who;
+  if (w === 'hourly' || w === 'nanny') return w;
+  const nm = String((t && t.name) || '');
+  return /钟点|小时工|保洁/.test(nm) ? 'hourly' : 'nanny';
+}
+function wageWhoLabel(t) { return wageWho(t) === 'hourly' ? '钟点工' : '育儿嫂'; }
+function wagePerson(t) {
+  const hk = getHousekeeper() || hkDefault();
+  return (wageWho(t) === 'hourly' ? hk.hourly : hk.nanny) || hkDefaultPerson();
+}
+/* v3.6.69 工资任务的触发点修正：当月下户时提前到下户日同一时刻（原触发点不再推）。
+   旧实现只判 shifted < trig，跨月也照样替换 —— 一次下户会把之后每个月的工资任务都钉在那个
+   已经过去的日期上，永远进不了推送窗口。现限定「下户日期与本次触发同一自然月」才提前。 */
+function wageTrigAdjusted(task, trig) {
+  try {
+    const p0 = wagePerson(task);
+    if (p0 && !p0.on && p0.endDate && task && task.startTime) {
+      const shifted = new Date(p0.endDate + 'T' + task.startTime + ':00');
+      if (!isNaN(shifted.getTime()) && shifted < trig
+          && shifted.getFullYear() === trig.getFullYear()
+          && shifted.getMonth() === trig.getMonth()) return shifted;
+    }
+  } catch (e) {}
+  return trig;
+}
 // v3.6.45 需求③：工资 = 满勤月工资 ÷ 满勤天数 × 当月工作天数。
-// 当月工作天数取家政考勤·育儿嫂（备忘录 → 家政考勤）：当月1号至下户日期或当月最后一天 − 当月休假（0.5计数）。
+// 当月工作天数取家政考勤（备忘录 → 家政考勤）：当月1号至下户日期或当月最后一天 − 当月休假（0.5计数）。
+// v3.6.69 取哪个人的考勤由任务自身决定（wageWho：钟点工 / 育儿嫂），不再一律读育儿嫂。
 // 结算月 = 触发日前一天所在月（monthly 任务每月1号推=结算上月；下户提前推送时=下户当月）。
 // vacList 参数保留以兼容旧调用签名（v3.6.45 起休假数据一律取家政考勤，不再由调用方传入）。
 function computeWage(task, trig, vacList) {
@@ -4034,7 +4068,7 @@ function computeWage(task, trig, vacList) {
   const dailyRate = base / div;
   const end = new Date(trig.getFullYear(), trig.getMonth(), trig.getDate());
   const ym = fmtDateLocal(new Date(end.getTime() - 86400000)).slice(0, 7);
-  const person = getHousekeeper().nanny;
+  const person = wagePerson(task);
   const totalDays = hkMonthTotalDays(person, ym);
   const vacDays = hkMonthVacDays(person, ym);
   const workDays = hkMonthWorkDays(person, ym);
@@ -8463,16 +8497,10 @@ async function runScheduler(forceGen) {
     if (!canPush) continue;
     // v3.6.45 需求③：工资任务当月有下户日期时，推送提前至下户日期当天同一时刻
     // （如原定 10月30日 12:00、下户 10月20日 → 10月20日 12:00 推，10月30日不推）
+    // v3.6.69：①按任务自身的对应人员取考勤（钟点工读 hourly、育儿嫂读 nanny），不再一律读育儿嫂；
+    //          ②只在「下户日期与本次触发同月」时提前，跨月不调整（详见 wageTrigAdjusted）
     let trig = prev;
-    if (isWageTask(task)) {   // v3.6.55 与列表/推送同口径
-      try {
-        const p0 = getHousekeeper().nanny;
-        if (!p0.on && p0.endDate && task.startTime) {
-          const shifted = new Date(p0.endDate + 'T' + task.startTime + ':00');
-          if (!isNaN(shifted.getTime()) && shifted < trig) trig = shifted;
-        }
-      } catch (e) {}
-    }
+    if (isWageTask(task)) trig = wageTrigAdjusted(task, trig);   // v3.6.55 与列表/推送同口径
     if (trig && now >= trig && now < new Date(trig.getTime() + SCHED_PUSH_GRACE)) {
       const pk = periodKey(task, trig);
       if (task.pushPeriod !== pk) {
@@ -8653,6 +8681,9 @@ function normalizeWageTaskNames() {
     // 甚至保留「工资结算」）的任务强制改回「工资结算」，用户改名后一刷新就被还原。
     // 现工资任务名称完全由用户自定义：这里只补「空名」默认值，绝不再动任何已有名称，避免改名后被自动还原。
     if (!String(t.name || '').trim()) { t.name = '工资结算'; changed = true; }
+    // v3.6.69 旧工资任务补「对应人员」who（按任务名推断一次后落盘，幂等）：不补的话服务端算工资与
+    // 下户提前推送仍会一律读育儿嫂考勤，钟点工任务会被育儿嫂的下户日期劫持（详见 wageWho）。
+    if (t.who !== 'hourly' && t.who !== 'nanny') { t.who = wageWho(t); changed = true; }
   });
   if (changed) saveSchedTasks();
   return changed;
@@ -8723,6 +8754,8 @@ function openTaskEditor(id) {
     // v3.6.45 需求③：满勤月工资/满勤天数（默认 10000 元 / 26 天，旧任务无此字段时回落默认）
     document.getElementById('taskBaseSalary').value = (t.baseSalary > 0) ? t.baseSalary : NANNY_BASE_SALARY;
     document.getElementById('taskPayDays').value = (t.payDays > 0) ? t.payDays : NANNY_PAY_DIVISOR;
+    // v3.6.69 回填「对应人员」（旧数据无 who 时按任务名推断：含「钟点」→ 钟点工，其余育儿嫂）
+    setRadio('taskWageWho', wageWho(t));
   } else {
     setRadio('taskFreq', 'daily'); setRadio('taskMode', 'ai');
     setTaskStartDateValue(getTodayDateStr());
@@ -8731,6 +8764,7 @@ function openTaskEditor(id) {
     document.getElementById('taskCustom').value = '';
     document.getElementById('taskBaseSalary').value = NANNY_BASE_SALARY;
     document.getElementById('taskPayDays').value = NANNY_PAY_DIVISOR;
+    setRadio('taskWageWho', 'nanny');
   }
   const ivEl = document.getElementById('taskInterval'); if (ivEl) ivEl.value = curInt;
   // v3.5.137 AI 推荐任务最多一个：新建时若已存在 AI 任务，禁用该选项并自动切到「自定义」
@@ -8745,6 +8779,11 @@ function getTaskWageVals() {
   const bs = parseFloat((bsEl && bsEl.value) || '');
   const pd = parseInt((pdEl && pdEl.value) || '', 10);
   return { baseSalary: (bs > 0) ? bs : NANNY_BASE_SALARY, payDays: (pd > 0 && pd <= 31) ? pd : NANNY_PAY_DIVISOR };
+}
+// v3.6.69 工资任务「对应人员」选择（hourly=钟点工 / nanny=育儿嫂，缺省育儿嫂）
+function getTaskWageWho() {
+  const el = document.querySelector('input[name="taskWageWho"]:checked');
+  return (el && (el.value === 'hourly' || el.value === 'nanny')) ? el.value : 'nanny';
 }
 function saveTask() {
   const id = document.getElementById('taskEditId').value;
@@ -8768,12 +8807,13 @@ function saveTask() {
     t.type = (mode === 'wage') ? 'wage' : 'normal';
     if (!String(t.name || '').trim()) t.name = '工资结算';   // v3.6.56 名称可自定义，仅空名时补默认
     if (mode === 'custom') t.content = document.getElementById('taskCustom').value;
-    else if (mode === 'wage') { t.content = ''; if (!t.lastWageDate) t.lastWageDate = ''; t.baseSalary = wageVals.baseSalary; t.payDays = wageVals.payDays; }
+    else if (mode === 'wage') { t.content = ''; if (!t.lastWageDate) t.lastWageDate = ''; t.baseSalary = wageVals.baseSalary; t.payDays = wageVals.payDays; t.who = getTaskWageWho(); }
   } else {
     const isWage = (mode === 'wage');
     SCHED_TASKS.push({ id: 't_' + Date.now(), name: String(name || '').trim() || (isWage ? '工资结算' : ''), freq: freq, interval: interval, startDate: startDate, startTime: startTime, mode: mode, type: isWage ? 'wage' : 'normal',
       content: mode === 'custom' ? document.getElementById('taskCustom').value : '', enabled: true, lastWageDate: isWage ? '' : undefined,
       baseSalary: isWage ? wageVals.baseSalary : undefined, payDays: isWage ? wageVals.payDays : undefined,
+      who: isWage ? getTaskWageWho() : undefined,
       genPeriod: '', pushPeriod: '', genTryTs: 0 });
   }
   const isNew = !id;

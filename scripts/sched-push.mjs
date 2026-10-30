@@ -410,12 +410,27 @@ function hkMonthVacDays(person, ym) {
   return v;
 }
 function hkNum(n) { const v = Math.round(n * 10) / 10; return Number.isInteger(v) ? String(v) : String(v); }
-/* v3.6.55 工资结算任务判定（与前端 isWageTask 同口径）：v3.6.45 起 type/mode 同步写入，
-   更早或异常数据可能只有其一，双条件兼容——避免旧工资任务被当成普通提醒推送。 */
+/* v3.6.69 工资任务对应「家政考勤」里的哪个人：'hourly'=钟点工 / 'nanny'=育儿嫂（与前端 wageWho 同口径）。
+   真因（用户反馈「钟点工工资结算 10/30 12:00 没触发」）：v3.6.45 起工资任务的分析一律写死读
+   housekeeper.nanny（育儿嫂），两个工资任务共用这份数据 —— 育儿嫂下户后，钟点工任务的触发点被改成
+   「育儿嫂下户日」，该日期早已过去 → 落在 3 小时宽限窗外 → 整月不推（实测日志：10-30 不推、直接跳 11/30）。
+   旧数据无 who：按任务名推断（含「钟点」→ 钟点工），其余默认育儿嫂，历史行为不变。 */
+function wageWho(t) {
+  const w = t && t.who;
+  if (w === 'hourly' || w === 'nanny') return w;
+  const nm = String((t && t.name) || '');
+  return /钟点|小时工|保洁/.test(nm) ? 'hourly' : 'nanny';
+}
+function wagePerson(t, hk) {
+  const h = hk || hkDefault();
+  return (wageWho(t) === 'hourly' ? h.hourly : h.nanny) || hkDefault().nanny;
+}
+// v3.6.55 工资结算任务判定（与前端 isWageTask 同口径）：v3.6.45 起 type/mode 同步写入，
+// 更早或异常数据可能只有其一，双条件兼容——避免旧工资任务被当成普通提醒推送。
 function isWageTask(t) { return !!t && (t.type === 'wage' || t.mode === 'wage'); }
 // v3.6.45 需求③：工资 = 满勤月工资 ÷ 满勤天数 × 当月工作天数（与前端 computeWage 一致）。
-// 当月工作天数取家政考勤·育儿嫂；结算月 = 触发日前一天所在月（monthly 每月1号推=结算上月；
-// 下户提前推送时 trig=下户日期当天 → 结算下户当月）。
+// v3.6.69：当月工作天数取「任务对应人员」的考勤（钟点工读 hourly、育儿嫂读 nanny）。
+// 结算月 = 触发日前一天所在月（monthly 每月1号推=结算上月；下户提前推送时 trig=下户日期当天 → 结算下户当月）。
 // vacList 参数保留兼容旧签名（v3.6.45 起一律取 hk）。
 function computeWage(task, trig, hk, vacList) {
   const base = (task && task.baseSalary > 0) ? task.baseSalary : NANNY_BASE_SALARY;
@@ -424,7 +439,7 @@ function computeWage(task, trig, hk, vacList) {
   const end = new Date(trig.getFullYear(), trig.getMonth(), trig.getDate());
   const ym = fmtDateLocal(new Date(end.getTime() - 86400000)).slice(0, 7);
   const h = hk || hkDefault();
-  const person = h.nanny;
+  const person = wagePerson(task, h);
   const todayStr = fmtDateLocal(new Date());
   const totalDays = hkMonthTotalDays(person, ym, todayStr);
   const vacDays = hkMonthVacDays(person, ym);
@@ -440,12 +455,17 @@ function wagePushContent(w) {
 }
 // v3.6.45 需求③：工资任务当月有下户日期时，推送提前至下户日期当天同一时刻
 // （如原定 10月30日 12:00、下户 10月20日 → 10月20日 12:00 推，10月30日不推）
+// v3.6.69：①按任务自身的对应人员取考勤（钟点工读 hourly、育儿嫂读 nanny），不再一律读育儿嫂；
+//          ②只在「下户日期与本次触发同一自然月」时提前 —— 旧实现跨月也替换，一次下户会把之后
+//            每个月工资任务的触发点都钉在那个已过去的日期上，永远进不了推送窗口（整月不推）。
 function wageTrigAdjusted(task, trig, hk) {
   try {
-    const p0 = (hk || hkDefault()).nanny;
-    if (p0 && !p0.on && p0.endDate && task.startTime) {
+    const p0 = wagePerson(task, hk);
+    if (p0 && !p0.on && p0.endDate && task && task.startTime) {
       const shifted = new Date(p0.endDate + 'T' + task.startTime + ':00');
-      if (!isNaN(shifted.getTime()) && shifted < trig) return shifted;
+      if (!isNaN(shifted.getTime()) && shifted < trig
+          && shifted.getFullYear() === trig.getFullYear()
+          && shifted.getMonth() === trig.getMonth()) return shifted;
     }
   } catch (e) {}
   return trig;
@@ -753,7 +773,10 @@ async function main() {
   if (disabledCnt) console.log('[Sched] 禁用名单条数 =', disabledCnt);
 
   for (const task of tasks) {
-    if (!task || !task.enabled) continue;
+    if (!task) continue;
+    // v3.6.69 诊断增强：旧实现这里静默 continue，日志里看不到「哪些任务被跳过、为什么」——
+    // 排查「钟点工工资结算到点没触发」时无法区分「任务已关闭」与「触发点算错」。
+    if (!task.enabled) { console.log('[Sched] 已关闭，跳过:', task.name || task.id); continue; }
     // v3.6.56 禁用名单兜底：名单里有它、且之后没有被重新开启（enabledTs 更晚）→ 一律不推
     if (task.id != null && disabledMap[String(task.id)]) {
       const dts = Number(disabledMap[String(task.id)] || 0);
@@ -791,11 +814,12 @@ async function main() {
     // ② 到点推送
     // v3.6.45 需求③：工资任务当月有下户日期 → 推送提前至下户日期当天同一时刻（原触发点不再推）
     let trig = prev;
-    if (!trig) continue;
+    if (!trig) { console.log('[Sched] 未到开始时间:', name, '开始', task.startDate || '—', (task.startTime || '')); continue; }
     if (isWageTask(task)) trig = wageTrigAdjusted(task, trig, housekeeper);   // v3.6.55 与前端同口径
     const inWindow = now >= trig && now < new Date(trig.getTime() + SCHED_PUSH_GRACE);
     const pk = periodKey(task, trig);
-    if (!inWindow) { console.log('[Sched] 未到点:', name, '下次', next ? next.toLocaleString('zh-CN') : '—'); continue; }
+    // v3.6.69 诊断增强：同时打印本次判定用的触发点（trig）——工资任务被下户日期改写时能一眼看出来
+    if (!inWindow) { console.log('[Sched] 未到点:', name, '触发点', trig.toLocaleString('zh-CN'), '下次', next ? next.toLocaleString('zh-CN') : '—'); continue; }
     if (task.pushPeriod === pk) continue;
     const sig = 'task|' + (task.id || task.name || '') + '|' + pk;
     if (await cloudDup(fid, sig)) { console.log('[Sched] 云端已推过，跳过:', name, pk); task.pushPeriod = pk; changed = true; continue; }
