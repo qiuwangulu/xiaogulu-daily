@@ -2802,6 +2802,12 @@
         <label class="cat-tag active"><input type="radio" name="taskWageWho" value="nanny" checked onchange="syncSeg(this)"><span>👩 育儿嫂</span></label>
         <label class="cat-tag"><input type="radio" name="taskWageWho" value="hourly" onchange="syncSeg(this)"><span>🧹 钟点工</span></label>
       </div>
+      <div class="te-label" style="margin-top:8px;">每月倒数第几天结算</div>
+      <div class="te-time-row">
+        <input type="number" id="taskWageInvDay" min="1" max="5" step="1" value="1" inputmode="numeric" class="te-interval-input" style="width:64px;">
+        <span class="te-unit">天（1 = 当月最后一天）</span>
+      </div>
+      <div class="te-hint">工资固定在每月<b>倒数第 N 天</b>结算，自动适配 30/31 天月份：倒数第 1 天 = 当月最后一天（如 10 月 31 号、4 月 30 号）。<b>当天若未休假，算作 1 个工作日一并计入</b>——例：10/21 上户、10/24 与 10/31 休假 → 工作 9 天（旧版固定「几号」会在 31 天的月份漏算月末那天）。</div>
       <div class="te-label" style="margin-top:8px;">满勤月工资 / 满勤天数</div>
       <div class="te-time-row">
         <input type="number" id="taskBaseSalary" min="0" step="100" value="10000" inputmode="numeric" class="te-interval-input" style="width:88px;">
@@ -3062,6 +3068,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.70"></script>
+<script src="app.js?v=v3.6.71"></script>
 </body>
 </html>

@@ -125,10 +125,50 @@ function stepBack(t, freq, interval) {
   if (freq === 'monthly') return addMonths(t, -interval);
   return null;
 }
+// v3.6.71 工资任务「当月倒数第几天」结算：触发日固定在每月倒数第 N 天（默认 1 = 当月最后一天），
+// 由任务字段 wageInvDay 控制（缺省 1）。触发日 = 当月天数 − (N−1)，自动适配 30/31 天月份
+// （10 月=31 号、4 月=30 号）。真因：原工资任务用固定 startDate 日（如 10/30）当每月触发日，
+// 导致 31 天的月份里「月末那一天（如 10/31）」即便未休假也不计入工作天数——
+// 用户反馈「10/21 上户、10/24 与 10/31 休假应算 9 天，实际只推 8 天」。触发日落到当月最后一天后，
+// hkMonthTotalDays 以「结算当天」为口径会自然把月末当天计入；下户提前推送逻辑不变。
+function wageInvDayOf(task) { return Math.max(1, parseInt((task && task.wageInvDay) || 1, 10) || 1); }
+function wageMonthlyTrigger(task, year, month) {
+  const dim = new Date(year, month + 1, 0).getDate();
+  const inv = wageInvDayOf(task);
+  const dom = Math.min(dim, Math.max(1, dim - (inv - 1)));
+  const q = String(task.startTime || '12:00').split(':').map(Number);
+  return new Date(year, month, dom, q[0] || 0, q[1] || 0, 0, 0);
+}
+// v3.6.71 工资任务（monthly）的 prev/next：不再固定 startDate 日，而是「当月倒数第 N 天」，逐月重算触发日。
+// first 由 taskFirstTrigger 给出（startDate 所在年/月作为「首次结算月」下界），保证新任务从首月才开始结算。
+function computeWageMonthlyTriggers(task, first, now) {
+  const sY = first.getFullYear(), sM = first.getMonth();
+  const firstTrig = wageMonthlyTrigger(task, sY, sM);
+  if (firstTrig.getTime() > now.getTime()) return { prev: null, next: firstTrig };
+  const y = now.getFullYear(), m = now.getMonth();
+  const thisTrig = wageMonthlyTrigger(task, y, m);
+  let prev, next;
+  if (thisTrig.getTime() <= now.getTime()) {
+    prev = thisTrig;
+    const ny = (m === 11) ? y + 1 : y, nm = (m + 1) % 12;
+    next = wageMonthlyTrigger(task, ny, nm);
+  } else {
+    const py = (m === 0) ? y - 1 : y, pm = (m + 11) % 12;
+    prev = wageMonthlyTrigger(task, py, pm);
+    next = thisTrig;
+  }
+  if (prev && prev.getTime() < firstTrig.getTime()) prev = null;
+  if (prev === null && next && next.getTime() < firstTrig.getTime()) next = firstTrig;
+  return { prev, next };
+}
 function computeTriggers(task, now) {
   const first = taskFirstTrigger(task);
   if (task.freq === 'once') {
     return { prev: first.getTime() <= now.getTime() ? first : null, next: first.getTime() > now.getTime() ? first : null };
+  }
+  // v3.6.71 工资任务按月固定「倒数第几天」：触发日随月份天数变化（不再固定 startDate 日）
+  if (isWageTask(task) && task.freq === 'monthly') {
+    return computeWageMonthlyTriggers(task, first, now);
   }
   const iv = taskInterval(task);
   let prev;
@@ -268,7 +308,10 @@ function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec, sfStreak) {
   const _eeDisabled = Object.keys(PLAN_EE_TYPES).filter(k => _hidden.indexOf(k) >= 0).map(k => PLAN_EE_TYPES[k]);
   const ad = getAgeDetail(ctx.birthDate, dateStr);
   const h = ctx.height || '', w = ctx.weight || '';
-  const kbPart = planKbList(ctx.kb || [], 50).map(x => '- [' + x.cat + '] ' + x.text).join('\n');
+  // v3.6.71 计划 prompt 注入「完整知识库」（预算放大到 500，配合 wind 置顶，任何规模 KB 的风速/风级定义都不会被截断漏掉）；
+  // 用户反馈「知识库明明定义了风小/风大，今日计划却说知识库未定义」——根因是旧预算 50 条会把靠后的风定义截断，
+  // 或 AI 没在知识库里检索到就走了兜底。现全量注入，并要求 AI 先检索、引用具体阈值。
+  const kbPart = planKbList(ctx.kb || [], 500).map(x => '- [' + x.cat + '] ' + x.text).join('\n');
   // v3.6.40 辅食连续添加天数（昨日=第 streak 天，今日=第 streak+1 天；streak=0 表示前一日无辅食记录）
   const _sf = (sfStreak && typeof sfStreak === 'object' && !Array.isArray(sfStreak)) ? sfStreak : null;
   const sfDay = (_sf && _sf.streak > 0) ? (_sf.streak + 1) : 0;
@@ -315,7 +358,7 @@ function buildPlanSystemPrompt(ctx, dateStr, wText, stats, supRec, sfStreak) {
     + (_eeDisabled.length ? ('\n【早教·已关闭】以下早教活动已在家园关闭，今日计划不纳入推荐：' + _eeDisabled.join('、') + '。') : '')
     + '\n'
     // v3.6.50 与 app.js buildPlanSystemPrompt 逐字对齐：知识库自定义风速风级标准为唯一准绳（详见 app.js 同段注释）
-    + '【风级换算与户外/防风】天气中的「最大风速」(km/h)换算风大/风小，**一律以家庭知识库中用户自定义的风速风级标准为唯一准绳**（通常位于知识库「穿衣/户外」条目，如「风小 ≤15km/h」「风稍大 15-30km/h」「风大 ≥30km/h」）。用户写明的阈值优先于本段一切数值、优先于任何通用气象风级表（如蒲福风级 3 级=12-19km/h）——**严禁使用通用风级表或四舍五入、取折中等方式自行改判档位**。边界严格按知识库原文执行：知识库写明「≤15km/h 为风小」时，16km/h 不属于风小，必须按知识库的下一档（风稍大）执行；含等号的一侧归属知识库写明的那一档。仅当知识库完全没有风速/风级相关定义时，才采用兜底：≤19km/h（≤4级，风小）→ 正常户外、可不戴帽或只戴薄帽、鼓励适当增加户外时长；20-38km/h（5-6级，风稍大）→ 戴帽防风、婴儿车加防风罩、选避风时段与地点、适当缩短户外；≥39km/h（≥7级，风大）→ 减少户外活动或改室内、必须戴帽并防风、避开风口与广告牌（参考：上海大风蓝色预警≈平均风力6级≈39km/h）；采用兜底时须在正文注明「知识库未定义风速档位，按通用口径」。该判断请写入【健康·出行】的户外时段、戴帽与避风建议中，并可在摘要点出"风大注意防风"或"风小宜多户外"（摘要与正文的风档名称一律用知识库的档位名称）。注意风有风寒效应、体感更冷，户外穿衣在气温档基础上：风稍大升半档、风大升一档。\n'
+    + '【风级换算与户外/防风】天气中的「最大风速」(km/h)换算风大/风小，**一律以家庭知识库中用户自定义的风速风级标准为唯一准绳**（通常位于知识库「穿衣/户外」条目，如「风小 ≤15km/h」「风稍大 15-30km/h」「风大 ≥30km/h」）。用户写明的阈值优先于本段一切数值、优先于任何通用气象风级表（如蒲福风级 3 级=12-19km/h）——**严禁使用通用风级表或四舍五入、取折中等方式自行改判档位**。边界严格按知识库原文执行：知识库写明「≤15km/h 为风小」时，16km/h 不属于风小，必须按知识库的下一档（风稍大）执行；含等号的一侧归属知识库写明的那一档。**执行步骤（务必先做第 1 步再判断）**：①先在上方【家庭知识库】逐条检索是否出现任何与风有关的描述（关键词含「风速 / 风级 / 风小 / 风稍大 / 风大 / 防风 / 避风」或具体 km/h 数字阈值）；②只要检索到，就必须以该阈值为准换算风档，并在【健康·出行】正文中**写明知识库的具体阈值原句**（例如「按知识库 ≤15km/h 为风小、≥30km/h 为风大」），风档名称一律用知识库的档位名称；③**仅当知识库里完全没有任何风相关描述时**才采用兜底：≤19km/h（≤4级，风小）→ 正常户外、可不戴帽或只戴薄帽、鼓励适当增加户外时长；20-38km/h（5-6级，风稍大）→ 戴帽防风、婴儿车加防风罩、选避风时段与地点、适当缩短户外；≥39km/h（≥7级，风大）→ 减少户外活动或改室内、必须戴帽并防风、避开风口与广告牌（参考：上海大风蓝色预警≈平均风力6级≈39km/h）；采用兜底时须在正文注明「知识库未定义风速档位，按通用口径」。注意风有风寒效应、体感更冷，户外穿衣在气温档基础上：风稍大升半档、风大升一档。\n'
     + '【温度要求】上方天气已给出当日最高温和最低温，请在「起居护理·穿衣」与「健康·出行」中明确写出具体温度数值（如"今日 28℃/19℃，短袖即可"），不要只写"根据天气"。\n'
     + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【喂养】【起居护理】【健康·出行】【早教】顺序分块给出内容（早教在最后）。';
 }
@@ -821,7 +864,11 @@ async function main() {
     let trig = prev;
     if (!trig) { console.log('[Sched] 未到开始时间:', name, '开始', task.startDate || '—', (task.startTime || '')); continue; }
     if (isWageTask(task)) trig = wageTrigAdjusted(task, trig, housekeeper);   // v3.6.55 与前端同口径
-    const inWindow = now >= trig && now < new Date(trig.getTime() + SCHED_PUSH_GRACE);
+    // v3.6.71 补推窗：原逻辑只在触发后 3 小时内推，但 GitHub Actions 调度偶发 4–9 小时静默，
+    // 会把「到点却未运行的触发」整段漏掉（用户反馈 06:30 计划拖到 08:41 才由客户端补推）。
+    // 改为「触发点 <= now < 下一触发点」：只要 cron 在两次触发之间的任意一次运行到，就补推；
+    // 云端去重（cloudDup / pushPeriod）保证同一周期只推一次，不会重复或跨周期串。
+    const inWindow = now >= trig && now < next;
     const pk = periodKey(task, trig);
     // v3.6.69 诊断增强：同时打印本次判定用的触发点（trig）——工资任务被下户日期改写时能一眼看出来
     if (!inWindow) { console.log('[Sched] 未到点:', name, '触发点', trig.toLocaleString('zh-CN'), '下次', next ? next.toLocaleString('zh-CN') : '—'); continue; }

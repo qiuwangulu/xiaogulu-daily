@@ -1555,7 +1555,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.70';
+const APP_VERSION = 'v3.6.71';
 // v3.6.64: 修复「放音乐后，播放记录（管理→音频页的「N 次」）还是没有更新」的真因——不在计数环节，而在**拉取**环节：
 //   eePullPlays 汇总云端各设备分片时用 `Object.assign(cloud, m)` 把 {歌曲id:次数} 直接拍平进了同一层，
 //   而 eeCloudPlaysFor 读的是两层结构 {设备id:{歌曲id:次数}}（`m[songId]`）——m 已是数字，恒取到 undefined → 次数恒 0。
@@ -6179,8 +6179,8 @@ async function saveSchedCloud() {
       hiddenActivities: Array.isArray(hiddenActivities) ? hiddenActivities.slice() : [],
       // v3.6.53：ctx.kb 落库保留完整 KB（仅用宽松上限 200 + 风速规则置顶兜底，保证云端镜像本地 KB），
       // 不再截断到 50——旧 slice(0,50) 会在源头丢失靠后的风速规则（idx=53），导致服务端读到的 ctx.kb 本就无风速规则。
-      // 计划 prompt 文本构造仍由各端 planKbList(..., 50) 按 50 预算截断（风速规则已置顶，必在预算内）。
-      kb: planKbList(kbSrc, 200),
+      // 计划 prompt 文本构造仍由各端 planKbList(..., 500) 截断（风速规则已置顶，必在预算内）。
+      kb: planKbList(kbSrc, 500),
       promptVer: PLAN_PROMPT_VERSION,
       genLead: SCHED_GEN_LEAD
     };
@@ -8174,11 +8174,47 @@ function stepBack(t, freq, interval) {
   if (freq === 'monthly') return addMonths(t, -interval);
   return null;
 }
+// v3.6.71 工资任务「当月倒数第几天」结算：触发日固定在每月倒数第 N 天（默认 1 = 当月最后一天），
+// 由任务字段 wageInvDay 控制（缺省 1）。触发日 = 当月天数 − (N−1)，自动适配 30/31 天月份。
+// 真因：原工资任务用固定 startDate 日（如 10/30）当每月触发日，导致 31 天月份里月末那天（如 10/31）
+// 即便未休假也不计入工作天数（用户反馈应算 9 天，实际只推 8 天）。与 sched-push.mjs 逐字等价。
+function wageInvDayOf(task) { return Math.max(1, parseInt((task && task.wageInvDay) || 1, 10) || 1); }
+function wageMonthlyTrigger(task, year, month) {
+  const dim = new Date(year, month + 1, 0).getDate();
+  const inv = wageInvDayOf(task);
+  const dom = Math.min(dim, Math.max(1, dim - (inv - 1)));
+  const q = String(task.startTime || '12:00').split(':').map(Number);
+  return new Date(year, month, dom, q[0] || 0, q[1] || 0, 0, 0);
+}
+function computeWageMonthlyTriggers(task, first, now) {
+  const sY = first.getFullYear(), sM = first.getMonth();
+  const firstTrig = wageMonthlyTrigger(task, sY, sM);
+  if (firstTrig.getTime() > now.getTime()) return { prev: null, next: firstTrig };
+  const y = now.getFullYear(), m = now.getMonth();
+  const thisTrig = wageMonthlyTrigger(task, y, m);
+  let prev, next;
+  if (thisTrig.getTime() <= now.getTime()) {
+    prev = thisTrig;
+    const ny = (m === 11) ? y + 1 : y, nm = (m + 1) % 12;
+    next = wageMonthlyTrigger(task, ny, nm);
+  } else {
+    const py = (m === 0) ? y - 1 : y, pm = (m + 11) % 12;
+    prev = wageMonthlyTrigger(task, py, pm);
+    next = thisTrig;
+  }
+  if (prev && prev.getTime() < firstTrig.getTime()) prev = null;
+  if (prev === null && next && next.getTime() < firstTrig.getTime()) next = firstTrig;
+  return { prev, next };
+}
 function computeTriggers(task, now) {
   const first = taskFirstTrigger(task);
   if (task.freq === 'once') {
     return { prev: first.getTime() <= now.getTime() ? first : null,
              next: first.getTime() > now.getTime() ? first : null };
+  }
+  // v3.6.71 工资任务按月固定「倒数第几天」：触发日随月份天数变化（不再固定 startDate 日）
+  if (isWageTask(task) && task.freq === 'monthly') {
+    return computeWageMonthlyTriggers(task, first, now);
   }
   const iv = taskInterval(task);
   let prev;
@@ -8262,7 +8298,9 @@ function buildPlanSystemPrompt(dateStr, wText, stats, sfStreak) {
   const birthStr = BIRTH_DATE.getFullYear() + '-' + _pad2(BIRTH_DATE.getMonth() + 1) + '-' + _pad2(BIRTH_DATE.getDate());
   const h = localStorage.getItem('babyHeight') || '';
   const w = localStorage.getItem('babyWeight') || '';
-  const kbPart = planKbList(KB, 50).map(x => '- [' + x.cat + '] ' + x.text).join('\n');
+  // v3.6.71 计划 prompt 注入「完整知识库」（预算放大到 500，wind 置顶，风速/风级定义不被截断），
+  // 并要求 AI 先在知识库检索风相关定义、引用具体阈值，仅在完全无风相关描述时才走兜底。
+  const kbPart = planKbList(KB, 500).map(x => '- [' + x.cat + '] ' + x.text).join('\n');
   // v3.6.40 辅食连续添加天数（昨日=第 streak 天，今日=第 streak+1 天；streak=0 表示前一日无辅食记录）。
   // 防御：历史调用方第 4 参可能传非对象（如旧测试传的 'D3'），非对象按未传处理。
   const _sf = (sfStreak && typeof sfStreak === 'object' && !Array.isArray(sfStreak)) ? sfStreak : null;
@@ -8314,7 +8352,7 @@ function buildPlanSystemPrompt(dateStr, wText, stats, sfStreak) {
     // 但又给出兜底数值 ≤19km/h=风小，与用户知识库自定义的 ≤15km/h=风小 冲突，16km/h 落在两口径之间被兜底带跑归小风。
     // 现改为：知识库自定义风速风级标准为唯一准绳（用户阈值绝对优先、严禁通用风级表/兜底数值覆盖、边界严禁四舍五入或折中），
     // 兜底仅在知识库完全无风速风级定义时启用且须声明。
-    + '【风级换算与户外/防风】天气中的「最大风速」(km/h)换算风大/风小，**一律以家庭知识库中用户自定义的风速风级标准为唯一准绳**（通常位于知识库「穿衣/户外」条目，如「风小 ≤15km/h」「风稍大 15-30km/h」「风大 ≥30km/h」）。用户写明的阈值优先于本段一切数值、优先于任何通用气象风级表（如蒲福风级 3 级=12-19km/h）——**严禁使用通用风级表或四舍五入、取折中等方式自行改判档位**。边界严格按知识库原文执行：知识库写明「≤15km/h 为风小」时，16km/h 不属于风小，必须按知识库的下一档（风稍大）执行；含等号的一侧归属知识库写明的那一档。仅当知识库完全没有风速/风级相关定义时，才采用兜底：≤19km/h（≤4级，风小）→ 正常户外、可不戴帽或只戴薄帽、鼓励适当增加户外时长；20-38km/h（5-6级，风稍大）→ 戴帽防风、婴儿车加防风罩、选避风时段与地点、适当缩短户外；≥39km/h（≥7级，风大）→ 减少户外活动或改室内、必须戴帽并防风、避开风口与广告牌（参考：上海大风蓝色预警≈平均风力6级≈39km/h）；采用兜底时须在正文注明「知识库未定义风速档位，按通用口径」。该判断请写入【健康·出行】的户外时段、戴帽与避风建议中，并可在摘要点出"风大注意防风"或"风小宜多户外"（摘要与正文的风档名称一律用知识库的档位名称）。注意风有风寒效应、体感更冷，户外穿衣在气温档基础上：风稍大升半档、风大升一档。\n'
+    + '【风级换算与户外/防风】天气中的「最大风速」(km/h)换算风大/风小，**一律以家庭知识库中用户自定义的风速风级标准为唯一准绳**（通常位于知识库「穿衣/户外」条目，如「风小 ≤15km/h」「风稍大 15-30km/h」「风大 ≥30km/h」）。用户写明的阈值优先于本段一切数值、优先于任何通用气象风级表（如蒲福风级 3 级=12-19km/h）——**严禁使用通用风级表或四舍五入、取折中等方式自行改判档位**。边界严格按知识库原文执行：知识库写明「≤15km/h 为风小」时，16km/h 不属于风小，必须按知识库的下一档（风稍大）执行；含等号的一侧归属知识库写明的那一档。**执行步骤（务必先做第 1 步再判断）**：①先在上方【家庭知识库】逐条检索是否出现任何与风有关的描述（关键词含「风速 / 风级 / 风小 / 风稍大 / 风大 / 防风 / 避风」或具体 km/h 数字阈值）；②只要检索到，就必须以该阈值为准换算风档，并在【健康·出行】正文中**写明知识库的具体阈值原句**（例如「按知识库 ≤15km/h 为风小、≥30km/h 为风大」），风档名称一律用知识库的档位名称；③**仅当知识库里完全没有任何风相关描述时**才采用兜底：≤19km/h（≤4级，风小）→ 正常户外、可不戴帽或只戴薄帽、鼓励适当增加户外时长；20-38km/h（5-6级，风稍大）→ 戴帽防风、婴儿车加防风罩、选避风时段与地点、适当缩短户外；≥39km/h（≥7级，风大）→ 减少户外活动或改室内、必须戴帽并防风、避开风口与广告牌（参考：上海大风蓝色预警≈平均风力6级≈39km/h）；采用兜底时须在正文注明「知识库未定义风速档位，按通用口径」。注意风有风寒效应、体感更冷，户外穿衣在气温档基础上：风稍大升半档、风大升一档。\n'
     + '【温度要求】上方天气已给出当日最高温和最低温，请在「起居护理·穿衣」与「健康·出行」中明确写出具体温度数值（如"今日 28℃/19℃，短袖即可"），不要只写"根据天气"。\n'
     + '\n【输出格式】第一行必须以「摘要：」开头写一句不超过 25 字的关键提示；之后换行写「计划：」，再按【喂养】【起居护理】【健康·出行】【早教】顺序分块给出内容（早教在最后）。';
 }
@@ -8511,7 +8549,10 @@ async function runScheduler(forceGen) {
     //          ②只在「下户日期与本次触发同月」时提前，跨月不调整（详见 wageTrigAdjusted）
     let trig = prev;
     if (isWageTask(task)) trig = wageTrigAdjusted(task, trig);   // v3.6.55 与列表/推送同口径
-    if (trig && now >= trig && now < new Date(trig.getTime() + SCHED_PUSH_GRACE)) {
+    // v3.6.71 补推窗：原为「触发后 3 小时内」推，但 GitHub Actions 偶发静默会把定点推送整段漏掉；
+    // 改为「触发点 <= now < 下一触发点」，与 sched-push.mjs 同口径——cron 在两次触发间任意一次运行即补推，
+    // 配合云端去重（pushPeriod / 服务端 cloudDup）保证同一周期只推一次。
+    if (trig && now >= trig && now < next) {
       const pk = periodKey(task, trig);
       if (task.pushPeriod !== pk) {
         if (task.mode === 'ai' && !task.content) { await generatePlanForTask(task, trig); }
@@ -8711,11 +8752,15 @@ function renderSchedTasks() {
     // v3.6.55 工资结算任务用 💰（钱的图标），AI 任务 🤖，其余 ✏️
     const icon = isWage ? '💰' : (t.mode === 'ai' ? '🤖' : '✏️');
     const expanded = !!taskExpanded[t.id];
+    // v3.6.71 工资任务显示「每月倒数第 N 天」而非固定的 startDate（触发日随月份天数变化）
+    const subTime = isWage
+      ? ('每月倒数第' + ((t.wageInvDay >= 1) ? t.wageInvDay : 1) + '天 ' + t.startTime)
+      : (t.startDate + ' ' + t.startTime);
     h += '<div class="task-card" id="taskcard_' + t.id + '">'
       + '<div class="task-row">'
       + '<div class="task-info" onclick="toggleTaskExpand(\'' + t.id + '\')">'
       + '<div class="task-name' + (expanded ? ' open' : '') + '"><span class="task-chev">▶</span>' + icon + ' ' + escapeHtml(nm) + '</div>'
-      + '<div class="task-sub">' + ((t.interval && t.interval > 1) ? ('每隔' + t.interval + (t.freq === 'daily' ? '天' : t.freq === 'weekly' ? '周' : '月') + ' · ') : '') + SCHED_FREQ_LABEL[t.freq] + ' ' + t.startDate + ' ' + t.startTime + ' · ' + (isWage ? '工资结算' : (t.mode === 'ai' ? 'AI 推荐计划' : '自定义内容')) + (t.enabled ? '' : ' · 已停止') + '</div>'
+      + '<div class="task-sub">' + ((t.interval && t.interval > 1) ? ('每隔' + t.interval + (t.freq === 'daily' ? '天' : t.freq === 'weekly' ? '周' : '月') + ' · ') : '') + SCHED_FREQ_LABEL[t.freq] + ' ' + subTime + ' · ' + (isWage ? '工资结算' : (t.mode === 'ai' ? 'AI 推荐计划' : '自定义内容')) + (t.enabled ? '' : ' · 已停止') + '</div>'
       + '</div>'
       + '<div class="task-actions">'
       + '<span class="rec-edit" onclick="openTaskEditor(\'' + t.id + '\')" title="编辑"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>'
@@ -8766,6 +8811,9 @@ function openTaskEditor(id) {
     document.getElementById('taskPayDays').value = (t.payDays > 0) ? t.payDays : NANNY_PAY_DIVISOR;
     // v3.6.69 回填「对应人员」（旧数据无 who 时按任务名推断：含「钟点」→ 钟点工，其余育儿嫂）
     setRadio('taskWageWho', wageWho(t));
+    // v3.6.71 回填「每月倒数第几天」（旧数据无 wageInvDay 时回落默认 1 = 当月最后一天）
+    const _invEl = document.getElementById('taskWageInvDay');
+    if (_invEl) _invEl.value = (t.wageInvDay >= 1) ? t.wageInvDay : 1;
   } else {
     setRadio('taskFreq', 'daily'); setRadio('taskMode', 'ai');
     setTaskStartDateValue(getTodayDateStr());
@@ -8783,12 +8831,16 @@ function openTaskEditor(id) {
   showModal('taskEditorModal');
 }
 // v3.6.45 需求③：读取工资结算的满勤月工资/满勤天数（0 或非法 → 回落默认 10000/26）
+// v3.6.71：读取「每月倒数第几天」（1–5，缺省 1 = 当月最后一天）
 function getTaskWageVals() {
   const bsEl = document.getElementById('taskBaseSalary');
   const pdEl = document.getElementById('taskPayDays');
+  const invEl = document.getElementById('taskWageInvDay');
   const bs = parseFloat((bsEl && bsEl.value) || '');
   const pd = parseInt((pdEl && pdEl.value) || '', 10);
-  return { baseSalary: (bs > 0) ? bs : NANNY_BASE_SALARY, payDays: (pd > 0 && pd <= 31) ? pd : NANNY_PAY_DIVISOR };
+  const inv = parseInt((invEl && invEl.value) || '1', 10);
+  return { baseSalary: (bs > 0) ? bs : NANNY_BASE_SALARY, payDays: (pd > 0 && pd <= 31) ? pd : NANNY_PAY_DIVISOR,
+           wageInvDay: (inv >= 1 && inv <= 5) ? inv : 1 };
 }
 // v3.6.69 工资任务「对应人员」选择（hourly=钟点工 / nanny=育儿嫂，缺省育儿嫂）
 function getTaskWageWho() {
@@ -8817,13 +8869,13 @@ function saveTask() {
     t.type = (mode === 'wage') ? 'wage' : 'normal';
     if (!String(t.name || '').trim()) t.name = '工资结算';   // v3.6.56 名称可自定义，仅空名时补默认
     if (mode === 'custom') t.content = document.getElementById('taskCustom').value;
-    else if (mode === 'wage') { t.content = ''; if (!t.lastWageDate) t.lastWageDate = ''; t.baseSalary = wageVals.baseSalary; t.payDays = wageVals.payDays; t.who = getTaskWageWho(); }
+    else if (mode === 'wage') { t.content = ''; if (!t.lastWageDate) t.lastWageDate = ''; t.baseSalary = wageVals.baseSalary; t.payDays = wageVals.payDays; t.who = getTaskWageWho(); t.wageInvDay = wageVals.wageInvDay; }
   } else {
     const isWage = (mode === 'wage');
     SCHED_TASKS.push({ id: 't_' + Date.now(), name: String(name || '').trim() || (isWage ? '工资结算' : ''), freq: freq, interval: interval, startDate: startDate, startTime: startTime, mode: mode, type: isWage ? 'wage' : 'normal',
       content: mode === 'custom' ? document.getElementById('taskCustom').value : '', enabled: true, lastWageDate: isWage ? '' : undefined,
       baseSalary: isWage ? wageVals.baseSalary : undefined, payDays: isWage ? wageVals.payDays : undefined,
-      who: isWage ? getTaskWageWho() : undefined,
+      who: isWage ? getTaskWageWho() : undefined, wageInvDay: isWage ? wageVals.wageInvDay : undefined,
       genPeriod: '', pushPeriod: '', genTryTs: 0 });
   }
   const isNew = !id;
