@@ -1024,19 +1024,31 @@ function getLastSleepRecord() {
   }
   return null;
 }
-/* v3.6.24 预估下一次睡觉：起床时间（开始+时长）+ 2 小时清醒间隔；
- * 跨夜记录的开始时间以记录所述日期为基准，若开始晚于记录时间则回退一天（如 0:30 补录的 20:00 入睡） */
-function getNextSleepInfo() {
+/* v3.6.24 预估下一次睡觉：起床时间（结束/开始 + 时长）+ 2 小时清醒间隔。
+ * v3.6.72 修正「下次睡觉」偏晚：带时长的睡眠视为「已结束」的整段睡眠，记录时刻为醒来/结束时刻，
+ *   整段睡眠发生在之前（如 06:00 记录「睡 6h」= 00:00–06:00 夜觉，醒来 06:00 → 下次 08:00），
+ *   不再把记录时刻当作睡眠开始而把醒来推到午后（旧逻辑 06:00 睡 6h 算成 12:00 醒 → 14:00 下次）。
+ *   仅当「仍在睡、无时长」（duration=0）时，记录时刻才是睡眠开始；若开始晚于记录时间（跨午夜补录）则回退一天。 */
+function getNextSleepInfo(now) {
+  now = now || new Date();
   const found = getLastSleepRecord();
   if (!found) return null;
   const { rec, ds } = found;
   const [sh, sm] = (rec.sleepStartTime || rec.recTime || '00:00').split(':').map(Number);
   const durMin = Math.max(0, Math.round(rec.duration || 0));
   const [yy, mo, dd] = ds.split('-').map(Number);
-  const start = new Date(yy, mo - 1, dd, sh, sm, 0, 0);
+  let start = new Date(yy, mo - 1, dd, sh, sm, 0, 0);
   const recTs = rec.timestamp || rec.updatedAt || 0;
-  if (recTs && start.getTime() > recTs + 30 * 60000) start.setDate(start.getDate() - 1);
-  const wake = new Date(start.getTime() + durMin * 60000);
+  let wake;
+  if (durMin > 0) {
+    // 已完成睡眠：记录时刻即醒来时刻，开始 = 醒来 − 时长（自然支持跨午夜的夜间睡眠）
+    wake = new Date(start.getTime());
+    start = new Date(start.getTime() - durMin * 60000);
+  } else {
+    // 仍在睡：记录时刻为睡眠开始；若开始晚于记录时间（跨午夜补录）回退一天
+    if (recTs && start.getTime() > recTs + 30 * 60000) start.setDate(start.getDate() - 1);
+    wake = new Date(start.getTime());
+  }
   const next = new Date(wake.getTime() + 2 * 3600000);   // 醒来后再玩 2 小时
   return { rec, start, wake, next, durMin };
 }
@@ -1555,7 +1567,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.71';
+const APP_VERSION = 'v3.6.72';
 // v3.6.64: 修复「放音乐后，播放记录（管理→音频页的「N 次」）还是没有更新」的真因——不在计数环节，而在**拉取**环节：
 //   eePullPlays 汇总云端各设备分片时用 `Object.assign(cloud, m)` 把 {歌曲id:次数} 直接拍平进了同一层，
 //   而 eeCloudPlaysFor 读的是两层结构 {设备id:{歌曲id:次数}}（`m[songId]`）——m 已是数字，恒取到 undefined → 次数恒 0。
