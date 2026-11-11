@@ -252,6 +252,7 @@ function init() {
   cleanupTestData();
   // 页面加载后检查喝奶提醒（已到时间则 toast，仅提醒一次）
   setTimeout(checkMilkReminder, 1200);
+  msAutoRefreshIfDue();   // v3.6.74 满15天到点后台自动全量刷新徽章（真正调用 DeepSeek），不依赖打开分析页
 }
 
 // 清理本地测试残留数据（开发/测试期间写入的脏数据）
@@ -1559,7 +1560,29 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.73';
+const APP_VERSION = 'v3.6.74';
+// v3.6.74: 两项用户反馈——①「分析图中成长里程碑徽章没有更新，按之前需求应该每隔 15 天调用 deepseek api 更新一下」：
+//   根因是四层叠加：a) shouldRefreshMilestones 只在 openAnalysis() 里检查，不打开分析页就永不触发；
+//   b) 刷新窗口内的旧逻辑「旧徽章原样保留、只补未解锁组」，已有 AI 概括的固化组绝不变（v3.6.29 固化 / v3.6.32 期内冻结语义）；
+//   c) classifyMilestoneLLM 有 localStorage 永久缓存 msllm:provider:model:hash，同一文本命中缓存就跳过真实请求；
+//   d) 叠加期内冻结，导致徽章长期不变、DeepSeek 基本没被调用。现按用户确认口径「全部重算并刷新」实现：
+//   · enrichMilestonesWithLLM 新增 opts.fullRefresh——满 15 天时绕过 LLM 永久缓存（classifyMilestoneLLM 第三参 bypassCache）
+//     真正发一次 DeepSeek 请求，且三大徽章（含已有 AI 概括的固化组）都按新 AI 结果刷新；仅 AI 成功返回新 label 才覆盖，
+//     AI 失败保留旧概括，绝不把好标题冲成规则截断。新增 opts.skipRender 供后台刷新不碰 DOM。
+//   · makeMilestoneTimeline 刷新分支由「保留旧快照 + 补未解锁组」改为 deriveBadgesFromItems(items) 全量重算
+//     （15 天内新记录可替换旧徽章）。未满 15 天期内仍冻结、不突然改乱；msRemedyBadgeLabels 期内补救语义完全不变。
+//   · 新增 msRunFullRefresh（先锚定 15 天刷新时刻并保存规则快照、再真正调 DeepSeek、AI 成功只更新缓存不推后锚）
+//     与 msAutoRefreshIfDue（init 启动后延迟 8 秒、确认本地已有里程碑记录后后台全量刷新，
+//     不碰 DOM / 不弹 toast / 锚点保证 15 天只跑一次），使「每隔 15 天」不再依赖用户恰好打开分析页；
+//     打开分析页的刷新分支改走同一公共逻辑（AI 回来即时刷新徽章 DOM）。
+//   · saveMilestoneBadgeCache 增加可选 updateAnchor=false，用于 AI 成功后只更新缓存内容、不推后 15 天锚点。
+//   ②「今日计划没有按知识库输出穿衣建议（给了通用/编造建议）」：v3.6.71 已把 KB 全量注入（planKbList 500），
+//   但【起居护理·穿衣】指令仍只写「参考知识库『穿衣』」并写死示例衣物名（「熊猫系带长袖长裤」「蓝/黄背心厚睡袋」），
+//   AI 容易照抄示例或套通用常识，而非引用用户知识库中的真实衣物名称 / 温度档——与之前风速规则是同类问题。
+//   现前端 buildPlanSystemPrompt 与服务端 scripts/sched-push.mjs 两侧逐字重写该段：先逐条检索知识库穿衣条目 →
+//   以登记的具体衣物名称与温度档为唯一准绳（名称逐字照抄、写明知识库原句）→ 严禁编造 / 泛称 / 通用常识替代 →
+//   同档多件全部列出 → 仅知识库完全无穿衣定义才按通用原则兜底且正文注明「知识库未定义穿衣，按通用口径」；
+//   删掉写死的示例衣物名。PLAN_PROMPT_VERSION 16→17，触发当天已生成计划按 staleVer 自动重生成。
 // v3.6.64: 修复「放音乐后，播放记录（管理→音频页的「N 次」）还是没有更新」的真因——不在计数环节，而在**拉取**环节：
 //   eePullPlays 汇总云端各设备分片时用 `Object.assign(cloud, m)` 把 {歌曲id:次数} 直接拍平进了同一层，
 //   而 eeCloudPlaysFor 读的是两层结构 {设备id:{歌曲id:次数}}（`m[songId]`）——m 已是数字，恒取到 undefined → 次数恒 0。
@@ -5391,9 +5414,11 @@ function msLLMCacheKey(text, cfg) {
   return 'msllm:' + cfg.provider + ':' + cfg.model + ':' + (h >>> 0);
 }
 // 单条文本调 LLM 归类：返回 {domainId, label} 或 null。命中缓存直接返回
-async function classifyMilestoneLLM(text, cfg) {
+async function classifyMilestoneLLM(text, cfg, bypassCache) {
   const cacheKey = msLLMCacheKey(text, cfg);
-  try { const c = localStorage.getItem(cacheKey); if (c) return JSON.parse(c); } catch {}
+  // v3.6.74 满15天全量刷新（bypassCache=true）时跳过缓存读取，真正发一次 DeepSeek 请求；
+  // 期内补救/日常调用仍走缓存（避免重复计费）。成功结果仍写回缓存，供期内使用。
+  if (!bypassCache) { try { const c = localStorage.getItem(cacheKey); if (c) return JSON.parse(c); } catch {} }
   const domainList = MILESTONE_DOMAINS.map(d => d.name).concat([MILESTONE_OTHER.name]).join('、');
   const sys = '你是婴儿成长里程碑分类助手。用户会给你一段育儿记录文本，请判断它最贴合哪个成长领域，并提取一个不超过6个汉字的简短标签概括核心成就。\n'
     + '可选领域（必须严格从中选一个，输出其准确名称）：' + domainList + '。\n'
@@ -5425,20 +5450,32 @@ async function _mapPool(items, limit, fn) {
 }
 // 规则先渲染，再异步用 LLM 回写分类/短标签；无配置或全失败则保持规则结果不动
 // v3.6.29 badges：本次新固化（fresh）的徽章用 AI label 美化一次；已固化组不受影响
-async function enrichMilestonesWithLLM(items, badges) {
+// v3.6.74 opts.fullRefresh=true（满 15 天全量刷新）：绕过 LLM 永久缓存真正调用一次 DeepSeek，
+//         且三大徽章（含已有 AI 概括的固化组）都按新 AI 结果刷新——仅 AI 成功返回新 label 才覆盖，
+//         AI 失败保留旧概括，绝不把好标题冲成规则截断（用户确认口径「全部重算并刷新」）。
+// v3.6.74 opts.skipRender=true（后台自动刷新）：不碰 DOM（用户没看着分析页），只回写 items/badges。
+// 未传 opts（期内补救 / 日常调用）时行为与 v3.6.32 完全一致：走缓存、只改 fresh 组或无 label 组。
+async function enrichMilestonesWithLLM(items, badges, opts) {
   const cfg = getAITagConfig();
   if (!cfg || !items || !items.length) return;
+  opts = opts || {};
+  const fullRefresh = !!opts.fullRefresh;
+  const skipRender = !!opts.skipRender;
   const unique = []; const seen = new Set();
   for (const it of items) { if (!seen.has(it.text)) { seen.add(it.text); unique.push(it); } }
   let changed = false;
+  const aiLabels = new Map();   // v3.6.74 本次 AI 成功返回的新概括（text -> label），供 fullRefresh 覆盖徽章标题
   // v3.6.29 修复：_mapPool 自 v3.6.17 起为 async（内部已逐条 try/catch 隔离失败），
   // 此处却仍用 Promise.allSettled 包住其返回的 Promise → 每次必抛 "object is not iterable"，
   // 导致 AI label 从未落盘、徽章退化为规则截断（用户反馈「突然改乱」的根因）。改为直接 await。
   await _mapPool(unique, 4, async it => {   // v3.6.17 最多 4 条并行
-    const r = await classifyMilestoneLLM(it.text, cfg);
+    // v3.6.74 满 15 天全量刷新时 bypassCache=true → 跳过 localStorage 永久缓存，真正发一次 DeepSeek 请求；
+    // 期内补救/日常调用传 false → 仍走缓存（避免重复计费）。
+    const r = await classifyMilestoneLLM(it.text, cfg, fullRefresh);
     if (!r) return;
     const dom = msDomainById(r.domainId);
     for (const x of items) { if (x.text !== it.text) continue; x.domain = dom; x.domains = [dom]; if (r.label) x.label = r.label; }
+    if (r.label) aiLabels.set(it.text, r.label);
     changed = true;
   });
   if (!changed) return;
@@ -5447,10 +5484,18 @@ async function enrichMilestonesWithLLM(items, badges) {
   // 规则徽章，15 天刷新窗口只补新组、永远等不到 AI（用户反馈「徽章像没调 AI」的根因）；
   // 已有 AI label 的已固化组仍绝不变（固化语义优先）
   if (badges) badges.forEach(b => {
-    if (!b || (!b.fresh && b.label)) return;
+    if (!b) return;
+    if (fullRefresh) {
+      // v3.6.74 全量刷新：已有 AI 概括的固化组也按新 AI 结果更新；仅成功返回新 label 时覆盖，失败保留旧概括
+      const nl = aiLabels.get(b.text);
+      if (nl) b.label = nl;
+      return;
+    }
+    if (!b.fresh && b.label) return;
     const it = items.find(x => x.text === b.text);
     if (it && it.label && it.label.trim()) b.label = it.label.trim();
   });
+  if (skipRender) return;   // v3.6.74 后台自动刷新：只回写数据，不碰 DOM
   const badgesEl = document.getElementById('milestoneBadges');
   // v3.5.104 renderMilestoneBadges 返回的是自带 id 的整块，用 outerHTML 替换（原用 innerHTML 会造成同 id 嵌套 = 重复 ID）
   if (badgesEl) badgesEl.outerHTML = renderMilestoneBadges(items, badges);
@@ -6043,7 +6088,7 @@ const SCHED_WEATHER_MAX_RETRY = 4;       // v3.6.67 天气自愈：单日最多�
 // v3.6.40 升 13：新增【辅食第N天食谱推荐】规则（前后端逐字对齐 + 辅食按月龄食谱种子）。
 // 注意：prompt 内容变化时须前后端同步升级此版本号（服务端 PLAN_PROMPT_VERSION）。
 // 比较用数值单调语义（见 runScheduler staleVer）：云端版本更新时不本地回退重生成。
-const PLAN_PROMPT_VERSION = '16'; // v3.6.58 需求②：AI 今日计划按当前开启活动过滤（已关闭活动如读书不纳入统计与推荐）；ctx 新增 hiddenActivities 下发服务端；两侧逐字对齐。 把「风速/风级/防风」相关 KB 条目强制置顶、其余按预算截断，修复 v3.6.50 遗留真正根因——KB 前 50 条截断漏掉靠后风速规则（用户 KB 共 62 条、风速规则在 idx=53），导致「16km/h 仍归小风」；两侧（app.js/sched-push.mjs）逐字对齐 planKbList，并同步修复 ctx.kb 落库截断（app.js: saveSchedCloud 改走 planKbList）。触发当天计划按新 prompt 重新生成（staleVer）。
+const PLAN_PROMPT_VERSION = '17'; // v3.6.74 需求②：今日计划【起居护理·穿衣】改为「先逐条检索知识库穿衣条目 → 以登记的衣物名称/温度档为唯一准绳 → 正文写明知识库原句 → 严禁编造/泛称/通用常识替代 → 仅知识库完全无穿衣定义才兜底并注明」，删掉写死的示例衣物名（原「熊猫系带长袖长裤」等易被 AI 照抄成编造建议）。两侧（app.js/sched-push.mjs）逐字对齐；升版本触发当天已生成计划按新 prompt 重新生成（staleVer）。// v3.6.58 需求②：AI 今日计划按当前开启活动过滤（已关闭活动如读书不纳入统计与推荐）；ctx 新增 hiddenActivities 下发服务端。 把「风速/风级/防风」相关 KB 条目强制置顶、其余按预算截断，修复 v3.6.50 遗留真正根因——KB 前 50 条截断漏掉靠后风速规则（用户 KB 共 62 条、风速规则在 idx=53），导致「16km/h 仍归小风」。
 let SCHED_TASKS = [];
 const _pad2 = n => String(n).padStart(2, '0');
 
@@ -8339,7 +8384,7 @@ function buildPlanSystemPrompt(dateStr, wText, stats, sfStreak) {
     + (targetIsMWF ? ('本计划日 ' + dateStr + ' 为' + PLAN_DOW[targetDow] + '（即任务触发当天；周一/三/五为补剂日），营养补剂请安排：' + (supRec || 'D3') + '（与上次相反）。')
                    : ('本计划日 ' + dateStr + ' 为' + PLAN_DOW[targetDow] + '（即任务触发当天；非周一/周三/周五），营养补剂项写明「今日无需补剂」。'))
     + '\n'
-    + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度，据此建议穿什么、几件多厚，参考知识库「穿衣」；穿衣必须精确到知识库里的具体衣物名称，如「熊猫系带长袖长裤」「蓝/黄背心厚睡袋」，不得只写「长袖长裤」「连体衣」这类泛称；知识库无对应款式时才给通用建议）；若知识库中同一厚薄档位有多件衣物（如多件长袖长裤），请在该档位下**全部列出**这些厚薄合适的衣物名称（如「熊猫长袖长裤／黄边长袖长裤／条纹长袖长裤」），提示长辈当天任选一件未洗的穿，不要把多件只写一件、也不要只写泛称，让长辈据当天实际哪件未洗来选；洗澡、剪指甲、睡眠、排便关注'
+    + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度）。**执行步骤（务必先做第 1 步再写建议）**：①先在上方【家庭知识库】逐条检索「穿衣」相关条目（关键词含「穿衣 / 衣物 / 衣服 / 连体 / 哈衣 / 外套 / 厚薄 / 保暖 / 洋葱 / 睡袋 / 包被 / 马甲 / 背心 / 帽子 / ℃ / 温度」及任何具体衣物名称），找出家庭登记的**具体衣物名称**与**气温→厚薄/件数档位**；②穿衣建议**一律以知识库登记的衣物名称与温度档为唯一准绳**——衣物名称必须**逐字照抄知识库里的具体名称**（不得改写、缩略或拼凑），严禁编造知识库里没有的衣物名、严禁只写「长袖长裤」「连体衣」「外套」这类泛称、严禁用通用穿衣常识覆盖或替代知识库定义，并在【起居护理】正文中**写明所依据的知识库原句**（例如「按知识库：20-26℃ 穿《知识库登记的那件衣物》」「按知识库：<10℃ 《知识库登记的搭配》」）；③若知识库中同一厚薄档位登记了多件衣物，请在该档位下**全部列出**这些衣物名称，提示长辈当天任选一件未洗的穿，不要把多件只写一件；④**仅当知识库里完全没有任何穿衣 / 衣物 / 温度档描述时**才可按通用原则（洋葱式分层、颈背温热干燥为准、按当日最高/最低温增减）兜底，且须在正文注明「知识库未定义穿衣，按通用口径」。此外：洗澡、剪指甲、睡眠、排便关注'
     + (stats && stats.poop === 0 ? '；昨日大便 0 次，需关注是否便秘：两餐间记得喂水、多顺时针揉腹'
        : (stats && stats.poop >= 3 ? '；昨日大便≥3 次，需关注拉肚子：注意保暖、防红屁屁' : '')) + '。\n'
     + '【健康·出行】户外活动时间与时长（结合天气与昨日户外时长，给出具体时段如"上午9-10点、下午4-5点"及总时长建议）、天气应对（大风/雾霾/降温）、防病注意；并再次点明当日最高/最低温，提示长辈据此增减衣物；结合知识库「穿衣」给出是否戴帽子、是否裹薄包被/纱巾。\n'
@@ -9367,9 +9412,50 @@ function shouldRefreshMilestones(now) {
   if (new Date(now).getHours() < 1) return false;  // 当天凌晨 1 点前不触发
   return true;
 }
+// v3.6.74 满 15 天全量刷新公共逻辑（后台自动刷新 / 打开分析页共用，避免两处各写一遍）：
+//   ① 先锚定 15 天刷新时刻并保存「全量重算的规则快照」——无论 AI 成败都算本次已刷新，
+//      避免 AI 异步期间用户离开 / 调用失败导致 15 天内反复触发；
+//   ② 再真正调用 DeepSeek（enrichMilestonesWithLLM fullRefresh=true 绕过永久缓存），
+//      重新归类全部里程碑并刷新三大徽章标题（含已有 AI 概括的固化组）；
+//   ③ AI 成功后只更新缓存内容（updateAnchor=false），不把 15 天锚点推后几十秒。
+// opts.skipRender=true：后台自动刷新用，不碰 DOM、不弹 toast；false/缺省：打开分析页用，AI 回来即时刷新徽章 DOM。
+function msRunFullRefresh(items, badges, opts) {
+  opts = opts || {};
+  saveMilestoneBadgeCache(items, badges);   // ① 锚定刷新时刻（此时锚=刷新开始，语义正确）
+  const cfg = getAITagConfig();
+  if (!cfg) return Promise.resolve({ items: items, badges: badges });
+  return enrichMilestonesWithLLM(items, badges, { fullRefresh: true, skipRender: !!opts.skipRender })
+    .then(() => { saveMilestoneBadgeCache(items, badges, false); return { items: items, badges: badges }; })
+    .catch(() => {
+      if (!opts.skipRender) showToast('徽章 AI 概括失败，已按规则概括（可到 管理 → AI 设置 点「测试」检查密钥）');
+      return { items: items, badges: badges };
+    });
+}
+// v3.6.74 「每隔 15 天调用 DeepSeek 更新徽章」不再依赖用户恰好打开分析页：
+// 启动后延迟 8 秒（等家庭云同步把记录拉下来）检查，到点且本地已有里程碑记录时后台全量重算 + 真实调用 DeepSeek，
+// 只更新缓存（skipRender=true：不碰 DOM / 不弹 toast），用户下次打开分析页即看到新徽章。
+// 锚点（saveMilestoneBadgeCache 刷新 MS_BADGE_LAST_KEY）+ 延迟内二次 shouldRefreshMilestones 检查保证 15 天只跑一次、
+// 也不会与用户在这 8 秒内打开分析页触发的刷新重复。
+// 本地无里程碑记录（如新设备云同步尚未完成）时不刷新、不锚定，避免按空数据把徽章固化成「待解锁」。
+function msAutoRefreshIfDue() {
+  try {
+    if (!shouldRefreshMilestones()) return;
+    setTimeout(() => {
+      try {
+        if (!shouldRefreshMilestones()) return;        // 延迟期间可能已被分析页刷新 / 别的入口刷新
+        const items = collectMilestones();
+        if (!items.length) return;                     // 数据未就绪 → 等下次，绝不锚定空快照
+        const badges = deriveBadgesFromItems(items);   // 全量重算三大徽章（新记录可替换旧徽章）
+        msRunFullRefresh(items, badges, { skipRender: true });
+      } catch (e) {}
+    }, 8000);
+  } catch (e) {}
+}
 // 把当前里程碑分类结果（含 AI/规则 domain 与 label）缓存到本地，并刷新「上次刷新时间」
 // v3.6.29 增加 badges 参数：三大徽章的固化快照（一旦确定不再随周期刷新而改变）
-function saveMilestoneBadgeCache(items, badges) {
+// v3.6.74 增加可选 updateAnchor=false：AI 成功后只更新缓存内容、不推后 15 天刷新锚（锚应在刷新开始时就固定）；
+// 不传或传 true 保持原行为（写缓存 + 刷新锚），兼容期内补救 / 格式升级等所有既有调用方。
+function saveMilestoneBadgeCache(items, badges, updateAnchor) {
   try {
     const data = (items || []).map(it => ({
       text: it.text, date: it.date, isFirst: it.isFirst,
@@ -9379,7 +9465,7 @@ function saveMilestoneBadgeCache(items, badges) {
     const obj = { ts: Date.now(), items: data };
     if (badges) obj.badges = badges.map(b => ({ groupIdx: b.groupIdx, text: b.text, label: b.label || null, date: b.date, domainId: b.domainId || null }));
     localStorage.setItem(MS_BADGE_CACHE_KEY, JSON.stringify(obj));
-    localStorage.setItem(MS_BADGE_LAST_KEY, String(Date.now()));
+    if (updateAnchor !== false) localStorage.setItem(MS_BADGE_LAST_KEY, String(Date.now()));
   } catch {}
 }
 // 读取上次刷新的徽章分类结果；无缓存返回 null（此时回落为当前规则结果）
@@ -9730,12 +9816,11 @@ function makeMilestoneTimeline(useCacheBadge) {
       }
     }
   } else {
-    // 刷新窗口/首次：旧徽章原样保留，只补未解锁组；渲染即用合并结果
-    // （v3.6.29 修复：旧代码此分支 badges=null，首渲染退化为「原始重算值」，AI 失败/离开即污染）
-    const oldCache = loadMilestoneBadgeCache();
-    const oldBadges = (oldCache && oldCache.badges) || [];
-    _msBadges = oldBadges.slice();
-    deriveBadgesFromItems(items).forEach((b, idx) => { if (b && !_msBadges[idx]) _msBadges[idx] = b; });
+    // v3.6.74 满 15 天全量重算：不再「旧徽章原样保留 + 只补未解锁组」（那是徽章长期不更新的根因之一），
+    // 而是按当前全部里程碑记录重新推导三大徽章（15 天内新增的成就可替换旧徽章）。
+    // 随后 openAnalysis 的刷新分支会走 msRunFullRefresh 真正调用 DeepSeek 刷新所有徽章标题（含已固化的 AI 概括）。
+    // 仍保留「先渲染规则快照、AI 异步回来再替换」的安全结构（v3.6.29 防 AI 失败/离开污染缓存）。
+    _msBadges = deriveBadgesFromItems(items);
   }
   const head = `<div class="chart-card"><div class="chart-title">🏆 成长里程碑</div>`;
   if (!items.length) {
@@ -10004,13 +10089,10 @@ function openAnalysis() {
   showModal('analysisModal');
   // v3.5.105 仅在「刷新窗口」才调用 AI/规则回写并重算徽章；其他时间沿用缓存（不调 AI、不重算）
   if (_msRefresh) {
-    // v3.6.29 徽章固化：无论是否配置 AI，先锚定刷新时间并保存合并后的徽章（含已定徽章）
-    // ——修复「AI 异步返回前用户离开/失败 → 缓存被无标签规则结果污染」
-    saveMilestoneBadgeCache(_milestoneItems, _msBadges);
-    const cfg = getAITagConfig();
-    if (cfg) enrichMilestonesWithLLM(_milestoneItems, _msBadges)
-      .then(() => saveMilestoneBadgeCache(_milestoneItems, _msBadges))
-      .catch(() => showToast('徽章 AI 概括失败，已按规则概括（可到 管理 → AI 设置 点「测试」检查密钥）'));
+    // v3.6.74 满 15 天全量刷新：_msBadges 已由 makeMilestoneTimeline(false) 全量重算，
+    // 走公共逻辑「锚定 + 存规则快照 → 真正调用 DeepSeek（绕过永久缓存）刷新全部徽章 → AI 成功只更新缓存」。
+    // skipRender 缺省 false：AI 回来即时替换徽章 DOM，用户正看着分析页能看到变化；失败有 toast。
+    msRunFullRefresh(_milestoneItems, _msBadges);
   } else if (!_msBadges || _msBadges.some(b => b && !b.label)) {
     // v3.6.32 期内补救：存在「已固化但无 AI label」的徽章组（旧格式缓存升级 / 无 AI 时固化 / AI 调用失败遗留，
     // 或从未固化过）——15 天刷新窗口只补新解锁组，这些组永远等不到 AI 美化（用户反馈「徽章像没调 AI」根因）。
