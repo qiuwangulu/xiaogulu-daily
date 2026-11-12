@@ -806,6 +806,10 @@
   .ai-kb-head { display:flex; justify-content:space-between; align-items:center; font-size:12.5px; color:var(--muted); margin-bottom:6px; }
   .ai-kb-head b { color:#74b9ff; }
   body.theme-day .ai-kb-head b { color:#0984e3; }
+  /* v3.6.75 知识库「恢复穿衣规则」按钮（只增不删恢复 12 条详细规则） */
+  .kb-restore-btn { background:none; border:1px solid #b2bec3; color:#b2bec3; border-radius:9px; padding:3px 9px; font-size:12px; font-family:inherit; cursor:pointer; white-space:nowrap; }
+  .kb-restore-btn:active { transform:scale(.96); }
+  body.theme-day .kb-restore-btn { border-color:#0984e3; color:#0984e3; }
   .ai-kb-list { flex:1; overflow-y:auto; }
   .ai-kb-list::-webkit-scrollbar { width:0; }
   .ai-kb-item { display:flex; gap:9px; align-items:flex-start; padding:11px 0; border-bottom:1px solid var(--rec-bd); font-size:13.5px; line-height:1.5;
@@ -2451,7 +2455,7 @@
         </div>
       </div>
       <div class="ai-kb-classify-note">🤖 自动分类/点编辑改分类</div>
-      <div class="ai-kb-head"><span>已添加 <b id="kbCnt">0</b> 条</span></div>
+      <div class="ai-kb-head"><span>已添加 <b id="kbCnt">0</b> 条</span><button class="kb-restore-btn" type="button" onclick="restoreDressRulesBtn()" title="恢复 12 条详细穿衣/户外/洗澡/室温推算规则（只增不删，已有的不受影响）">🔄 恢复穿衣规则</button></div>
       <div class="ai-kb-list" id="kbList"></div>
     </div>
   </div>
@@ -3068,6 +3072,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.74"></script>
+<script src="app.js?v=v3.6.75"></script>
 </body>
 </html>

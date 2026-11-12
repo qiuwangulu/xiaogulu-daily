@@ -252,7 +252,7 @@ function init() {
   cleanupTestData();
   // 页面加载后检查喝奶提醒（已到时间则 toast，仅提醒一次）
   setTimeout(checkMilkReminder, 1200);
-  msAutoRefreshIfDue();   // v3.6.74 满15天到点后台自动全量刷新徽章（真正调用 DeepSeek），不依赖打开分析页
+  msAutoRefreshIfDue();   // v3.6.75 每月10/25号到点后台自动全量刷新徽章（真正调用大模型 API），不依赖打开分析页
 }
 
 // 清理本地测试残留数据（开发/测试期间写入的脏数据）
@@ -1560,7 +1560,14 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.74';
+const APP_VERSION = 'v3.6.75';
+// v3.6.75: 两项——①用户反馈「知识库被篡改，之前写的非常详细的穿衣规则没有了，需要立即恢复」：
+//   诊断：云端 _ai_kb 被覆盖成只剩 20 条系统种子，用户手工粘贴的 12 条详细穿衣/户外/洗澡/室温推算规则全丢；
+//   扩散路径是 loadKBCloud() 云端无条件覆盖本地（KB = arr），残缺云端会把所有设备同步成残缺版。
+//   修复：内置 12 条原文恢复包 KB_DRESS_RULES + 云端覆盖前保住本地受保护条目 + 启动全量丢失自动兜底 + 知识库页一键恢复按钮；
+//   并把已修复的 32 条写回云端（只增不删）。PLAN_PROMPT_VERSION 17→18 触发当天计划按恢复后的完整知识库重新生成穿衣建议。
+// ②徽章刷新规则改为「每月 10 号、25 号各一次全量更新」：shouldRefreshMilestones 用半月周期键去重，
+//   仍走 v3.6.74 的 fullRefresh（真正调用大模型 API、绕过缓存、全部重算三大徽章）。
 // v3.6.74: 两项用户反馈——①「分析图中成长里程碑徽章没有更新，按之前需求应该每隔 15 天调用 deepseek api 更新一下」：
 //   根因是四层叠加：a) shouldRefreshMilestones 只在 openAnalysis() 里检查，不打开分析页就永不触发；
 //   b) 刷新窗口内的旧逻辑「旧徽章原样保留、只补未解锁组」，已有 AI 概括的固化组绝不变（v3.6.29 固化 / v3.6.32 期内冻结语义）；
@@ -5556,6 +5563,48 @@ const KB_CHAT_BUDGET = 12000;      // v3.6.17 问答 system prompt 知识库预�
 const AI_HIST_KEY = 'ai_chat_history_v1';
 const AI_HIST_CAP = 10;            // v3.5.137 历史对话仅保留最近 10 段（此前 30）
 let KB = [];
+// ============ v3.6.75 用户「详细穿衣规则」内置恢复包（防丢失/防篡改） ============
+// 背景：2026-11-12 用户反馈「知识库被篡改，之前写的非常详细的穿衣规则没有了」。
+// 诊断：云端 _ai_kb 被覆盖成只剩 20 条系统种子，用户手工粘贴的 12 条详细穿衣/户外/洗澡/室温推算规则全部丢失；
+// 扩散路径：loadKBCloud() 云端无条件覆盖本地（KB = arr），任何一次把残缺 KB 推上云，所有设备下次打开都会被同步成残缺版。
+// 对策：①这 12 条内置为常量；②云端覆盖本地前保住本地独有的受保护条目；③启动时若全部丢失则自动补回并回写云端；④知识库页提供一键恢复按钮。
+// 只增不删：绝不改动/删除用户已有的任何条目；用户主动删掉的单条不会被自动强行加回（仅「一条都不剩」才自动兜底）。
+const KB_DRESS_RULES = [
+  { cat: "穿衣", text: "室温 20–25℃ 起居穿搭：穿 73 码熊猫系带长袖长裤（外婆买的）、73 码冰雪系带长袖长裤（外婆买的）或 73 码白色圣诞树扣子中袖长裤；袜子穿五朵棉蓝/白中筒袜、兰/白色卡通短袜或白/绿/灰中筒袜；加 L 码薄肚围；睡袋用可拆袖分腿双层睡袋，盖熊猫毯子或双层包单；也可穿蓝/黄背心厚睡袋（外婆买的）+ 包单。" },
+  { cat: "穿衣", text: "室温 25–26℃ 起居穿搭：穿 73 码紫色薄长袖长裤；袜子穿五朵棉白/蓝中筒袜或蓝/黄宽松中筒袜；加 L 码薄肚围；盖包单或多层纱；睡袋穿蓝/黄厚背心睡袋（外婆买的）或黄/蓝薄背心睡袋 + 包单。此温度也适合 66 码白色刺猬猫长袖长裤（去医院穿的）和 66 码白色中袖中裤（奶奶买的）。" },
+  { cat: "穿衣", text: "室温高于 26℃ 起居穿搭：穿 73 码白色扣子短袖长裤（外婆买的）或 73 码蓝色薄包屁衣；袜子穿小红书买的白/蓝不掉长筒袜或中筒袜；加 L 码薄肚围；盖多层纱；睡袋穿蓝/黄薄背心睡袋。" },
+  { cat: "穿衣", text: "室温 18–20℃ 起居穿搭：穿 73 码棕色厚长袖长裤、73 码青色条绒长袖长裤或 73 码黄色厚棉长袖长裤；袜子穿五朵棉厚毛袜或五朵棉白/蓝中筒袜；加 L 码厚肚围；用可拆袖分腿双层睡袋 + 包单，或直接穿胎脂棉厚睡袋。" },
+  { cat: "户外", text: "20–25℃ 外出穿搭：内搭长袖长裤 + 80 码棕/白连体外套（双胞胎给的）+ 肚围 + 薄帽子。" },
+  { cat: "户外", text: "25–27℃ 外出穿搭：长袖长裤或包屁衣 + 长筒袜 + 肚围 + 多层纱 + 薄帽子。" },
+  { cat: "户外", text: "高于 27℃ 外出穿搭：包屁衣 + 长筒袜 + 肚围。" },
+  { cat: "户外", text: "15–20℃ 外出穿搭：内搭长袖长裤 + 80 码棕/白连体外套（双胞胎给的）或薄夹棉外套 + 厚肚围 + 熊猫毯 + 厚帽子。" },
+  { cat: "综合", text: "洗澡（室温低于 25℃）：在浴室开风暖、关窗户；澡托上放浴巾，身上浇热水保暖；浴室提前备好吹屁股机、保湿霜、氧化锌、衣服、袜子、浴巾、云柔巾；穿好衣服再出来；水温 38℃。" },
+  { cat: "综合", text: "洗澡（室温高于 25℃）：浴室仅关窗户，水温 37℃；洗完抱到客厅进行护理和穿衣服。" },
+  { cat: "穿衣", text: "【室外温度→室内温度推算规则（上海秋冬季）】适用场景：拿到当日天气预报（最高/最低气温）后，推算宝宝所处房间（卧室/客厅）的室内温度，用于匹配起居穿搭与睡袋分档。适用月份 9 月–次年 3 月（3 月后墙体尚冷，修正项统一取下限）。基础公式（不开暖气、正常关窗）：室内白天温度 ≈ 当日最高气温 + 3～5℃；室内夜间温度 ≈ 当日最低气温 + 2～4℃。朝南房间再 +1～3℃，朝北/暗卫 -1～2℃。季节修正（墙体蓄热导致同温不同感，取上限/下限）：9 月–10 月中（夏季余热+日照足）按 +4～6℃；10 月下–11 月按 +3～5℃；12 月–2 月按 +2～4℃（关窗密封好的新房可 +5～6℃，老房/阴雨/常开窗只 +1～2℃，寒潮时可能持平）。快速查表（按当日最高气温估白天室内）：最高 25℃ 以上 → 室内 28–30℃；最高 20–25℃ → 室内 24–28℃；最高 15–20℃ → 室内 19–23℃；最高 10–15℃ → 室内 13–18℃；最高 5–10℃ → 室内 8–13℃；最高 0–5℃ → 室内 3–8℃。开暖气时：家中一般不开全屋暖气；仅当用户当天说明开了空调/风暖/取暖器，该房间直接按设定温度 20–22℃ 计，不再折算；其他未开设备的房间仍按上面规则。夜间注意空调化霜/暂停会掉 2–3℃。" },
+  { cat: "穿衣", text: "【推算结果如何使用（衔接穿衣分档）】穿衣与睡袋一律按「推算出的室内温度」匹配起居穿搭分档（知识库中按室温分的档：高于 26℃ / 25–26℃ / 20–25℃ / 18–20℃），不要直接按户外温度选档；只有出门、户外活动才按户外实际温度匹配户外的四档（15–20℃ / 20–25℃ / 25–27℃ / 高于 27℃）。白天穿衣按推算的室内白天温度选档；夜间睡袋按推算的夜间温度选档（比白天低 2–4℃），深秋至初冬的夜间卧室常低于 18℃，此时以最厚档（厚长袖+厚肚围+胎脂棉厚睡袋）为基础，再加包单/毯子，或建议睡前开暖风。当推算室内低于 18℃（知识库最低档）时，不要硬套最厚档，要明确提示「室温偏低，需叠加包被/开暖气」。洗澡：当天室内低于 25℃ 按「开风暖、关窗、澡托放浴巾、身上浇热水保暖、穿好衣服再出来、水温 38℃」流程；高于 25℃ 仅关窗、水温 37℃、洗完在客厅护理穿衣服。不确定时（阴雨/寒潮/查表临界）：按相邻两档中偏厚的一档准备，并提示长辈选方便穿脱的层（马甲/肚围/可拆袖睡袋），便于一天中温差大时增减。" },
+];
+const KB_DRESS_FP = new Set(KB_DRESS_RULES.map(r => String(r.text).slice(0, 12)));
+function dressRuleFp(t) { return String(t || '').slice(0, 12); }
+function missingDressRules() {
+  return KB_DRESS_RULES.filter(r => !KB.some(x => x && typeof x.text === 'string' && dressRuleFp(x.text) === dressRuleFp(r.text)));
+}
+// force=false（启动兜底）：仅在 12 条「一条都不剩」时补回，尊重用户主动删除；force=true（手动按钮）：补齐全部缺失
+function restoreDressRules(force, skipCloud) {
+  const miss = missingDressRules();
+  if (!miss.length) return 0;
+  if (!force && miss.length < KB_DRESS_RULES.length) return 0;
+  miss.forEach(r => KB.push({ cat: r.cat, text: r.text }));
+  try { saveKBLocal(); } catch {}
+  // skipCloud=true（云同步就绪时的启动兜底）：只先补本地让界面立即可见，不抢在云端拉取完成前把本地残缺 KB 推上云覆盖；
+  // 云端拉取完成后 aiInit 会再跑一次不带 skipCloud 的兜底，届时若云端仍缺才回写云端（自愈闭环）。
+  if (!skipCloud) { try { if (typeof saveKBCloud === 'function') saveKBCloud().catch(() => {}); } catch {} }
+  try { renderKb(); updateKbCntLine(); } catch {}
+  return miss.length;
+}
+function restoreDressRulesBtn() {
+  const n = restoreDressRules(true);
+  showToast(n ? ('已恢复 ' + n + ' 条详细穿衣规则') : ('详细穿衣规则已齐全（共 ' + KB_DRESS_RULES.length + ' 条），无需恢复'));
+}
 let KB_FILTER = '全部';
 const kbExpanded = new Set();      // v3.5.122 知识库已展开条目的全局索引（仅控制 UI 折叠态）
 let scrollKbToNew = false;         // v3.5.142 添加后滚动定位到新条目
@@ -5571,15 +5620,20 @@ function aiInit() {
   if (!Array.isArray(AI_HIST)) AI_HIST = [];
   loadKBLocal();
   loadAIHistLocal();
+  // v3.6.75 立即同步兜底：本地 KB 一加载完就检查，若 12 条详细穿衣规则全丢则马上补回本地，
+  // 让「打开 App」当下即可看到，不等云端拉取（异步链可能延迟/失败）。云同步就绪时 skipCloud=true，
+  // 不抢在云端拉取完成前把本地残缺 KB 推上云覆盖；拉取完成后下方 .then 会再跑一次幂等兜底。
+  try { restoreDressRules(false, isSyncReady()); } catch {}
   // v3.5.110 知识库自动双向同步家庭云：启动即拉取；云端为空而本地有内容时上推
   if (isSyncReady()) {
     loadKBCloud()
       .then(had => { if (!had && KB.length) return saveKBCloud(); })
-      .then(() => { seedAuthoritativeKB(); })   // v3.5.131 方案A：云端拉取完成后再投喂，避免与云端已有条目重复
-      .catch(() => { seedAuthoritativeKB(); });
+      .then(() => { seedAuthoritativeKB(); restoreDressRules(false); })   // v3.5.131 云端拉取完成后再投喂；v3.6.75 全量丢失兜底恢复详细穿衣规则
+      .catch(() => { seedAuthoritativeKB(); restoreDressRules(false); });
     // v3.5.137 历史对话已改为「仅本机、不共享」：不再读写家庭云
   } else {
     seedAuthoritativeKB();   // 未配置同步时也投喂（仅本机）
+    restoreDressRules(false);   // v3.6.75 未配置云同步时也兜底恢复（仅本机）
   }
   initScheduler();   // v3.5.132 启动定时任务调度（含天气地址云端恢复）
 }
@@ -6088,7 +6142,7 @@ const SCHED_WEATHER_MAX_RETRY = 4;       // v3.6.67 天气自愈：单日最多�
 // v3.6.40 升 13：新增【辅食第N天食谱推荐】规则（前后端逐字对齐 + 辅食按月龄食谱种子）。
 // 注意：prompt 内容变化时须前后端同步升级此版本号（服务端 PLAN_PROMPT_VERSION）。
 // 比较用数值单调语义（见 runScheduler staleVer）：云端版本更新时不本地回退重生成。
-const PLAN_PROMPT_VERSION = '17'; // v3.6.74 需求②：今日计划【起居护理·穿衣】改为「先逐条检索知识库穿衣条目 → 以登记的衣物名称/温度档为唯一准绳 → 正文写明知识库原句 → 严禁编造/泛称/通用常识替代 → 仅知识库完全无穿衣定义才兜底并注明」，删掉写死的示例衣物名（原「熊猫系带长袖长裤」等易被 AI 照抄成编造建议）。两侧（app.js/sched-push.mjs）逐字对齐；升版本触发当天已生成计划按新 prompt 重新生成（staleVer）。// v3.6.58 需求②：AI 今日计划按当前开启活动过滤（已关闭活动如读书不纳入统计与推荐）；ctx 新增 hiddenActivities 下发服务端。 把「风速/风级/防风」相关 KB 条目强制置顶、其余按预算截断，修复 v3.6.50 遗留真正根因——KB 前 50 条截断漏掉靠后风速规则（用户 KB 共 62 条、风速规则在 idx=53），导致「16km/h 仍归小风」。
+const PLAN_PROMPT_VERSION = '18'; // v3.6.75 需求①：知识库详细穿衣规则恢复后，升版本触发当天已生成计划按恢复后的完整知识库重新生成穿衣建议（staleVer）。// v3.6.74 需求②：今日计划【起居护理·穿衣】改为「先逐条检索知识库穿衣条目 → 以登记的衣物名称/温度档为唯一准绳 → 正文写明知识库原句 → 严禁编造/泛称/通用常识替代 → 仅知识库完全无穿衣定义才兜底并注明」，删掉写死的示例衣物名（原「熊猫系带长袖长裤」等易被 AI 照抄成编造建议）。两侧（app.js/sched-push.mjs）逐字对齐；升版本触发当天已生成计划按新 prompt 重新生成（staleVer）。// v3.6.58 需求②：AI 今日计划按当前开启活动过滤（已关闭活动如读书不纳入统计与推荐）；ctx 新增 hiddenActivities 下发服务端。 把「风速/风级/防风」相关 KB 条目强制置顶、其余按预算截断，修复 v3.6.50 遗留真正根因——KB 前 50 条截断漏掉靠后风速规则（用户 KB 共 62 条、风速规则在 idx=53），导致「16km/h 仍归小风」。
 let SCHED_TASKS = [];
 const _pad2 = n => String(n).padStart(2, '0');
 
@@ -9231,7 +9285,17 @@ async function loadKBCloud() {
       const json = await decrypt(key, rows[0].encrypted_data, rows[0].iv);
       const arr = JSON.parse(json);
       if (Array.isArray(arr) && arr.length) {
+        // v3.6.75 防篡改：云端若是残缺版（缺失本地已有的 12 条详细穿衣规则），先把本地受保护条目合并回来，
+        // 避免「云端无条件覆盖本地」把本地完整数据整体抹掉（本次知识库被篡改的扩散路径）。
+        let merged = 0;
+        try {
+          const cloudFp = new Set(arr.map(x => dressRuleFp(x && x.text)));
+          const keep = KB.filter(x => x && KB_DRESS_FP.has(dressRuleFp(x.text)) && !cloudFp.has(dressRuleFp(x.text)));
+          if (keep.length) { arr.push(...keep); merged = keep.length; }
+        } catch {}
         KB = arr; saveKBLocal();
+        // 自愈闭环：本地补回的条目即时回写云端，避免残缺云端继续拖累家里其他设备（下次打开又被覆盖回去）
+        if (merged && typeof saveKBCloud === 'function') { try { saveKBCloud().catch(() => {}); } catch {} }
         if (document.getElementById('aiOverlay')) { renderKb(); updateKbCntLine(); }
         return true;
       }
@@ -9401,26 +9465,41 @@ let _milestoneItems = [];
 let _milestoneExpanded = false;
 const MILESTONE_PREVIEW = 5;
 
-// ============ v3.5.105 里程碑徽章刷新频率控制：每 14 天凌晨 1 点窗口才刷新，其他时间沿用缓存 ============
+// ============ 里程碑徽章刷新频率控制：v3.6.75 起「每月 10 号、25 号各一次全量更新」，其他时间沿用缓存 ============
 const MS_BADGE_CACHE_KEY = 'ms_badge_cache';
 const MS_BADGE_LAST_KEY = 'ms_badge_last_update';
-// 是否到了「刷新徽章」的窗口：距上次刷新 >= 15 天，且当天已过凌晨 1 点（锚定刷新时刻，避免跨日午夜误触发）
+const MS_BADGE_PERIOD_KEY = 'ms_badge_last_period';   // v3.6.75 半月周期键去重（如 2026-11-10 / 2026-11-25）
+// v3.6.75 半月周期键：10 号（含）~24 号 → 本月 10 号期；25 号（含）~次月 9 号 → 本月/上月 25 号期。
+// 错过 10 号当天、11 号之后打开仍会补触发 10 号那一期；到 25 号进入 25 号那一期再触发一次；同一期只跑一次。
+function msBadgePeriodKey(now) {
+  const d = new Date(now || Date.now());
+  const y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+  if (day >= 25) return y + '-' + String(m).padStart(2, '0') + '-25';
+  if (day >= 10) return y + '-' + String(m).padStart(2, '0') + '-10';
+  const py = (m === 1) ? y - 1 : y, pm = (m === 1) ? 12 : m - 1;   // 1~9 号属于上月 25 号期
+  return py + '-' + String(pm).padStart(2, '0') + '-25';
+}
+// 是否到了「刷新徽章」的窗口：当前半月周期尚未全量刷新过，且当天已过凌晨 1 点（沿用业务日口径，避免跨日午夜误触发）
 function shouldRefreshMilestones(now) {
   now = now || Date.now();
-  const last = Number(localStorage.getItem(MS_BADGE_LAST_KEY) || 0);
-  if (now - last < 15 * 86400000) return false;   // 未到 15 天
   if (new Date(now).getHours() < 1) return false;  // 当天凌晨 1 点前不触发
+  const pk = msBadgePeriodKey(now);
+  if (localStorage.getItem(MS_BADGE_PERIOD_KEY) === pk) return false;   // 本期已全量刷新过
+  // 升级兼容：v3.6.74 及之前只写 MS_BADGE_LAST_KEY（时间戳），若上次刷新与当前同属一期，视为已刷新，避免升级后立刻重复调用大模型
+  const last = Number(localStorage.getItem(MS_BADGE_LAST_KEY) || 0);
+  if (!localStorage.getItem(MS_BADGE_PERIOD_KEY) && last && msBadgePeriodKey(last) === pk) return false;
   return true;
 }
-// v3.6.74 满 15 天全量刷新公共逻辑（后台自动刷新 / 打开分析页共用，避免两处各写一遍）：
-//   ① 先锚定 15 天刷新时刻并保存「全量重算的规则快照」——无论 AI 成败都算本次已刷新，
-//      避免 AI 异步期间用户离开 / 调用失败导致 15 天内反复触发；
+// v3.6.75 每月 10/25 号全量刷新公共逻辑（后台自动刷新 / 打开分析页共用，避免两处各写一遍）：
+//   ① 先锚定本半月周期并保存「全量重算的规则快照」——无论 AI 成败都算本期已刷新，
+//      避免 AI 异步期间用户离开 / 调用失败导致同一期内反复触发；
 //   ② 再真正调用 DeepSeek（enrichMilestonesWithLLM fullRefresh=true 绕过永久缓存），
 //      重新归类全部里程碑并刷新三大徽章标题（含已有 AI 概括的固化组）；
-//   ③ AI 成功后只更新缓存内容（updateAnchor=false），不把 15 天锚点推后几十秒。
+//   ③ AI 成功后只更新缓存内容（updateAnchor=false），不把周期锚点推后几十秒。
 // opts.skipRender=true：后台自动刷新用，不碰 DOM、不弹 toast；false/缺省：打开分析页用，AI 回来即时刷新徽章 DOM。
 function msRunFullRefresh(items, badges, opts) {
   opts = opts || {};
+  try { localStorage.setItem(MS_BADGE_PERIOD_KEY, msBadgePeriodKey(Date.now())); } catch {}   // v3.6.75 锚定本半月周期，保证每期只全量刷新一次
   saveMilestoneBadgeCache(items, badges);   // ① 锚定刷新时刻（此时锚=刷新开始，语义正确）
   const cfg = getAITagConfig();
   if (!cfg) return Promise.resolve({ items: items, badges: badges });
@@ -9431,10 +9510,10 @@ function msRunFullRefresh(items, badges, opts) {
       return { items: items, badges: badges };
     });
 }
-// v3.6.74 「每隔 15 天调用 DeepSeek 更新徽章」不再依赖用户恰好打开分析页：
+// v3.6.75 「每月 10 号、25 号调用大模型 API 全部更新一次」不再依赖用户恰好打开分析页：
 // 启动后延迟 8 秒（等家庭云同步把记录拉下来）检查，到点且本地已有里程碑记录时后台全量重算 + 真实调用 DeepSeek，
 // 只更新缓存（skipRender=true：不碰 DOM / 不弹 toast），用户下次打开分析页即看到新徽章。
-// 锚点（saveMilestoneBadgeCache 刷新 MS_BADGE_LAST_KEY）+ 延迟内二次 shouldRefreshMilestones 检查保证 15 天只跑一次、
+// 周期锚点（MS_BADGE_PERIOD_KEY）+ 延迟内二次 shouldRefreshMilestones 检查保证每期只跑一次、
 // 也不会与用户在这 8 秒内打开分析页触发的刷新重复。
 // 本地无里程碑记录（如新设备云同步尚未完成）时不刷新、不锚定，避免按空数据把徽章固化成「待解锁」。
 function msAutoRefreshIfDue() {
@@ -9453,7 +9532,7 @@ function msAutoRefreshIfDue() {
 }
 // 把当前里程碑分类结果（含 AI/规则 domain 与 label）缓存到本地，并刷新「上次刷新时间」
 // v3.6.29 增加 badges 参数：三大徽章的固化快照（一旦确定不再随周期刷新而改变）
-// v3.6.74 增加可选 updateAnchor=false：AI 成功后只更新缓存内容、不推后 15 天刷新锚（锚应在刷新开始时就固定）；
+// v3.6.74 增加可选 updateAnchor=false：AI 成功后只更新缓存内容、不推后刷新锚（锚应在刷新开始时就固定）；
 // 不传或传 true 保持原行为（写缓存 + 刷新锚），兼容期内补救 / 格式升级等所有既有调用方。
 function saveMilestoneBadgeCache(items, badges, updateAnchor) {
   try {
