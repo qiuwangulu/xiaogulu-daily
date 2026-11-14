@@ -1560,7 +1560,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.75';
+const APP_VERSION = 'v3.6.76';
 // v3.6.75: 两项——①用户反馈「知识库被篡改，之前写的非常详细的穿衣规则没有了，需要立即恢复」：
 //   诊断：云端 _ai_kb 被覆盖成只剩 20 条系统种子，用户手工粘贴的 12 条详细穿衣/户外/洗澡/室温推算规则全丢；
 //   扩散路径是 loadKBCloud() 云端无条件覆盖本地（KB = arr），残缺云端会把所有设备同步成残缺版。
@@ -1697,17 +1697,13 @@ function sfCloseAllPanels() {
   const ps = document.querySelectorAll('.sf-panel');
   for (let i = 0; i < ps.length; i++) ps[i].style.display = 'none';
 }
-function sfTogglePanel(p, id) {
-  const panel = document.getElementById(`${p}panel_${id}`);
+// v3.6.76 抽出定位逻辑：供「打开」与「页面/弹窗滚动时重新定位」复用。
+// 面板虽为 position:fixed，DOM 上仍是 .sf-select 子元素，用 closest 拿触发框即可按视口坐标定位，
+// 彻底避开 .modal-box(overflow:auto) 对下拉的裁切（v3.6.66 修复点）。
+function sfPositionPanel(panel) {
   if (!panel) return;
-  const willOpen = (panel.style.display === 'none' || panel.style.display === '');
-  sfCloseAllPanels();
-  if (!willOpen) return;
-  panel.style.display = '';
-  sfRenderList(p, id);
-  // v3.6.66 固定定位 + 触发框视口坐标，彻底避开 .modal-box(overflow:auto) 对下拉的裁切（显示不全）
   try {
-    const sel = document.getElementById(`${p}sel_${id}`);
+    const sel = (panel.closest && panel.closest('.sf-select')) || panel.parentNode;
     const rect = (sel && sel.getBoundingClientRect) ? sel.getBoundingClientRect() : null;
     const vh = (typeof window !== 'undefined' && window.innerHeight) || 0;
     const vw = (typeof window !== 'undefined' && window.innerWidth) || 0;
@@ -1718,7 +1714,7 @@ function sfTogglePanel(p, id) {
       let top = (downSpace < panelH && upSpace > downSpace)
         ? rect.top - panelH                                 // 下方不足且上方更宽 → 向上展开
         : rect.bottom + 4;                                  // 否则向下展开
-      // v3.6.66 兜底：无论向上/向下，都保证面板完整落在视口内（不超出顶/底，避免仍被截掉）
+      // 无论向上/向下，都保证面板完整落在视口内（不超出顶/底，避免仍被截掉）
       if (top < 4) top = 4;
       if (top + panelH > vh - 4) top = Math.max(4, vh - 4 - panelH);
       let left = rect.left;
@@ -1736,6 +1732,30 @@ function sfTogglePanel(p, id) {
   } catch (e) {
     panel.style.left = '0px'; panel.style.top = '0px'; panel.style.width = '100%';
     panel.style.right = 'auto'; panel.style.bottom = 'auto';
+  }
+}
+function sfTogglePanel(p, id) {
+  const panel = document.getElementById(`${p}panel_${id}`);
+  if (!panel) return;
+  const willOpen = (panel.style.display === 'none' || panel.style.display === '');
+  sfCloseAllPanels();
+  if (!willOpen) return;
+  panel.style.display = '';
+  sfRenderList(p, id);
+  sfPositionPanel(panel);
+}
+// v3.6.76 滚动时不再「一滚就关」，改为重新定位固定面板，避免与触发框错位；
+// 仅当触发框已完全滚出视口时才关闭（此时面板留着已无意义）。
+function sfRepositionOpenPanels() {
+  const ps = document.querySelectorAll('.sf-panel');
+  const vh = (typeof window !== 'undefined' && window.innerHeight) || 0;
+  for (let i = 0; i < ps.length; i++) {
+    const pn = ps[i];
+    if (pn.style.display === 'none') continue;
+    const sel = (pn.closest && pn.closest('.sf-select')) || pn.parentNode;
+    const rect = (sel && sel.getBoundingClientRect) ? sel.getBoundingClientRect() : null;
+    if (rect && vh && (rect.bottom < 0 || rect.top > vh)) { pn.style.display = 'none'; continue; }
+    sfPositionPanel(pn);
   }
 }
 function sfFilter(p, id, val) {
@@ -1763,13 +1783,26 @@ function sfAddNew(p, id, name) {
 function _sfOutsideClose(e) {
   if (!e) return;
   const t = e.target;
-  if (t && t.closest && t.closest('.sf-select')) return;   // 下拉内部：不关
+  // v3.6.76 同时认 .sf-panel：固定定位面板即便将来被移出 .sf-select，内部点击/触摸也不会误关
+  if (t && t.closest && (t.closest('.sf-select') || t.closest('.sf-panel'))) return;
   sfCloseAllPanels();
 }
 document.addEventListener('click', _sfOutsideClose);
 document.addEventListener('touchstart', _sfOutsideClose, { passive: true });
-// v3.6.66 弹窗（.modal-box）滚动时关闭固定定位的下拉，避免面板与触发框错位（fixed 不再随弹窗滚动）
-document.addEventListener('scroll', () => { try { sfCloseAllPanels(); } catch (e) {} }, true);
+// v3.6.76 修复「无法向下滑动 / 无法输入食物名搜索，下拉会自动关掉」：
+// 旧实现用 capture 监听任意 scroll 就 sfCloseAllPanels()，把「下拉列表自身滚动」和
+// 「搜索框聚焦时软键盘弹起引发的页面/弹窗滚动」都误判成弹窗滚动，导致一滑/一输入面板就没了。
+// 现在：① 面板内部滚动（列表滑动、搜索重排）与搜索输入期间 → 保持打开；
+//      ② 其余滚动 → 只重新定位面板，不再关闭（仍避免 fixed 错位）；
+//      ③ 触发框滚出视口 → 由 sfRepositionOpenPanels 关闭。
+function _sfScrollGuard(e) {
+  const t = e && e.target;
+  if (t && t.closest && t.closest('.sf-panel')) return;
+  const ae = document.activeElement;
+  if (ae && ae.closest && ae.closest('.sf-search')) return;
+  try { sfRepositionOpenPanels(); } catch (err) {}
+}
+document.addEventListener('scroll', _sfScrollGuard, true);
 // iOS 事件委托兜底：让 body 具备可点击性，click 才会冒泡到 document
 if (document.body && !document.body.hasAttribute('onclick')) {
   document.body.setAttribute('onclick', 'void(0)');
