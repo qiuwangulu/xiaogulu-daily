@@ -1542,7 +1542,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.80';
+const APP_VERSION = 'v3.6.81';
 // v3.6.75: 两项——①用户反馈「知识库被篡改，之前写的非常详细的穿衣规则没有了，需要立即恢复」：
 //   诊断：云端 _ai_kb 被覆盖成只剩 20 条系统种子，用户手工粘贴的 12 条详细穿衣/户外/洗澡/室温推算规则全丢；
 //   扩散路径是 loadKBCloud() 云端无条件覆盖本地（KB = arr），残缺云端会把所有设备同步成残缺版。
@@ -10131,6 +10131,11 @@ let _sfFoodDays = {};         // { 食物名: 尝试天数 }（按日期去重�
 let _sfAbnormalNote = {};     // { 食物名: { date, note } } 取该食物最近一次「异常」记录
 let _sfLatestFoods = [];      // 最近一次辅食记录里的食物名数组
 const SF_PREVIEW = 5;
+// v3.6.81：辅食情况图「时间轴 / 日历」双模式 + 日历选中日期详情
+let _sfViewMode = 'timeline';       // 'timeline'（默认，保留原样） | 'calendar'
+let _sfCalYear = 0, _sfCalMonth = 0; // 日历当前显示年月（month 0-based）；0 表示尚未初始化
+let _sfCalSelected = '';            // 日历选中的日期 YYYY-MM-DD
+let _sfByDate = {};                 // { 'YYYY-MM-DD': [record, ...] } 按日期分组，供日历格与详情使用
 
 function renderSfTimeline() {
   const groups = _sfGroups;
@@ -10237,9 +10242,18 @@ function makeSolidFoodAnalysis() {
     _sfAbnormalNote = _stats.abnormalNote;
     _sfLatestFoods = _stats.latestFoods;
   } catch (e) { _sfFoodDays = {}; _sfAbnormalNote = {}; _sfLatestFoods = []; }
+  // v3.6.81：按日期聚合记录（records 已按日期倒序），供日历格与「点击某天详情」使用
+  _sfByDate = {};
+  records.forEach(r => { (_sfByDate[r.date] = _sfByDate[r.date] || []).push(r); });
+  // v3.6.81：日历默认定位到「最近一次有辅食记录的年月」并选中该日，保证打开即可看到内容
+  if (!_sfCalYear && records.length) {
+    const _lt = records[0].date.split('-');
+    _sfCalYear = parseInt(_lt[0], 10); _sfCalMonth = parseInt(_lt[1], 10) - 1;
+    _sfCalSelected = records[0].date;
+  }
   const nowAge = getAgeDetail(getTodayDateStr());
   const stat = `<div class="ms-stat">当前 ${nowAge.months}月龄${nowAge.days > 0 ? nowAge.days + '天' : ''} · 共尝试 ${triedCount} 种 · 异常 ${abnormalCount} 种</div>`;
-  // v3.6.79：圆环上方显示「最近一次记录的食物 + 各自尝试天数」
+  // v3.6.81：最近一次记录「上移到月龄(stat)下方、去外框」——从圆环内搬出，紧跟在 stat 之后
   const latestHead = (_sfLatestFoods.length)
     ? `<div class="sf-latest">` +
       `<div class="sf-latest-title">🕒 最近一次记录</div>` +
@@ -10261,24 +10275,29 @@ function makeSolidFoodAnalysis() {
   const abArc = abnormalCount > 0
     ? `<circle cx="100" cy="100" r="70" stroke="#ff7675" stroke-dasharray="${dash(segAb)}" stroke-dashoffset="0" stroke-linecap="round"/>`
     : '';
+  // v3.6.81：异常食物 chips 从圆环上方「移入圆环内」，放在圆环中央数字下方（有异常才渲染）
+  const abnormalInRing = abnormalCount > 0
+    ? `<div class="sf-abnormal">` + [...abnormal].map(f => `<span class="sf-ab-chip">${String(f).replace(/</g, '&lt;')}</span>`).join('') + `</div>`
+    : '';
   const ring = `<div class="sf-ring-wrap" onclick="toggleSfFoods()" title="点击查看已尝试的食物">` +
-    `<div class="sf-abnormal">` + [...abnormal].map(f => `<span class="sf-ab-chip">${String(f).replace(/</g, '&lt;')}</span>`).join('') + `</div>` +
-    latestHead +
-    `<svg class="sf-donut" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">` +
-      `<g transform="rotate(-90 100 100)" fill="none" stroke-width="22">` +
-        `<circle class="sf-arc-un" cx="100" cy="100" r="70" stroke-dasharray="${dash(segUn)}" stroke-dashoffset="${(-(segAb + segNo)).toFixed(2)}"/>` +
-        `<circle cx="100" cy="100" r="70" stroke="#2ecc71" stroke-dasharray="${dash(segNo)}" stroke-dashoffset="${(-segAb).toFixed(2)}" stroke-linecap="round"/>` +
-        abArc +
-      `</g>` +
-      `<text class="sf-center-num" x="100" y="98" text-anchor="middle">${triedCount}/${totalFoods}</text>` +
-      `<text class="sf-center-lab" x="100" y="116" text-anchor="middle">已尝试/总数</text>` +
-    `</svg>` +
+    `<div class="sf-donut-stage">` +
+      `<svg class="sf-donut" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">` +
+        `<g transform="rotate(-90 100 100)" fill="none" stroke-width="22">` +
+          `<circle class="sf-arc-un" cx="100" cy="100" r="70" stroke-dasharray="${dash(segUn)}" stroke-dashoffset="${(-(segAb + segNo)).toFixed(2)}"/>` +
+          `<circle cx="100" cy="100" r="70" stroke="#2ecc71" stroke-dasharray="${dash(segNo)}" stroke-dashoffset="${(-segAb).toFixed(2)}" stroke-linecap="round"/>` +
+          abArc +
+        `</g>` +
+        `<text class="sf-center-num" x="100" y="92" text-anchor="middle">${triedCount}/${totalFoods}</text>` +
+        `<text class="sf-center-lab" x="100" y="110" text-anchor="middle">已尝试/总数</text>` +
+      `</svg>` +
+      abnormalInRing +
+    `</div>` +
     `<div class="sf-ring-hint">👆 点击圆环查看食物</div>` +
     `<div class="sf-legend"><span><i class="sf-lg-ab"></i>异常</span><span><i class="sf-lg-no"></i>正常</span><span><i class="sf-lg-un"></i>未尝试</span></div>` +
     `<div class="sf-foods" id="sfFoodsPanel" style="display:none"></div>` +
   `</div>`;
 
-  // 时间轴（与成长里程碑样式一致）
+  // 时间轴（与成长里程碑样式一致）——保留原时间轴模式
   _sfGroups = [];
   for (const r of records) {
     const g = _sfGroups[_sfGroups.length - 1];
@@ -10287,7 +10306,124 @@ function makeSolidFoodAnalysis() {
   }
   const tl = `<div class="ms-timeline" id="sfTimeline">${renderSfTimeline()}</div>`;
 
-  return head + stat + ring + tl + `</div>`;
+  // v3.6.81：时间轴 / 日历 双模式切换（保留时间轴模式，新增日历模式）
+  const viewTabs = `<div class="sf-view-tabs">` +
+    `<span class="sf-view-tab${_sfViewMode === 'timeline' ? ' active' : ''}" data-mode="timeline" onclick="sfSwitchView('timeline')">📋 时间轴</span>` +
+    `<span class="sf-view-tab${_sfViewMode === 'calendar' ? ' active' : ''}" data-mode="calendar" onclick="sfSwitchView('calendar')">📅 日历</span>` +
+    `</div>`;
+  const viewBody = `<div class="sf-view-body">` +
+    `<div id="sfViewTimeline" style="${_sfViewMode === 'timeline' ? '' : 'display:none'}">${tl}</div>` +
+    `<div id="sfViewCalendar" style="${_sfViewMode === 'calendar' ? '' : 'display:none'}">${renderSfCalendar()}</div>` +
+    `</div>`;
+
+  // v3.6.81 顺序：月龄(stat) → 最近一次记录(latestHead，去外框) → 圆环 → 视图切换 → 时间轴/日历
+  return head + stat + latestHead + ring + viewTabs + viewBody + `</div>`;
+}
+
+/* ============ v3.6.81：辅食「时间轴 / 日历」双模式 ============ */
+// 切换视图模式：只切换两块容器的显隐与 tab 高亮，不改数据、不动今日计划
+function sfSwitchView(mode) {
+  _sfViewMode = (mode === 'calendar') ? 'calendar' : 'timeline';
+  const card = document.querySelector('.sf-view-tabs');
+  if (card) {
+    card.querySelectorAll('.sf-view-tab').forEach(t => {
+      t.classList.toggle('active', t.getAttribute('data-mode') === _sfViewMode);
+    });
+  }
+  const tlBox = document.getElementById('sfViewTimeline');
+  const calBox = document.getElementById('sfViewCalendar');
+  if (tlBox) tlBox.style.display = (_sfViewMode === 'timeline') ? '' : 'none';
+  if (calBox) calBox.style.display = (_sfViewMode === 'calendar') ? '' : 'none';
+}
+
+// 日历上/下月翻页
+function sfCalNav(delta) {
+  _sfCalMonth += delta;
+  if (_sfCalMonth < 0) { _sfCalMonth = 11; _sfCalYear--; }
+  if (_sfCalMonth > 11) { _sfCalMonth = 0; _sfCalYear++; }
+  const box = document.getElementById('sfViewCalendar');
+  if (box) box.innerHTML = renderSfCalendar();
+}
+
+// 点击日历某一天：选中并刷新日历（下方详情随之更新）
+function sfCalPickDay(key) {
+  _sfCalSelected = key;
+  const box = document.getElementById('sfViewCalendar');
+  if (box) box.innerHTML = renderSfCalendar();
+}
+
+// 渲染日历：显示所选年月的每一天 + 当天食物名称；点击日期在下方显示 月龄/食物/正常或异常/辅食量/备注
+function renderSfCalendar() {
+  const y = _sfCalYear, m = _sfCalMonth;
+  const ymPrefix = `${y}-${String(m + 1).padStart(2, '0')}-`;
+  const firstDow = (new Date(y, m, 1).getDay() + 6) % 7; // 周一开头
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const prevDays = new Date(y, m, 0).getDate();
+  const wd = ['一', '二', '三', '四', '五', '六', '日'];
+  let html = `<div class="sf-cal">` +
+    `<div class="sf-cal-head">` +
+      `<span class="sf-cal-nav" onclick="sfCalNav(-1)">‹</span>` +
+      `<span class="sf-cal-ym">${y} 年 ${m + 1} 月</span>` +
+      `<span class="sf-cal-nav" onclick="sfCalNav(1)">›</span>` +
+    `</div>` +
+    `<div class="sf-cal-week">` + wd.map(w => `<span>${w}</span>`).join('') + `</div>` +
+    `<div class="sf-cal-grid">`;
+  // 上月尾部补齐
+  for (let i = firstDow - 1; i >= 0; i--) {
+    html += `<div class="sf-cal-cell out">${prevDays - i}</div>`;
+  }
+  // 本月每一天
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = ymPrefix + String(d).padStart(2, '0');
+    const recs = _sfByDate[key] || [];
+    const foods = [], hasBad = recs.some(r => r.afterMeal === '异常');
+    recs.forEach(r => r.foods.forEach(f => { if (foods.indexOf(f) < 0) foods.push(f); }));
+    const cls = ['sf-cal-cell'];
+    if (recs.length) cls.push('has');
+    if (hasBad) cls.push('bad');
+    if (key === _sfCalSelected) cls.push('sel');
+    const foodTxt = foods.map(f => foodIcon(f) + String(f).replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('、');
+    html += `<div class="${cls.join(' ')}" onclick="sfCalPickDay('${key}')">` +
+      `<span class="sf-cal-d">${d}</span>` +
+      (foodTxt ? `<span class="sf-cal-food">${foodTxt}</span>` : '') +
+      `</div>`;
+  }
+  // 下月头部补齐到 42 格（6 行 × 7）
+  const total = firstDow + daysInMonth;
+  const fill = (7 - (total % 7)) % 7;
+  for (let d = 1; d <= fill; d++) html += `<div class="sf-cal-cell out">${d}</div>`;
+  html += `</div>`; // /.sf-cal-grid
+  // 点击某天下方的详情
+  html += `<div class="sf-cal-detail">` + renderSfCalDetail() + `</div>`;
+  html += `</div>`; // /.sf-cal
+
+  return html;
+}
+
+// 渲染「选中某天」详情：月龄 / 食物 / 正常或异常 / 辅食量 / 备注
+function renderSfCalDetail() {
+  const key = _sfCalSelected;
+  const recs = key ? (_sfByDate[key] || []) : [];
+  if (!recs.length) {
+    return `<div class="sf-cal-detail-empty">点击上方日期，查看当天的月龄、食物、饭后情况、辅食量与备注</div>`;
+  }
+  const ad = getAgeDetail(key);
+  const ageLabel = `${ad.months}月龄${ad.days > 0 ? ad.days + '天' : ''}`;
+  let rows = `<div class="sf-cal-detail-head">📅 ${key} · ${ageLabel}</div>`;
+  recs.forEach(r => {
+    const bad = r.afterMeal === '异常';
+    const fnames = r.foods.map(f => foodIcon(f) + String(f).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')).join('、');
+    const amt = r.amount > 0 ? r.amount + 'g' : '—';
+    const note = String(r.note || '').trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    rows += `<div class="sf-cal-detail-row" style="border-left-color:${bad ? '#ff7675' : '#74b9ff'}">` +
+      `<div class="sf-cal-detail-fd">${fnames}` +
+        `<span class="sf-cal-detail-status${bad ? ' bad' : ''}">${r.afterMeal}</span>` +
+        `<span class="sf-cal-detail-amt">辅食量 ${amt}</span>` +
+      `</div>` +
+      (note ? `<div class="sf-cal-detail-note">备注：${note}</div>` : '') +
+      `</div>`;
+  });
+  return rows;
 }
 
 function openAnalysis() {
