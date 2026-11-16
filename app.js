@@ -1542,7 +1542,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.81';
+const APP_VERSION = 'v3.6.82';
 // v3.6.75: 两项——①用户反馈「知识库被篡改，之前写的非常详细的穿衣规则没有了，需要立即恢复」：
 //   诊断：云端 _ai_kb 被覆盖成只剩 20 条系统种子，用户手工粘贴的 12 条详细穿衣/户外/洗澡/室温推算规则全丢；
 //   扩散路径是 loadKBCloud() 云端无条件覆盖本地（KB = arr），残缺云端会把所有设备同步成残缺版。
@@ -10253,15 +10253,13 @@ function makeSolidFoodAnalysis() {
   }
   const nowAge = getAgeDetail(getTodayDateStr());
   const stat = `<div class="ms-stat">当前 ${nowAge.months}月龄${nowAge.days > 0 ? nowAge.days + '天' : ''} · 共尝试 ${triedCount} 种 · 异常 ${abnormalCount} 种</div>`;
-  // v3.6.81：最近一次记录「上移到月龄(stat)下方、去外框」——从圆环内搬出，紧跟在 stat 之后
+  // v3.6.82：最近一次记录「去掉标题文字与图标」，仅保留每种食物名称 + 已吃天数（紧跟 stat 之后、去外框）
   const latestHead = (_sfLatestFoods.length)
     ? `<div class="sf-latest">` +
-      `<div class="sf-latest-title">🕒 最近一次记录</div>` +
       `<div class="sf-latest-list">` + _sfLatestFoods.map(f => {
-        const ic = foodIcon(f);
         const nm = String(f).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const d = _sfFoodDays[f] || 0;
-        return `<span class="sf-latest-chip">${ic} ${nm}<b>已吃 ${d} 天</b></span>`;
+        return `<span class="sf-latest-chip">${nm}<b>已吃 ${d} 天</b></span>`;
       }).join('') + `</div></div>`
     : '';
 
