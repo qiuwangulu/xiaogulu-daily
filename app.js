@@ -1560,7 +1560,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.77';
+const APP_VERSION = 'v3.6.78';
 // v3.6.75: 两项——①用户反馈「知识库被篡改，之前写的非常详细的穿衣规则没有了，需要立即恢复」：
 //   诊断：云端 _ai_kb 被覆盖成只剩 20 条系统种子，用户手工粘贴的 12 条详细穿衣/户外/洗澡/室温推算规则全丢；
 //   扩散路径是 loadKBCloud() 云端无条件覆盖本地（KB = arr），残缺云端会把所有设备同步成残缺版。
@@ -3964,7 +3964,7 @@ const HK_PERSONS = [
   { id: 'hourly', name: '钟点工', icon: '🧹' },
   { id: 'nanny',  name: '育儿嫂', icon: '👩' }
 ];
-function hkDefaultPerson() { return { on: true, startDate: '', endDate: '', vac: {} }; }
+function hkDefaultPerson() { return { on: true, startDate: '', endDate: '', vac: {}, onAt: 0 }; } // v3.6.78 onAt=「是否上户」最后一次切换时间(ms)，供云端同步按最新记录合并
 function hkDefault() { return { hourly: hkDefaultPerson(), nanny: hkDefaultPerson() }; }
 // 旧平铺日期数组 → vac { date: 1 }（全天）
 function hkVacFromList(list) {
@@ -3976,6 +3976,9 @@ function hkPersonDef(v) {
   const p0 = hkDefaultPerson();
   if (v && typeof v === 'object') {
     p0.on = v.on !== false;                                  // 缺省=开启（默认上户中）
+    // v3.6.78：解析「是否上户」最后切换时间，兼容数字/数字字符串/缺失(旧数据=0)
+    p0.onAt = (typeof v.onAt === 'number' && isFinite(v.onAt)) ? v.onAt
+            : ((typeof v.onAt === 'string' && /^\d+$/.test(v.onAt)) ? Number(v.onAt) : 0);
     if (typeof v.startDate === 'string') p0.startDate = v.startDate;
     if (typeof v.endDate === 'string') p0.endDate = v.endDate;
     if (v.vac && typeof v.vac === 'object' && !Array.isArray(v.vac)) {
@@ -4194,6 +4197,7 @@ function hkToggle(id) {
   const hk = getHousekeeper();
   const p0 = hk[id]; if (!p0) return;
   p0.on = !p0.on;
+  p0.onAt = Date.now();                // v3.6.78 记录本次切换时间，供云端同步判定「最新一次记录」
   if (p0.on) p0.endDate = '';          // 重新上户：清掉下户日期，工作时间回到「1号至今/整月」口径
   saveHousekeeper(hk);
   const meta = HK_PERSONS.find(p => p.id === id);
@@ -4331,10 +4335,25 @@ async function loadHousekeeperCloud() {
         HK_PERSONS.forEach(p => {
           const rp = hkPersonDef(remote[p.id]);
           const lp = hk[p.id];
+          // 休假日期仍按原口径并集合并（本地优先 + 云端补缺）
           Object.keys(rp.vac).forEach(d => { if (!(d in lp.vac)) lp.vac[d] = rp.vac[d]; });
-          if (rp.startDate && !lp.startDate) lp.startDate = rp.startDate;
-          if (rp.endDate && !lp.endDate) lp.endDate = rp.endDate;
-          lp.on = lp.on && rp.on;   // 任一端标记已下户 → 合并为已下户（保守：避免给已下户的人多算工时）
+          // v3.6.78 修复「育儿嫂开关昨天开启、今天启动后自动被关」：
+          // 旧逻辑 lp.on = lp.on && rp.on 只要云端残留一个旧的 on=false，就会把本地刚开启的 on=true 关掉。
+          // 现按 onAt（最后一次切换上户/下户的时间）取「最新一次记录」（last-write-wins）。
+          const lo = Number(lp.onAt) || 0, ro = Number(rp.onAt) || 0;
+          if (ro > lo) {
+            // 云端那次切换更新 → 采信云端的 on 及其上/下户日期
+            lp.on = rp.on;
+            lp.onAt = ro;
+            lp.startDate = rp.startDate;
+            lp.endDate = rp.endDate;
+          } else {
+            // 本地相同或更新 → 保留本地 on（旧数据两端 onAt 均为 0 时本地优先，直接解决当前投诉：
+            // 昨天在本地开启的状态不再被云端旧值覆盖）。同时避免重新上户后云端残留的旧 endDate 回填，
+            // 造成「上户中却仍带着下户日期」的矛盾状态。
+            if (!lp.startDate && rp.startDate) lp.startDate = rp.startDate;
+            if (!lp.endDate && rp.endDate && ro >= lo) lp.endDate = rp.endDate;
+          }
         });
         saveHousekeeper(hk);
         return true;
