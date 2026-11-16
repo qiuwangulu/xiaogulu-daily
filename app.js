@@ -518,24 +518,6 @@ function getMilkInterval() {
   return (h >= 5 && h < 19) ? 3 : 5;
 }
 
-function getSupplementSuggestion() {
-  const allKeys = [];
-  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('records_')) allKeys.push(k); }
-  allKeys.sort().reverse();
-  for (const k of allKeys) {
-    let recs = []; try { recs = JSON.parse(localStorage.getItem(k) || '[]'); } catch { continue; }
-    if (!Array.isArray(recs)) continue; // 防止脏数据导致 "recs is not iterable"
-    for (const r of recs) {
-      if (r.type === 'supplement' && r.supplementTypes) {
-        if (r.supplementTypes.includes('AD') && !r.supplementTypes.includes('D3')) return 'D3';
-        if (r.supplementTypes.includes('D3') && !r.supplementTypes.includes('AD')) return 'AD';
-        return 'AD';
-      }
-    }
-  }
-  return 'AD';
-}
-
 /* ==================== 成就计算与订阅推送(PushPlus) ==================== */
 function computeAchievements(records) {
   const achievements = new Set();
@@ -1560,7 +1542,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.79';
+const APP_VERSION = 'v3.6.80';
 // v3.6.75: 两项——①用户反馈「知识库被篡改，之前写的非常详细的穿衣规则没有了，需要立即恢复」：
 //   诊断：云端 _ai_kb 被覆盖成只剩 20 条系统种子，用户手工粘贴的 12 条详细穿衣/户外/洗澡/室温推算规则全丢；
 //   扩散路径是 loadKBCloud() 云端无条件覆盖本地（KB = arr），残缺云端会把所有设备同步成残缺版。
@@ -1859,9 +1841,8 @@ function renderAddList(filterText) {
       let po = ''; POOP_STATUS.forEach(ps => { po += `<label><input type="radio" name="adpoop_${act.id}" value="${ps.value}" ${ps.value==='正常'?'checked':''}> <span class="poop-icon ${ps.cls}">${ps.icon}</span>${ps.label}</label>`; });
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row radio-group">${po}</div>`;
     } else if (act.type === 'supplement') {
-      const sug = getSupplementSuggestion();
-      const dow = new Date().getDay(), isMWF = (dow===1||dow===3||dow===5);
-      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group"><label><input type="checkbox" name="adsup_${act.id}" value="AD" ${isMWF?'checked':''}> AD</label><label><input type="checkbox" name="adsup_${act.id}" value="D3"> D3</label></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">用量:</label><input type="number" step="1" min="1" id="adinp_${act.id}" value="1"><span class="unit">粒</span></div><div class="hint-text">建议选${sug}（与上次不同）</div>`;
+      // v3.6.80 补剂完全以知识库为准：不再按周一/三/五默认勾选 AD，也不再显示「与上次不同」轮换提示；种类由家长按知识库自行勾选
+      inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${String(new Date().getHours()).padStart(2,'0')}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${String(new Date().getMinutes()).padStart(2,'0')}"></div></div><div class="input-row checkbox-group"><label><input type="checkbox" name="adsup_${act.id}" value="AD"> AD</label><label><input type="checkbox" name="adsup_${act.id}" value="D3"> D3</label></div><div class="input-row"><label style="font-size:14px;color:#b2bec3;">用量:</label><input type="number" step="1" min="1" id="adinp_${act.id}" value="1"><span class="unit">粒</span></div><div class="hint-text">补剂种类/剂量以家庭知识库登记为准</div>`;
     } else if (act.type === 'solidFood') {
       // v3.5.74 辅食：开始时间 + 食物（可搜索多选下拉）+ 克数 + 饭后正常/异常
       const _sh = String(new Date().getHours()).padStart(2,'0'), _sm = String(new Date().getMinutes()).padStart(2,'0');
@@ -6312,7 +6293,7 @@ const SCHED_WEATHER_MAX_RETRY = 4;       // v3.6.67 天气自愈：单日最多�
 // v3.6.40 升 13：新增【辅食第N天食谱推荐】规则（前后端逐字对齐 + 辅食按月龄食谱种子）。
 // 注意：prompt 内容变化时须前后端同步升级此版本号（服务端 PLAN_PROMPT_VERSION）。
 // 比较用数值单调语义（见 runScheduler staleVer）：云端版本更新时不本地回退重生成。
-const PLAN_PROMPT_VERSION = '18'; // v3.6.75 需求①：知识库详细穿衣规则恢复后，升版本触发当天已生成计划按恢复后的完整知识库重新生成穿衣建议（staleVer）。// v3.6.74 需求②：今日计划【起居护理·穿衣】改为「先逐条检索知识库穿衣条目 → 以登记的衣物名称/温度档为唯一准绳 → 正文写明知识库原句 → 严禁编造/泛称/通用常识替代 → 仅知识库完全无穿衣定义才兜底并注明」，删掉写死的示例衣物名（原「熊猫系带长袖长裤」等易被 AI 照抄成编造建议）。两侧（app.js/sched-push.mjs）逐字对齐；升版本触发当天已生成计划按新 prompt 重新生成（staleVer）。// v3.6.58 需求②：AI 今日计划按当前开启活动过滤（已关闭活动如读书不纳入统计与推荐）；ctx 新增 hiddenActivities 下发服务端。 把「风速/风级/防风」相关 KB 条目强制置顶、其余按预算截断，修复 v3.6.50 遗留真正根因——KB 前 50 条截断漏掉靠后风速规则（用户 KB 共 62 条、风速规则在 idx=53），导致「16km/h 仍归小风」。
+const PLAN_PROMPT_VERSION = '19'; // v3.6.80 需求：营养补剂改为「完全以知识库为准」——删除写死的周一/三/五补剂日与非补剂日「今日无需补剂」、删除 AD/D3「与上次相反」轮换，改为让 AI 先在家庭知识库检索补剂条目并按知识库原句输出；两侧（app.js/sched-push.mjs）逐字对齐，升版本触发当天已生成计划按新 prompt 重生成（staleVer）。// v3.6.75 需求①：知识库详细穿衣规则恢复后，升版本触发当天已生成计划按恢复后的完整知识库重新生成穿衣建议（staleVer）。// v3.6.74 需求②：今日计划【起居护理·穿衣】改为「先逐条检索知识库穿衣条目 → 以登记的衣物名称/温度档为唯一准绳 → 正文写明知识库原句 → 严禁编造/泛称/通用常识替代 → 仅知识库完全无穿衣定义才兜底并注明」，删掉写死的示例衣物名（原「熊猫系带长袖长裤」等易被 AI 照抄成编造建议）。两侧（app.js/sched-push.mjs）逐字对齐；升版本触发当天已生成计划按新 prompt 重新生成（staleVer）。// v3.6.58 需求②：AI 今日计划按当前开启活动过滤（已关闭活动如读书不纳入统计与推荐）；ctx 新增 hiddenActivities 下发服务端。 把「风速/风级/防风」相关 KB 条目强制置顶、其余按预算截断，修复 v3.6.50 遗留真正根因——KB 前 50 条截断漏掉靠后风速规则（用户 KB 共 62 条、风速规则在 idx=53），导致「16km/h 仍归小风」。
 let SCHED_TASKS = [];
 const _pad2 = n => String(n).padStart(2, '0');
 
@@ -8578,10 +8559,9 @@ function buildPlanSystemPrompt(dateStr, wText, stats, sfStreak) {
   // 防御：历史调用方第 4 参可能传非对象（如旧测试传的 'D3'），非对象按未传处理。
   const _sf = (sfStreak && typeof sfStreak === 'object' && !Array.isArray(sfStreak)) ? sfStreak : null;
   const sfDay = (_sf && _sf.streak > 0) ? (_sf.streak + 1) : 0;
-  // v3.6.0 目标日星期（营养补剂 M/W/F 判定）与生成日当天早教/大便/辅食统计
+  // v3.6.80 营养补剂改为「完全以知识库为准」：不再写死周一/三/五补剂日，不再做 AD/D3「与上次相反」轮换；
+  // targetDow 仅用于天气行星期展示；补剂种类/剂量/频次一律由 AI 检索知识库补剂条目后按原句输出。
   const targetDow = new Date(dateStr + 'T00:00:00').getDay();
-  const targetIsMWF = (targetDow === 1 || targetDow === 3 || targetDow === 5);
-  const supRec = (typeof getSupplementSuggestion === 'function') ? getSupplementSuggestion() : 'D3';
   let dayPart = '';
   if (stats) {
     const c = stats.counts;
@@ -8592,8 +8572,7 @@ function buildPlanSystemPrompt(dateStr, wText, stats, sfStreak) {
       + '- 大便次数：' + stats.poop + ' 次\n'
       + '- 户外时长：' + stats.outdoorMin + ' 分钟\n'
       + (stats.foods.length ? ('- 辅食记录：' + stats.foods.map(f => (f.names.join('/') || '辅食') + (f.amount > 0 ? ' ' + f.amount + 'g' : '') + (f.time ? ('（昨日 ' + f.time + ' 添加' + (f.afterMeal && f.afterMeal !== '正常' ? '，饭后' + f.afterMeal : '') + '）') : '') + (f.note ? '（备注：' + f.note + '）' : '')).join('；') + '\n') : '- 前一日无辅食记录（今日是否试新辅食，需按下方「辅食试吃条件」判断）\n')
-      + (sfDay > 0 ? ('- 辅食已连续添加 ' + _sf.streak + ' 天：昨日为辅食第' + _sf.streak + '天，今日为辅食第' + sfDay + '天\n') : '')
-      + '- 营养补剂建议（与上次相反）：' + (supRec || '—') + '\n';
+      + (sfDay > 0 ? ('- 辅食已连续添加 ' + _sf.streak + ' 天：昨日为辅食第' + _sf.streak + '天，今日为辅食第' + sfDay + '天\n') : '');
   }
   return '你是一位专业、贴心的婴幼儿育儿规划助手，服务对象是长辈（外婆）带小宝宝，目标是提前生成「今日计划」以减少带娃决策压力。\n'
     + '请用简体中文、具体可操作；不要使用 markdown 标记；分点请用「·」。内容精炼：每个分类 3 条以内、每条不超过 20 字。\n\n'
@@ -8604,9 +8583,8 @@ function buildPlanSystemPrompt(dateStr, wText, stats, sfStreak) {
     + '\n【目标日期天气】' + dateStr + '（' + PLAN_DOW[targetDow] + '） ' + wText + '\n'
     + '\n【规划规则——请严格按以下四部分输出，顺序固定：喂养 → 起居护理 → 健康·出行 → 早教（早教必须放在最后）】\n'
     + '【喂养】单次奶量、喝奶次数、辅食（尝试食物及量）、喝水、过敏/防呛提醒；'
-    // v3.6.2 补剂判定明确按「本计划日（=任务触发当天）」的星期，不用第二天的星期
-    + (targetIsMWF ? ('本计划日 ' + dateStr + ' 为' + PLAN_DOW[targetDow] + '（即任务触发当天；周一/三/五为补剂日），营养补剂请安排：' + (supRec || 'D3') + '（与上次相反）。')
-                   : ('本计划日 ' + dateStr + ' 为' + PLAN_DOW[targetDow] + '（即任务触发当天；非周一/周三/周五），营养补剂项写明「今日无需补剂」。'))
+    // v3.6.80 营养补剂完全以知识库为准：删掉写死的周一/三/五补剂日、非补剂日「今日无需补剂」与 AD/D3「与上次相反」轮换。
+    + '营养补剂一律以【家庭知识库】登记的补剂条目为唯一准绳：**执行步骤（务必先做第 1 步再写建议）**：①先在上方【家庭知识库】逐条检索「补剂 / 营养补剂 / 维生素 / 维D / 维生素D / 维生素AD / AD / D3 / 鱼肝油 / 400IU / 滴剂」及任何具体补剂名称，找出家庭登记的补剂种类、剂量与服用频次（每日 / 隔日 / 每周几天等）；②营养补剂建议**一律以知识库原文为准**——补什么、补多少、几天补一次都逐字照抄知识库写明的内容，并在【喂养】正文**写明所依据的知识库原句**（例如「按知识库：<知识库登记的补剂原句>」）；③**严禁**按周一/周三/周五等任何固定星期判断是否补剂、严禁写「今日无需补剂」这类按星期下的结论、严禁在 AD 与 D3 之间「与上次相反」轮换、严禁用通用常识自行编造补剂种类/剂量/频次覆盖知识库定义；④**仅当知识库里完全没有任何补剂条目时**才可按通用原则（足月儿出生约15天起每日补充维生素D 400IU、补至2岁）兜底，且须在正文注明「知识库未定义补剂，按通用口径」。'
     + '\n'
     + '【起居护理】穿衣（结合天气，必须点明当日具体气温：最高/最低几度）。**执行步骤（务必先做第 1 步再写建议）**：①先在上方【家庭知识库】逐条检索「穿衣」相关条目（关键词含「穿衣 / 衣物 / 衣服 / 连体 / 哈衣 / 外套 / 厚薄 / 保暖 / 洋葱 / 睡袋 / 包被 / 马甲 / 背心 / 帽子 / ℃ / 温度」及任何具体衣物名称），找出家庭登记的**具体衣物名称**与**气温→厚薄/件数档位**；②穿衣建议**一律以知识库登记的衣物名称与温度档为唯一准绳**——衣物名称必须**逐字照抄知识库里的具体名称**（不得改写、缩略或拼凑），严禁编造知识库里没有的衣物名、严禁只写「长袖长裤」「连体衣」「外套」这类泛称、严禁用通用穿衣常识覆盖或替代知识库定义，并在【起居护理】正文中**写明所依据的知识库原句**（例如「按知识库：20-26℃ 穿《知识库登记的那件衣物》」「按知识库：<10℃ 《知识库登记的搭配》」）；③若知识库中同一厚薄档位登记了多件衣物，请在该档位下**全部列出**这些衣物名称，提示长辈当天任选一件未洗的穿，不要把多件只写一件；④**仅当知识库里完全没有任何穿衣 / 衣物 / 温度档描述时**才可按通用原则（洋葱式分层、颈背温热干燥为准、按当日最高/最低温增减）兜底，且须在正文注明「知识库未定义穿衣，按通用口径」。此外：洗澡、剪指甲、睡眠、排便关注'
     + (stats && stats.poop === 0 ? '；昨日大便 0 次，需关注是否便秘：两餐间记得喂水、多顺时针揉腹'
@@ -8616,8 +8594,8 @@ function buildPlanSystemPrompt(dateStr, wText, stats, sfStreak) {
     // v3.6.40 辅食第N天食谱推荐（用户要求：前一天添加了辅食计为第一天，按添加辅食的时间与最相近月龄查知识库，推荐当天具体食谱与制作方法，如多少度的水冲泡多少米粉）
     + (sfDay > 0 ? ('【辅食第' + sfDay + '天食谱推荐】上方显示前一日已添加辅食（含昨日添加时间/食物/量）：今日为辅食第' + sfDay + '天，请在【喂养】的辅食项给出今日具体食谱与制作方法——必须具体到：①吃什么（昨日为首次添加或同食物观察未满2-3天，今日仍吃同一种食物、不添新食物；观察期满可按知识库换下一种）；②多少克/多少毫升（比昨日略增，增幅不超过2成）；③用什么温度的水（如"50-60℃温开水"）及冲调/蒸煮步骤、稀稠程度（由稀到稠）；④建议喂食时段（参考昨日添加时间，如上午10点，固定在宝宝清醒情绪好时）；⑤过敏观察要点（观察皮疹/腹泻/呕吐，出现即停）。食谱必须结合知识库「辅食」条目与宝宝当前月龄；知识库无对应月龄食谱时按通用原则：6月龄首口高铁米粉（约50-60℃水冲成缓慢滴落的稀糊、每天1次）；7-8月龄稍稠引入蛋黄/肉泥；9-10月龄稠粥碎末加手指食物；11-12月龄软饭小丁接近家庭餐。\n') : '')
     + '【辅食试吃条件】若上方为「前一日无辅食记录」（或辅食很少），请在【喂养】的辅食项按辅食添加条件判断今日是否可试新辅食：月龄是否已达 6 月龄且已开始添加辅食、是否处于健康状态且非接种当日、每次只引入一种新食物并连续观察 2-3 天无过敏再加下一种、由稀到稠由少到多；据此明确写出「今日可试 XX（某种具体食物，如米粉/南瓜泥/蛋黄）」或「暂不添加，原因：…」。\n'
-    + '【补剂判定】营养补剂是否为补剂日（周一/三/五），一律按本计划日（即上方"目标日期"、任务触发当天）的星期判断；不得按"第二天"或其他任何日期判断。\n'
-    + '【统计口径】天气与营养补剂一律按「本计划日（上方目标日期、任务触发当天）」判断；大便次数与早教一律按「前一日」的记录判断。两者口径不得混用。\n'
+    + '【补剂判定】营养补剂一律以【家庭知识库】登记的补剂条目为准，不再按任何星期（含周一/三/五）判断是否为补剂日，也不再与上次记录比较做 AD/D3 轮换；补什么、补多少、频次多少均照抄知识库原句并写明依据。\n'
+    + '【统计口径】天气按「本计划日（上方目标日期、任务触发当天）」判断；营养补剂按【家庭知识库】条目判断（不按星期、不与上次轮换）；大便次数与早教一律按「前一日」的记录判断。三者口径不得混用。\n'
     + '【早教】放在最后一段输出。结合上方"前一日早教数据"（仅含当前已开启的活动）：次数<1 的项目必须纳入今日计划；结合宝宝月龄与知识库「早教」条目，给具体可操作动作（如"练习翻身""读布书认识动物""听儿歌"）。已做满的项目不必重复。'
     + (_eeDisabled.length ? ('\n【早教·已关闭】以下早教活动已在家园关闭，今日计划不纳入推荐：' + _eeDisabled.join('、') + '。') : '')
     + '\n'
@@ -8748,7 +8726,7 @@ async function pushTask(task, trig, pk) {
 
 /* ---------- 调度器（静态站点：页面打开时由定时器检查触发） ---------- */
 /* ---------- v3.6.3 今日计划：每天 0 点生成「当天」计划 ----------
- * 简化规则：每天 0 点调用 AI 生成当天计划（天气/营养补剂按当天；大便/早教按前一天）；
+ * 简化规则：每天 0 点调用 AI 生成当天计划（天气按当天、营养补剂按知识库；大便/早教按前一天）；
  * 用户在任务中可编辑；到用户设定的触发时刻推送并更新首页；推送后至次日 0 点只读不可编辑。 */
 function _planToday() { return new Date(planTodayStr() + 'T00:00:00'); }
 function planPushedToday(task) {
@@ -8782,7 +8760,7 @@ async function runScheduler(forceGen) {
     const { prev, next } = computeTriggers(task, now);
     // v3.6.3 AI 计划：每天 0 点生成「当天」计划（不再提前 12h 生成次日计划）。
     // genDate !== 今天 或 prompt 版本过期 → 以今天 00:00 为触发日重新生成
-    // （天气/营养补剂按当天判断，大便/早教/辅食/户外按前一天记录）。
+    // （天气按当天、营养补剂按知识库判断，大便/早教/辅食/户外按前一天记录）。
     if (task.mode === 'ai') {
       const todayStr = planTodayStr();   // v3.6.5 计划日用真实日历日（0 点翻页），不用业务日（1 点翻页）
       const cooling = (Date.now() - (task.genTryTs || 0)) <= SCHED_GEN_COOLDOWN;
@@ -8863,7 +8841,7 @@ async function migratePlanPromptVersion() {
     if (!t.enabled) continue;
     try {
       const before = t.content || '';
-      // v3.6.5 prompt 升级后重新生成「当天」计划（天气/补剂按当天、大便/早教按前一天）
+      // v3.6.5 prompt 升级后重新生成「当天」计划（天气按当天、补剂按知识库、大便/早教按前一天）
       await generatePlanForTask(t, new Date(planTodayStr() + 'T00:00:00'));
       if (!t.content || t.content === before) {   // 生成失败 → 保留旧内容并清掉周期标记，之后窗口内还会重试
         t.content = before; t.genPeriod = ''; saveSchedTasks();
