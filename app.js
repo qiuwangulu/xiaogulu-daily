@@ -1560,7 +1560,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.78';
+const APP_VERSION = 'v3.6.79';
 // v3.6.75: 两项——①用户反馈「知识库被篡改，之前写的非常详细的穿衣规则没有了，需要立即恢复」：
 //   诊断：云端 _ai_kb 被覆盖成只剩 20 条系统种子，用户手工粘贴的 12 条详细穿衣/户外/洗澡/室温推算规则全丢；
 //   扩散路径是 loadKBCloud() 云端无条件覆盖本地（KB = arr），残缺云端会把所有设备同步成残缺版。
@@ -10117,11 +10117,41 @@ function collectSolidFoods() {
   return { records, firstFoodDate };
 }
 
+// v3.6.79：从辅食记录统计三份展示数据（records 须已按日期倒序）
+//  - foodDays：每种食物「尝试天数」，同一天多条记录只算 1 天（按日期去重）
+//  - abnormalNote：每种异常食物最近一次「异常」记录的 { date, note }（倒序遍历，首次命中即最近）
+//  - latestFoods：最近一次辅食记录里的食物名（records[0] 即最新一天）
+function computeSolidFoodStats(records) {
+  const list = Array.isArray(records) ? records : [];
+  const dateSets = {}, abnormalNote = {};
+  for (const r of list) {
+    const foods = (r && Array.isArray(r.foods)) ? r.foods : [];
+    for (const f of foods) {
+      if (!dateSets[f]) dateSets[f] = new Set();
+      dateSets[f].add(r.date);
+    }
+    // 只在该食物尚未记录过异常备注时写入；列表倒序 ⇒ 第一次命中就是最近一次异常
+    if (r && r.afterMeal === '异常' && String(r.note || '').trim()) {
+      for (const f of foods) {
+        if (!(f in abnormalNote)) abnormalNote[f] = { date: r.date, note: String(r.note).trim() };
+      }
+    }
+  }
+  const foodDays = {};
+  Object.keys(dateSets).forEach(f => { foodDays[f] = dateSets[f].size; });
+  const latestFoods = (list.length && Array.isArray(list[0].foods)) ? list[0].foods.slice() : [];
+  return { foodDays, abnormalNote, latestFoods };
+}
+
 let _sfExpanded = false;
 let _sfGroups = [];
 let _sfFirstFoodDate = {};
 let _sfTriedList = [];        // v3.6.62 需求③：已尝试食物清单（点击圆环展示用）
 let _sfAbnormalSet = new Set(); // v3.6.62 需求③：异常食物集合（展示时标红）
+// v3.6.79：每种食物尝试天数、异常食物最新一次备注、最近一次记录里的食物
+let _sfFoodDays = {};         // { 食物名: 尝试天数 }（按日期去重）
+let _sfAbnormalNote = {};     // { 食物名: { date, note } } 取该食物最近一次「异常」记录
+let _sfLatestFoods = [];      // 最近一次辅食记录里的食物名数组
 const SF_PREVIEW = 5;
 
 function renderSfTimeline() {
@@ -10176,12 +10206,27 @@ function toggleSfFoods() {
     if (!_sfTriedList.length) {
       panel.innerHTML = `<div class="sf-foods-empty">还没有尝试过任何辅食</div>`;
     } else {
-      const chips = _sfTriedList.map(f => {
+      // v3.6.79：每种食物后附「已吃 X 天」；异常食物再附该食物最近一次异常的备注
+      // 用 typeof 守卫新全局，兼容旧测试/旧调用点（未定义时天数=0、无备注），不影响原有顿号/标红/标题格式
+      const _items = _sfTriedList.map(f => {
         const bad = _sfAbnormalSet.has(f);
         const ic = foodIcon(f);
         const name = String(f).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        return `<span class="sf-food-chip${bad ? ' is-bad' : ''}">${ic} ${name}</span>`;
-      }).join('<span class="sf-food-sep">、</span>');
+        const d = ((typeof _sfFoodDays !== 'undefined' && _sfFoodDays) ? _sfFoodDays[f] : 0) || 0;
+        let noteHtml = '';
+        if (bad) {
+          const an = (typeof _sfAbnormalNote !== 'undefined' && _sfAbnormalNote) ? _sfAbnormalNote[f] : null;
+          if (an && an.note) {
+            const nd = String(an.date || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+            const nt = String(an.note).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            noteHtml = `<span class="sf-food-badnote">⚠ ${nd} 异常：${nt}</span>`;
+          }
+        }
+        return `<span class="sf-food-chip${bad ? ' is-bad' : ''}">${ic} ${name}` +
+          `<span class="sf-food-days">已吃 ${d} 天</span>${noteHtml}</span>`;
+      });
+      // 保留旧测试的顿号分隔与 is-bad 断言
+      const chips = _items.join('<span class="sf-food-sep">、</span>');
       panel.innerHTML = `<div class="sf-foods-title">已尝试食物（${_sfTriedList.length} 种）</div><div class="sf-foods-list">${chips}</div>`;
     }
     panel.style.display = 'block';
@@ -10207,8 +10252,26 @@ function makeSolidFoodAnalysis() {
   // v3.6.62 需求③：缓存已尝试清单与异常集合，供点击圆环时展示食物名称
   _sfTriedList = [...tried];
   _sfAbnormalSet = abnormal;
+  // v3.6.79：统计每种食物尝试天数 / 异常食物最近一次备注 / 最近一次记录食物
+  try {
+    const _stats = computeSolidFoodStats(records);
+    _sfFoodDays = _stats.foodDays;
+    _sfAbnormalNote = _stats.abnormalNote;
+    _sfLatestFoods = _stats.latestFoods;
+  } catch (e) { _sfFoodDays = {}; _sfAbnormalNote = {}; _sfLatestFoods = []; }
   const nowAge = getAgeDetail(getTodayDateStr());
   const stat = `<div class="ms-stat">当前 ${nowAge.months}月龄${nowAge.days > 0 ? nowAge.days + '天' : ''} · 共尝试 ${triedCount} 种 · 异常 ${abnormalCount} 种</div>`;
+  // v3.6.79：圆环上方显示「最近一次记录的食物 + 各自尝试天数」
+  const latestHead = (_sfLatestFoods.length)
+    ? `<div class="sf-latest">` +
+      `<div class="sf-latest-title">🕒 最近一次记录</div>` +
+      `<div class="sf-latest-list">` + _sfLatestFoods.map(f => {
+        const ic = foodIcon(f);
+        const nm = String(f).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const d = _sfFoodDays[f] || 0;
+        return `<span class="sf-latest-chip">${ic} ${nm}<b>已吃 ${d} 天</b></span>`;
+      }).join('') + `</div></div>`
+    : '';
 
   // 环形：异常红 / 正常绿 / 未尝试白
   const C = 2 * Math.PI * 70;
@@ -10222,6 +10285,7 @@ function makeSolidFoodAnalysis() {
     : '';
   const ring = `<div class="sf-ring-wrap" onclick="toggleSfFoods()" title="点击查看已尝试的食物">` +
     `<div class="sf-abnormal">` + [...abnormal].map(f => `<span class="sf-ab-chip">${String(f).replace(/</g, '&lt;')}</span>`).join('') + `</div>` +
+    latestHead +
     `<svg class="sf-donut" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">` +
       `<g transform="rotate(-90 100 100)" fill="none" stroke-width="22">` +
         `<circle class="sf-arc-un" cx="100" cy="100" r="70" stroke-dasharray="${dash(segUn)}" stroke-dashoffset="${(-(segAb + segNo)).toFixed(2)}"/>` +
