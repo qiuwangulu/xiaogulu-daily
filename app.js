@@ -1542,7 +1542,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.82';
+const APP_VERSION = 'v3.6.83';
 // v3.6.75: 两项——①用户反馈「知识库被篡改，之前写的非常详细的穿衣规则没有了，需要立即恢复」：
 //   诊断：云端 _ai_kb 被覆盖成只剩 20 条系统种子，用户手工粘贴的 12 条详细穿衣/户外/洗澡/室温推算规则全丢；
 //   扩散路径是 loadKBCloud() 云端无条件覆盖本地（KB = arr），残缺云端会把所有设备同步成残缺版。
@@ -10290,7 +10290,7 @@ function makeSolidFoodAnalysis() {
       `</svg>` +
       abnormalInRing +
     `</div>` +
-    `<div class="sf-ring-hint">👆 点击圆环查看食物</div>` +
+    // v3.6.83：去掉「👆 点击圆环查看食物」提示行，图例上移到原提示行位置（点击展开食物功能仍保留）
     `<div class="sf-legend"><span><i class="sf-lg-ab"></i>异常</span><span><i class="sf-lg-no"></i>正常</span><span><i class="sf-lg-un"></i>未尝试</span></div>` +
     `<div class="sf-foods" id="sfFoodsPanel" style="display:none"></div>` +
   `</div>`;
