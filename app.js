@@ -1542,7 +1542,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.83';
+const APP_VERSION = 'v3.6.84';
 // v3.6.75: 两项——①用户反馈「知识库被篡改，之前写的非常详细的穿衣规则没有了，需要立即恢复」：
 //   诊断：云端 _ai_kb 被覆盖成只剩 20 条系统种子，用户手工粘贴的 12 条详细穿衣/户外/洗澡/室温推算规则全丢；
 //   扩散路径是 loadKBCloud() 云端无条件覆盖本地（KB = arr），残缺云端会把所有设备同步成残缺版。
@@ -10132,7 +10132,8 @@ let _sfAbnormalNote = {};     // { 食物名: { date, note } } 取该食物最�
 let _sfLatestFoods = [];      // 最近一次辅食记录里的食物名数组
 const SF_PREVIEW = 5;
 // v3.6.81：辅食情况图「时间轴 / 日历」双模式 + 日历选中日期详情
-let _sfViewMode = 'timeline';       // 'timeline'（默认，保留原样） | 'calendar'
+// v3.6.84：默认视图改为日历模式（用户明确要求「默认日历模式」），时间轴模式仍保留可切换
+let _sfViewMode = 'calendar';       // 'calendar'（v3.6.84 起默认） | 'timeline'（保留，可切换）
 let _sfCalYear = 0, _sfCalMonth = 0; // 日历当前显示年月（month 0-based）；0 表示尚未初始化
 let _sfCalSelected = '';            // 日历选中的日期 YYYY-MM-DD
 let _sfByDate = {};                 // { 'YYYY-MM-DD': [record, ...] } 按日期分组，供日历格与详情使用
