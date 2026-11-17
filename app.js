@@ -294,7 +294,10 @@ function flushBodySaves() {
 }
 // v3.6.44 需求④：新的一天清空首页身高/体重输入（仅回填当天已记录的数值）；
 // 之前日期的记录保留在 bodyHistory（曲线/历史/知识库引用不受影响），babyHeight/babyWeight
-// 保留为「最新录入值」供 AI 上下文引用，输入为空时不写空、不同步
+// 保留为「最新录入值」供 AI 上下文引用。
+// v3.6.86 修正：用户「主动清空当天输入框」时必须清除当天 bodyHistory 对应字段，
+// 否则日报（读当天 bodyHistory）仍显示旧值、loadHeight/loadWeight 又把旧值回填首页框。
+// 边界：跨天自动清空走 loadHeight/loadWeight 直接赋值、不触发 oninput/onblur，不会误清历史记录。
 function loadHeight() {
   const el = document.getElementById('heightInput'); if (!el) return;
   if (document.activeElement === el) return;
@@ -309,8 +312,13 @@ function saveHeight() {
   if (v > 0) {
     if (raw !== prev) { localStorage.setItem('babyHeight', raw); bumpConfigTs('babyHeight'); }
     recordBodyMeasurement('h', v);          // 幂等：无变化时不重复写盘/上传
+  } else if (raw === '') {
+    // v3.6.86：用户主动清空当天身高 → 清除当天 bodyHistory 的 h 记录，
+    // 使日报与首页回填都以「当天未测」为准，不再显示/回填历史值。
+    // babyHeight 仍作为「最新录入值」保留供 AI 上下文引用。
+    const rec = getBodyHistory().find(x => x.d === getTodayDateStr());
+    if (rec && rec.h != null) recordBodyMeasurement('h', null);
   }
-  // 输入为空（如新的一天尚未测量）：保留 babyHeight 作为最新录入值，不写空、不触发同步
 }
 function loadWeight() {
   const el = document.getElementById('weightInput'); if (!el) return;
@@ -326,8 +334,11 @@ function saveWeight() {
   if (v > 0) {
     if (raw !== prev) { localStorage.setItem('babyWeight', raw); bumpConfigTs('babyWeight'); }
     recordBodyMeasurement('w', v);          // 幂等：无变化时不重复写盘/上传
+  } else if (raw === '') {
+    // v3.6.86：用户主动清空当天体重 → 清除当天 bodyHistory 的 w 记录（同 saveHeight）
+    const rec = getBodyHistory().find(x => x.d === getTodayDateStr());
+    if (rec && rec.w != null) recordBodyMeasurement('w', null);
   }
-  // 输入为空（如新的一天尚未测量）：保留 babyWeight 作为最新录入值，不写空、不触发同步
 }
 // v3.6.44 需求④：跨天（业务日 1 点翻页）自动清空首页身高/体重输入
 // ——loadHeight/loadWeight 有「焦点保护」（正在输入时不动），定时巡检只在日期真正变化时触发一次
@@ -1542,7 +1553,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.85';
+const APP_VERSION = 'v3.6.86';
 // v3.6.75: 两项——①用户反馈「知识库被篡改，之前写的非常详细的穿衣规则没有了，需要立即恢复」：
 //   诊断：云端 _ai_kb 被覆盖成只剩 20 条系统种子，用户手工粘贴的 12 条详细穿衣/户外/洗澡/室温推算规则全丢；
 //   扩散路径是 loadKBCloud() 云端无条件覆盖本地（KB = arr），残缺云端会把所有设备同步成残缺版。
@@ -2984,6 +2995,8 @@ function confirmVoiceAdd() {
 
 /* ==================== 日报 ==================== */
 function openReport() {
+  // v3.6.86：打开日报前强制落盘首页身高/体重（含「刚清空」场景），确保读到的 bodyHistory 是最新状态
+  flushBodySaves();
   const records = getTodayRecords(); const content = document.getElementById('reportContent');
   const stats = {};
   const noteRecords = []; // 带备注的记录（用于备注区块）
@@ -3720,6 +3733,8 @@ async function testAITagConfig() {
 
 /* ==================== 日报复制 ==================== */
 function buildReportText() {
+  // v3.6.86：复制日报前同样强制落盘首页身高/体重（含「刚清空」场景）
+  flushBodySaves();
   const t = new Date(); const ds = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
   const records = getTodayRecords();
   let text = `${BABY_NAME}的日常 (${ds})\n${document.getElementById('ageInfo').textContent}\n`;
