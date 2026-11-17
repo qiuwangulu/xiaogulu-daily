@@ -1595,8 +1595,8 @@
   .sf-donut-stage { position: relative; width: 240px; height: 240px; display: flex; align-items: center; justify-content: center; }
   .sf-donut { width: 240px; height: 240px; cursor: pointer; }
   .sf-donut-stage .sf-abnormal { position: absolute; left: 50%; top: 70%; transform: translate(-50%, -50%); width: 64%; margin: 0; gap: 3px; }
-  /* v3.6.83 圆环内异常食物名称缩小一半：18px→9px；v3.6.84 调整到 10px */
-  .sf-donut-stage .sf-ab-chip { font-size: 10px; padding: 1px 6px; border-radius: 7px; }
+  /* v3.6.83 圆环内异常食物名称缩小一半：18px→9px；v3.6.84 调到 10px；v3.6.85 调到 12px */
+  .sf-donut-stage .sf-ab-chip { font-size: 12px; padding: 1px 6px; border-radius: 7px; }
   /* v3.6.62 需求③：点击圆环查看食物清单 */
   .sf-ring-wrap { cursor: pointer; }
   .sf-ring-hint { font-size: 11px; color: #74b9ff; margin-top: 6px; opacity: 0.85; }
@@ -1617,10 +1617,10 @@
   .sf-latest-list { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; }
   .sf-latest-chip { font-size: 12px; color: #dfe6ed; background: rgba(116,185,255,0.12); border-radius: 9px; padding: 3px 8px; }
   .sf-latest-chip b { margin-left: 6px; font-size: 10.5px; font-weight: 600; color: #74b9ff; }
-  /* v3.5.83 环形配色改为 CSS class 驱动（原先内联白，浅色模式下看不见）；v3.6.82 中心数字缩小到 15；v3.6.84 中心数字与「已尝试/总数」标签统一改为 10px */
+  /* v3.5.83 环形配色改为 CSS class 驱动（原先内联白，浅色模式下看不见）；v3.6.82 中心数字缩小到 15；v3.6.84 统一 10px；v3.6.85 中心数字与「已尝试/总数」标签统一调为 12px */
   .sf-arc-un { stroke: rgba(255,255,255,0.16); }
-  .sf-center-num { font-size: 10px; font-weight: 800; fill: #fff; }
-  .sf-center-lab { font-size: 10px; fill: rgba(255,255,255,0.5); }
+  .sf-center-num { font-size: 12px; font-weight: 800; fill: #fff; }
+  .sf-center-lab { font-size: 12px; fill: rgba(255,255,255,0.5); }
   .sf-legend { display: flex; gap: 14px; justify-content: center; margin-top: 10px; font-size: 11px; color: #b2bec3; }
   .sf-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
   .sf-lg-ab { background: #ff7675; }
@@ -1634,8 +1634,8 @@
   .sf-note::before { content: "备注："; color: rgba(223,230,233,0.4); }
   /* v3.6.81 辅食时间轴/日历 视图切换 tab */
   .sf-view-tabs { display: flex; gap: 6px; margin: 4px 0 10px; }
-  /* v3.6.83 放大到 14px 与标题一致；v3.6.84 用户要求「时间轴和日历字体改为10px」→ 10px */
-  .sf-view-tab { flex: 1; text-align: center; font-size: 10px; font-weight: 600; padding: 6px 0; border-radius: 9px; cursor: pointer; -webkit-tap-highlight-color: transparent; color: rgba(223,230,233,0.55); background: rgba(255,255,255,0.05); border: 1px solid transparent; }
+  /* v3.6.83 放大到 14px 与标题一致；v3.6.84 调到 10px；v3.6.85 用户要求「时间轴/日历改为12px」→ 12px */
+  .sf-view-tab { flex: 1; text-align: center; font-size: 12px; font-weight: 600; padding: 6px 0; border-radius: 9px; cursor: pointer; -webkit-tap-highlight-color: transparent; color: rgba(223,230,233,0.55); background: rgba(255,255,255,0.05); border: 1px solid transparent; }
   .sf-view-tab.active { color: #74b9ff; background: rgba(116,185,255,0.12); border-color: rgba(116,185,255,0.35); }
   /* v3.6.81 日历模式 */
   .sf-cal { padding: 2px 0; }
@@ -3153,6 +3153,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.84"></script>
+<script src="app.js?v=v3.6.85"></script>
 </body>
 </html>

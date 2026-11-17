@@ -1542,7 +1542,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.84';
+const APP_VERSION = 'v3.6.85';
 // v3.6.75: 两项——①用户反馈「知识库被篡改，之前写的非常详细的穿衣规则没有了，需要立即恢复」：
 //   诊断：云端 _ai_kb 被覆盖成只剩 20 条系统种子，用户手工粘贴的 12 条详细穿衣/户外/洗澡/室温推算规则全丢；
 //   扩散路径是 loadKBCloud() 云端无条件覆盖本地（KB = arr），残缺云端会把所有设备同步成残缺版。
@@ -3007,8 +3007,12 @@ function openReport() {
     if (detail) stats[r.type].details.push(detail);
     if (r.note && r.note.trim()) noteRecords.push({ time: r.recTime || r.time || '', name: r.name, note: r.note.trim() });
   });
-  const height = localStorage.getItem('babyHeight') || '';
-  const weight = localStorage.getItem('babyWeight') || '';
+  // v3.6.85 需求③：日报身高体重以「当天」记录为准；当天未测则为空，不回退显示历史最新值。
+  // babyHeight/babyWeight 是跨天保留的"最新录入值"（供 AI 上下文引用），不能直接用于日报展示，
+  // 否则当天没测时会显示上一次的历史记录（如体重一直是 7.3kg）。当天数据取自 bodyHistory 中 d===今天的那条。
+  const _todayBody = getBodyHistory().find(x => x.d === getTodayDateStr());
+  const height = (_todayBody && _todayBody.h != null) ? _todayBody.h : '';
+  const weight = (_todayBody && _todayBody.w != null) ? _todayBody.w : '';
   let html = '';
   if (height || weight) {
     html += `<div class="report-item"><span class="report-label">高</span><span class="report-value">${height||'-'} cm</span></div>`;
@@ -3719,7 +3723,9 @@ function buildReportText() {
   const t = new Date(); const ds = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
   const records = getTodayRecords();
   let text = `${BABY_NAME}的日常 (${ds})\n${document.getElementById('ageInfo').textContent}\n`;
-  const h = localStorage.getItem('babyHeight'), w = localStorage.getItem('babyWeight');
+  // v3.6.85 需求③：与日报弹窗一致，身高体重取当天记录；当天未测则为空，不显示历史最新值
+  const _tb = getBodyHistory().find(x => x.d === getTodayDateStr());
+  const h = (_tb && _tb.h != null) ? _tb.h : '', w = (_tb && _tb.w != null) ? _tb.w : '';
   if (h || w) text += `高${h||'-'}cm 重${w||'-'}kg\n`;
   text += '\u2500'.repeat(20) + '\n';
   const noteRecords = [];
@@ -8992,6 +8998,13 @@ function normalizeWageTaskNames() {
   return changed;
 }
 function renderSchedTasks() {
+  // v3.6.85 需求②：正在编辑任务长文本时跳过重建。
+  // 根因：runScheduler 每 60s 定时（及切前台/云对账合并）都会调用本函数整体重建 innerHTML，
+  // 若此刻正聚焦 textarea.task-plan 输入长文本，DOM 被销毁 → 失焦、软键盘收起、页面跳回顶部打断输入。
+  // 编辑内容已由 onPlanInput 实时写入 t.content 并落盘，跳过本次重建不丢数据；
+  // 用户主动操作（展开/开关/编辑/删除）时焦点不在该 textarea，不受影响照常重建，下次调度再刷新状态。
+  const _ae = document.activeElement;
+  if (_ae && _ae.tagName === 'TEXTAREA' && _ae.classList && _ae.classList.contains('task-plan')) return;
   const box = document.getElementById('tasksList'); if (!box) return;
   if (!SCHED_TASKS.length) { box.innerHTML = ''; return; }
   normalizeWageTaskNames();   // v3.6.55 打开任务页即把旧工资任务名归一（幂等）
