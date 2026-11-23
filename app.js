@@ -91,6 +91,32 @@ const DEFAULT_FINE_MOTOR = ['抓握', '摇头', '点头', '挥手', '放东西',
 // v3.5.74 辅食食物默认清单（用户可在管理弹窗增删，长期有效）
 const DEFAULT_SOLID_FOODS = ['高铁米粉','不含铁米粉','苹果','南瓜','山药','小米','红薯','玉米','紫薯','猪肉','牛肉','羊肉','鱼','鸡肉','虾','鸡蛋','猪肝','胡萝卜','梨','豆腐','花生','枣','黄豆','绿豆','红豆','油菜','白菜','西兰花','西红柿','茄子','牛油果','芒果','猕猴桃','莴苣','黄瓜','核桃','冬瓜','香菇','香蕉','西瓜'];
 
+// v3.6.90 辅食量单位：界面统一用「勺」，底层 solidFoodAmount 仍以「克」存储（5g=1勺）。
+// 目的：用户可见的历史记录/录入/日报一律按 5g=1勺 换算呈现；底层保留克可让 AI 食谱推荐继续按
+// 知识库的克数口径工作（如「15g米粉+150ml水」），服务端 sched-push.mjs 零改动、PLAN_PROMPT_VERSION 保持 19，
+// 也避免了不可逆的历史数据物理迁移与多设备同步竞态。
+const SF_G_PER_SPOON = 5;
+// 克 → 勺（保留 1 位小数）
+function gramToSpoon(g) {
+  const n = Number(g);
+  if (!isFinite(n) || n <= 0) return 0;
+  return Math.round((n / SF_G_PER_SPOON) * 10) / 10;
+}
+// 勺 → 克（底层存储值，四舍五入到整克）
+function spoonToGram(s) {
+  const n = Number(s);
+  if (!isFinite(n) || n <= 0) return 0;
+  return Math.round(n * SF_G_PER_SPOON);
+}
+// 勺数展示文本：整数不带 .0，小数保留 1 位
+function spoonNumText(n) {
+  const v = Number(n);
+  if (!isFinite(v) || v <= 0) return '0';
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+// 克 → 勺展示文本（UI 一步到位）
+function gramToSpoonText(g) { return spoonNumText(gramToSpoon(g)); }
+
 let hiddenActivities = [];
 // v3.5.115 首页筛选：默认全部分类选中（=显示全部活动）；actSearchQuery 为活动名搜索关键字
 let selectedCategories = new Set(CATEGORIES.map(c => c.id));
@@ -1348,7 +1374,7 @@ function formatRecordBrief(r, ds) {
   }
   else if (r.type === 'poop') { base = r.poopStatus || ''; }
   else if (r.type === 'supplement') { base = (r.supplementTypes||[]).join('/'); if (r.supplementAmount > 0) base += ' ' + r.supplementAmount + '粒'; }
-  else if (r.type === 'solidFood') { base = (r.solidFoods||[]).join('、'); if (r.solidFoodAmount > 0) base += ' ' + r.solidFoodAmount + 'g'; if (r.afterMeal) base += ' · 饭后' + r.afterMeal; }
+  else if (r.type === 'solidFood') { base = (r.solidFoods||[]).join('、'); if (r.solidFoodAmount > 0) base += ' ' + gramToSpoonText(r.solidFoodAmount) + '勺'; if (r.afterMeal) base += ' · 饭后' + r.afterMeal; }
   else if (r.type === 'vaccine') { base = (r.vaccineTypes||[]).join('/'); if (r.vaccineDose > 0) base += ' 第' + r.vaccineDose + '剂'; }
   else if (r.type === 'listenStory') { base = (r.storyLangs||[]).join('/'); }
   else if (r.type === 'grossMotor') { base = (r.grossMotorItems||[]).join(', '); }
@@ -1427,7 +1453,7 @@ function openEditRecord(type, timestamp, ds) {
   } else if (act.type === 'solidFood') {
     // v3.5.74 辅食：食物（可搜索多选）+ 克数 + 饭后正常/异常
     editPendingSf = { p: 'edt', id: act.id, sel: rec.solidFoods || [] };
-    html += `<div class="input-row sf-row"><label class="sf-label">食物:</label>${sfPickerHtml('edt', act.id)}<input type="number" step="1" min="0" id="edt_sfamt" class="sf-amt" placeholder="0" value="${rec.solidFoodAmount > 0 ? rec.solidFoodAmount : ''}"><span class="unit">g</span></div>`;
+    html += `<div class="input-row sf-row"><label class="sf-label">食物:</label>${sfPickerHtml('edt', act.id)}<input type="number" step="0.1" min="0" id="edt_sfamt" class="sf-amt" placeholder="0" value="${rec.solidFoodAmount > 0 ? gramToSpoonText(rec.solidFoodAmount) : ''}"><span class="unit">勺</span></div>`;
     html += `<div class="input-row sf-row sf-meal-row radio-group"><label class="sf-label">饭后:</label><label><input type="radio" name="edt_meal" value="正常" ${(rec.afterMeal||'正常')==='正常'?'checked':''}> 正常</label><label><input type="radio" name="edt_meal" value="异常" ${rec.afterMeal==='异常'?'checked':''}> 异常</label></div>`;
   } else if (act.type === 'vaccine') {
     const sel = rec.vaccineTypes || [];
@@ -1501,7 +1527,7 @@ function saveEditRecord() {
     rec.solidFoodTime = rec.recTime;
     rec.solidFoods = sfGetSelection('edt', _editingType);
     const el = document.getElementById('edt_sfamt'); const v = el ? parseFloat(String(el.value).trim()) : NaN;
-    rec.solidFoodAmount = (!isNaN(v) && v > 0) ? Math.round(v) : 0;
+    rec.solidFoodAmount = (!isNaN(v) && v > 0) ? spoonToGram(v) : 0;   // v3.6.90 界面输入勺 → 底层存克
     const rds = document.getElementsByName('edt_meal'); let _m = '正常'; for (const r of rds) { if (r.checked) { _m = r.value; break; } }
     rec.afterMeal = _m;
   } else if (act.type === 'vaccine') {
@@ -1553,7 +1579,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.89';
+const APP_VERSION = 'v3.6.90';
 // v3.6.75: 两项——①用户反馈「知识库被篡改，之前写的非常详细的穿衣规则没有了，需要立即恢复」：
 //   诊断：云端 _ai_kb 被覆盖成只剩 20 条系统种子，用户手工粘贴的 12 条详细穿衣/户外/洗澡/室温推算规则全丢；
 //   扩散路径是 loadKBCloud() 云端无条件覆盖本地（KB = arr），残缺云端会把所有设备同步成残缺版。
@@ -1858,7 +1884,7 @@ function renderAddList(filterText) {
       // v3.5.74 辅食：开始时间 + 食物（可搜索多选下拉）+ 克数 + 饭后正常/异常
       const _sh = String(new Date().getHours()).padStart(2,'0'), _sm = String(new Date().getMinutes()).padStart(2,'0');
       inputsHtml = `<div class="input-row"><label style="font-size:14px;color:#b2bec3;">开始:</label><div class="time-input-group"><input type="number" id="adinp_${act.id}_h" min="0" max="23" value="${_sh}"><span>:</span><input type="number" id="adinp_${act.id}_m" min="0" max="59" value="${_sm}"></div></div>`;
-      inputsHtml += `<div class="input-row sf-row"><label class="sf-label">食物:</label>${sfPickerHtml('ad', act.id)}<input type="number" step="1" min="0" id="adinp_${act.id}" placeholder="0" class="sf-amt"><span class="unit">g</span></div>`;
+      inputsHtml += `<div class="input-row sf-row"><label class="sf-label">食物:</label>${sfPickerHtml('ad', act.id)}<input type="number" step="0.1" min="0" id="adinp_${act.id}" placeholder="0" class="sf-amt"><span class="unit">勺</span></div>`;
       inputsHtml += `<div class="input-row sf-row sf-meal-row radio-group"><label class="sf-label">饭后:</label><label><input type="radio" name="admeal_${act.id}" value="正常" checked> 正常</label><label><input type="radio" name="admeal_${act.id}" value="异常"> 异常</label></div>`;
       sfPending.push({ p: 'ad', id: act.id, sel: [] });
     } else if (act.type === 'vaccine') {
@@ -1973,7 +1999,7 @@ function confirmAdd() {
       record.solidFoodTime = recTime;
       record.solidFoods = sfGetSelection('ad', id);
       const el = document.getElementById(`adinp_${id}`); const _sv = el ? parseFloat(String(el.value).trim()) : NaN;
-      record.solidFoodAmount = (!isNaN(_sv) && _sv > 0) ? Math.round(_sv) : 0;
+      record.solidFoodAmount = (!isNaN(_sv) && _sv > 0) ? spoonToGram(_sv) : 0;   // v3.6.90 界面输入勺 → 底层存克
       const rds = document.getElementsByName(`admeal_${id}`); let _meal = '正常'; for (const r of rds) { if (r.checked) { _meal = r.value; break; } }
       record.afterMeal = _meal;
     } else if (act.type === 'vaccine') {
@@ -2175,9 +2201,15 @@ const VOICE_RULES = [
       getSolidFoodOptions().forEach(f => { if (zone.includes(f) && !foods.includes(f)) foods.push(f); });
       [['米糊','高铁米粉'],['米粉','高铁米粉'],['蛋黄','鸡蛋'],['鸡肉泥','鸡肉'],['猪肉泥','猪肉']]
         .forEach(([kw, val]) => { if (zone.includes(kw) && !foods.includes(val)) foods.push(val); });
-      let amount = 0;
-      const am = zone.match(/(\d+(?:\.\d+)?)\s*(?:g|克)(?![0-9])/);
-      if (am) { const n = parseFloat(am[1]); if (!isNaN(n) && n >= 0) amount = Math.round(n); }
+      let amount = 0;  // 底层存克（5g=1勺）
+      // v3.6.90 语音既识别「勺」（×5 转克，支持阿拉伯/中文数字）也兼容旧口径「g/克」（直接存克）
+      let spoonN = null;
+      const spoonM = zone.match(/(\d+(?:\.\d+)?)\s*勺/);
+      if (spoonM) spoonN = parseFloat(spoonM[1]);
+      else { const cm = zone.match(/([零一二两三四五六七八九十百]+)\s*勺/); if (cm) spoonN = cnNum(cm[1]); }
+      const gramM = zone.match(/(\d+(?:\.\d+)?)\s*(?:g|克)(?![0-9])/);
+      if (spoonN !== null && !isNaN(spoonN) && spoonN >= 0) amount = spoonToGram(spoonN);
+      else if (gramM) { const n = parseFloat(gramM[1]); if (!isNaN(n) && n >= 0) amount = Math.round(n); }
       let meal = '正常';
       if (/异常|过敏|起疹|红疹|吐了|呕吐|不舒服|拉肚|腹泻/.test(zone)) meal = '异常';
       return { params: { solidFoods: foods, solidFoodAmount: amount, afterMeal: meal }, warn: foods.length === 0 };
@@ -2852,7 +2884,7 @@ function voiceItemParamDef(item) {
   if (p.duration !== undefined && (item.actId === 'sleep' || item.actId === 'outdoor' || item.actId === 'airButt')) return { key: 'duration', label: '时长', value: p.duration, unit: '分钟', min: 0, step: 1 };
   if (p.temperature !== undefined) return { key: 'temperature', label: '体温', value: p.temperature, unit: '℃', min: 30, step: 0.1 };
   if (p.supplementAmount !== undefined) return { key: 'supplementAmount', label: '用量', value: p.supplementAmount, unit: '粒', min: 1, step: 1 };
-  if (p.solidFoodAmount !== undefined) return { key: 'solidFoodAmount', label: '克数', value: p.solidFoodAmount, unit: 'g', min: 0, step: 1 };
+  if (p.solidFoodAmount !== undefined) return { key: 'solidFoodAmount', label: '勺数', value: gramToSpoon(p.solidFoodAmount), unit: '勺', min: 0, step: 0.1 };
   if (p.vaccineDose !== undefined) return { key: 'vaccineDose', label: '第几剂', value: p.vaccineDose, unit: '剂', min: 1, step: 1 };
   return null;
 }
@@ -2947,7 +2979,10 @@ function confirmVoiceAdd() {
       if (dhEl && dmEl) it.params.duration = (parseInt(dhEl.value) || 0) * 60 + (parseInt(dmEl.value) || 0);
     } else if (pd) {
       const nEl = document.getElementById('vin_' + i);
-      if (nEl && nEl.value !== '' && !isNaN(parseFloat(nEl.value))) it.params[pd.key] = parseFloat(nEl.value);
+      if (nEl && nEl.value !== '' && !isNaN(parseFloat(nEl.value))) {
+        // v3.6.90 辅食输入框是勺数 → 转回克；其他参数（奶量/体温/剂数）保持原值
+        it.params[pd.key] = (pd.key === 'solidFoodAmount') ? spoonToGram(parseFloat(nEl.value)) : parseFloat(nEl.value);
+      }
     }
   });
   voiceItems.forEach((it, viIdx) => {
@@ -3042,7 +3077,7 @@ function openReport() {
       else {
         if (act.type === 'sleep') { const h = Math.floor(s.duration / 60); const m = Math.round(s.duration % 60); val = s.count + '次 · ' + h + 'h ' + m + 'min'; }
         else if (act.type === 'supplement') val = s.count + '次 · ' + s.totalSuppl + '粒';
-        else if (act.type === 'solidFood') val = s.count + '次 · ' + s.totalSolid + 'g';
+        else if (act.type === 'solidFood') val = s.count + '次 · ' + gramToSpoonText(s.totalSolid) + '勺';
         else if (act.type === 'milk') val = s.count + '次 · ' + s.totalMilk + 'ml';
         else if (s.duration > 0) val = s.count + '次 · ' + s.duration.toFixed(1) + '分钟';
         else val = s.count + '次';
