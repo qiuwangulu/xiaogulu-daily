@@ -988,6 +988,8 @@
     font-family: inherit; line-height: 1.5;
   }
   .add-inputs .input-row textarea::placeholder { color: rgba(255,255,255,0.35); }
+  /* v3.6.91 编辑弹窗备注框调高：长文本默认可见更多行，不再挤在 46px 内被截断；仅影响编辑弹窗 #edt_note，不动添加弹窗 */
+  #edt_note { min-height: 130px; }
   .add-inputs .unit { font-size: 13px; color: #b2bec3; white-space: nowrap; }
   .add-inputs select, #aiTagProvider {
     background: rgba(0,0,0,0.3);
@@ -3153,6 +3155,6 @@
 <script src="std-config.js?v=v3.5.130"></script>
 <script src="app-config.js?v=v3.5.130"></script>
 <script src="lame.min.js?v=v3.6.18"></script>
-<script src="app.js?v=v3.6.90"></script>
+<script src="app.js?v=v3.6.91"></script>
 </body>
 </html>

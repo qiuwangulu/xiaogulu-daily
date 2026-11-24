@@ -1485,7 +1485,7 @@ function openEditRecord(type, timestamp, ds) {
   // 所有活动统一附带多行备注编辑框
   const notePh2 = act.type === 'note' ? '记录内容（支持多行）' : '备注（可选，支持多行）';
   const noteEsc = (rec.note || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  html += `<div class="input-row add-note-row"><textarea id="edt_note" rows="2" placeholder="${notePh2}">${noteEsc}</textarea></div>`;
+  html += `<div class="input-row add-note-row"><textarea id="edt_note" rows="6" placeholder="${notePh2}">${noteEsc}</textarea></div>`;
 
   container.innerHTML = html;
   if (editPendingSf) sfInit(editPendingSf.p, editPendingSf.id, editPendingSf.sel);
@@ -1579,7 +1579,7 @@ function saveEditRecord() {
 }
 
 /* ==================== 添加记录弹窗 ==================== */
-const APP_VERSION = 'v3.6.90';
+const APP_VERSION = 'v3.6.91';
 // v3.6.75: 两项——①用户反馈「知识库被篡改，之前写的非常详细的穿衣规则没有了，需要立即恢复」：
 //   诊断：云端 _ai_kb 被覆盖成只剩 20 条系统种子，用户手工粘贴的 12 条详细穿衣/户外/洗澡/室温推算规则全丢；
 //   扩散路径是 loadKBCloud() 云端无条件覆盖本地（KB = arr），残缺云端会把所有设备同步成残缺版。
